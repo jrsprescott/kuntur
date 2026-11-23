@@ -3770,6 +3770,10 @@ version = "0.1.0"
 [[package]]
 name = "kuntur-config"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "toml 1.2.2+spec-1.1.0",
+]
 
 [[package]]
 name = "kuntur-files"

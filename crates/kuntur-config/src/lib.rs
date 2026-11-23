@@ -1,3 +1,5 @@
-//! Configuración en TOML: temas (themes/*.toml), atajos por pestaña o globales, perfiles MCP, sesiones guardadas.
-//!
-//! Ver docs/PLAN.md.
+//! Configuración de Kuntur: temas (`themes/*.toml`) y ajustes persistentes.
+
+pub mod theme;
+
+pub use theme::{Rgba8, Theme, ThemeId, builtin};
