@@ -1902,6 +1902,30 @@ git push
 
 ---
 
+### Task 12 (surgida en la aceptación): el PATH del hijo no debe duplicarse ✅
+
+**Problema encontrado:** `claude`, `node`, `codex` no arrancaban dentro de Kuntur ("No hay suficientes recursos de memoria disponibles"). Causa: `portable_pty::CommandBuilder::new` relee el entorno del registro y **concatena el PATH del sistema y el del usuario**; con PATH grandes el resultado supera el límite de 32.767 caracteres de Windows y ningún programa externo puede iniciarse desde el shell.
+
+**Files:** Modify `crates/kuntur-term/src/pane.rs`
+
+- [x] **Prueba (falla):** `el_hijo_hereda_el_path_sin_duplicarlo` — lanza `powershell.exe -NoProfile -Command "'PATHLEN=' + $env:Path.Length"` en un `Pane` y compara con el largo UTF-16 del PATH de Kuntur. Antes del arreglo: PowerShell ni siquiera respondía.
+- [x] **Arreglo:** en `Pane::spawn`, justo después de `CommandBuilder::new`:
+
+```rust
+        // portable-pty arma el entorno releyendo el registro y SUMA el PATH del sistema y del usuario.
+        // Con PATH grandes supera los 32.767 caracteres y Windows no deja lanzar procesos desde el
+        // shell ("no hay suficientes recursos de memoria"). Usamos exactamente el entorno de Kuntur.
+        cmd.env_clear();
+        for (key, value) in std::env::vars_os() {
+            cmd.env(key, value);
+        }
+```
+
+- [x] **Pasa:** 26 pruebas OK. `claude`, `codex`, `opencode` y `qwen` se dibujan correctamente dentro de Kuntur (capturas con `scripts/smoke.ps1`).
+- [x] **Script de humo:** además de `NO_COLOR`, ahora quita las variables `CLAUDE*` heredadas cuando la prueba corre dentro de Claude Code (si no, `claude` se niega a abrir una sesión anidada).
+
+---
+
 ## Fuera del alcance de F1 (van en fases siguientes)
 - Reporte de mouse a los programas (modos 1000/1006): selección con mouse dentro de `nvim`/`htop` → F2.
 - Composición IME (teclados asiáticos) y ligaduras → F2.

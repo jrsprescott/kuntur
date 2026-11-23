@@ -29,12 +29,18 @@ public static class KunturSmoke {
 "@
 [KunturSmoke]::SetProcessDPIAware() | Out-Null
 
-# NO_COLOR heredado (p. ej. de herramientas de IA) hace que PowerShell quite los colores.
-$savedNoColor = $env:NO_COLOR; Remove-Item Env:NO_COLOR -ErrorAction SilentlyContinue
+# Lanzar Kuntur como desde el menú Inicio: sin variables heredadas de la herramienta que corre la prueba.
+# - NO_COLOR hace que PowerShell quite los colores.
+# - CLAUDECODE / CLAUDE_* (si la prueba corre dentro de Claude Code) impiden abrir `claude` dentro de Kuntur.
+$saved = @{}
+Get-ChildItem Env: | Where-Object { $_.Name -eq 'NO_COLOR' -or $_.Name -like 'CLAUDE*' } | ForEach-Object {
+    $saved[$_.Name] = $_.Value
+    Remove-Item "Env:$($_.Name)"
+}
 $env:KUNTUR_SMOKE_INPUT = ($Commands -join '\n')
 $p = Start-Process $exe -PassThru
 Remove-Item Env:KUNTUR_SMOKE_INPUT
-if ($savedNoColor) { $env:NO_COLOR = $savedNoColor }
+foreach ($k in $saved.Keys) { Set-Item "Env:$k" $saved[$k] }
 
 $deadline = (Get-Date).AddSeconds(20)
 while ((Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 300; $p.Refresh(); if ($p.MainWindowHandle -ne 0) { break } }
