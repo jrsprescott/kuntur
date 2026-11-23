@@ -3,11 +3,13 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::{Duration, Instant};
 
 use alacritty_terminal::event::Event;
 use alacritty_terminal::term::TermMode;
 use portable_pty::{Child, CommandBuilder, MasterPty, native_pty_system};
 
+use crate::cwd::CwdScanner;
 use crate::emulator::Emulator;
 use crate::paste::paste_bytes;
 use crate::size::GridSize;
@@ -22,7 +24,9 @@ pub struct PaneOptions {
 }
 
 impl PaneOptions {
-    /// PowerShell 7 si está instalado; si no, Windows PowerShell.
+    /// PowerShell 7 si está instalado; si no, Windows PowerShell. Envuelve el `prompt` (el del perfil
+    /// del usuario, si lo hay) para que además informe la carpeta actual con OSC 9;9, como Windows
+    /// Terminal; lo que el usuario ve no cambia.
     pub fn default_shell(size: GridSize) -> Self {
         let program = if find_in_path("pwsh.exe") {
             "pwsh.exe"
@@ -31,12 +35,30 @@ impl PaneOptions {
         };
         Self {
             program: program.into(),
-            args: vec!["-NoLogo".into()],
+            args: vec![
+                "-NoLogo".into(),
+                "-NoExit".into(),
+                "-Command".into(),
+                PROMPT_HOOK.into(),
+            ],
             cwd: None,
             size,
         }
     }
 }
+
+/// Script de `-Command`: sin comillas dobles (para no depender de cómo cada PowerShell parte la línea
+/// de comandos). Antepone `ESC ] 9 ; 9 ; "<carpeta>" ESC \` a la salida del prompt original.
+const PROMPT_HOOK: &str = concat!(
+    "$global:__kunturPrompt = $function:prompt; ",
+    "function global:prompt { ",
+    "$l = $executionContext.SessionState.Path.CurrentLocation; ",
+    "$o = (& $global:__kunturPrompt) -join ''; ",
+    "if ($l.Provider.Name -eq 'FileSystem') { ",
+    "$e = [string][char]27; $q = [string][char]34; ",
+    "$e + ']9;9;' + $q + $l.ProviderPath + $q + $e + '\\' + $o ",
+    "} else { $o } }"
+);
 
 fn find_in_path(exe: &str) -> bool {
     std::env::var_os("PATH")
@@ -53,6 +75,9 @@ pub struct Pane {
     exited: Arc<AtomicBool>,
     title: Arc<Mutex<Option<String>>>,
     clipboard: Arc<Mutex<Option<String>>>,
+    pid: Option<u32>,
+    cwd: Arc<Mutex<Option<PathBuf>>>,
+    last_output: Arc<Mutex<Instant>>,
 }
 
 impl Pane {
@@ -77,6 +102,7 @@ impl Pane {
         cmd.env("TERM_PROGRAM", "Kuntur");
 
         let child = pair.slave.spawn_command(cmd)?;
+        let pid = child.process_id();
         drop(pair.slave);
 
         let mut reader = pair.master.try_clone_reader()?;
@@ -85,22 +111,32 @@ impl Pane {
         let exited = Arc::new(AtomicBool::new(false));
         let title = Arc::new(Mutex::new(None));
         let clipboard = Arc::new(Mutex::new(None));
+        let cwd = Arc::new(Mutex::new(None));
+        let last_output = Arc::new(Mutex::new(Instant::now()));
 
         {
-            let (emulator, writer, exited, title, clipboard) = (
+            let (emulator, writer, exited, title, clipboard, cwd, last_output) = (
                 emulator.clone(),
                 writer.clone(),
                 exited.clone(),
                 title.clone(),
                 clipboard.clone(),
+                cwd.clone(),
+                last_output.clone(),
             );
             thread::Builder::new().name("kuntur-pty-lector".into()).spawn(move || {
                 let mut buf = vec![0u8; 64 * 1024];
+                let mut scanner = CwdScanner::new();
                 loop {
                     let n = match reader.read(&mut buf) {
                         Ok(0) | Err(_) => break,
                         Ok(n) => n,
                     };
+                    *last_output.lock().unwrap() = Instant::now();
+                    // Antes del emulador y sin tocar los bytes: solo mira si pasó una carpeta nueva.
+                    if let Some(dir) = scanner.feed(&buf[..n]) {
+                        *cwd.lock().unwrap() = Some(PathBuf::from(dir));
+                    }
                     let events = {
                         let mut emu = emulator.lock().unwrap();
                         emu.feed(&buf[..n]);
@@ -134,6 +170,9 @@ impl Pane {
             exited,
             title,
             clipboard,
+            pid,
+            cwd,
+            last_output,
         })
     }
 
@@ -170,6 +209,21 @@ impl Pane {
         self.title.lock().unwrap().clone()
     }
 
+    /// PID del programa (el shell de la sesión).
+    pub fn pid(&self) -> Option<u32> {
+        self.pid
+    }
+
+    /// Carpeta actual informada por el shell (OSC 7 / OSC 9;9); `None` hasta el primer aviso.
+    pub fn cwd(&self) -> Option<PathBuf> {
+        self.cwd.lock().unwrap().clone()
+    }
+
+    /// Tiempo desde la última salida del programa.
+    pub fn last_output_age(&self) -> Duration {
+        self.last_output.lock().unwrap().elapsed()
+    }
+
     pub fn has_exited(&self) -> bool {
         self.exited.load(Ordering::SeqCst) || self.child.lock().unwrap().try_wait().ok().flatten().is_some()
     }
@@ -185,7 +239,6 @@ impl Drop for Pane {
 mod tests {
     use super::*;
     use std::os::windows::ffi::OsStrExt;
-    use std::time::{Duration, Instant};
 
     fn wait_for(pane: &Pane, needle: &str) -> bool {
         let deadline = Instant::now() + Duration::from_secs(15);
@@ -221,6 +274,70 @@ mod tests {
         let pane = Pane::spawn(opts, || {}).unwrap();
         pane.write(b"echo teclado-ok\r").unwrap();
         assert!(wait_for(&pane, "teclado-ok"));
+    }
+
+    fn wait_cwd(pane: &Pane) -> Option<PathBuf> {
+        let deadline = Instant::now() + Duration::from_secs(20);
+        while Instant::now() < deadline {
+            if let Some(dir) = pane.cwd() {
+                return Some(dir);
+            }
+            thread::sleep(Duration::from_millis(50));
+        }
+        None
+    }
+
+    #[test]
+    fn la_carpeta_actual_llega_por_osc_9_9() {
+        let opts = PaneOptions {
+            program: "cmd.exe".into(),
+            args: vec!["/c".into(), "echo \x1b]9;9;C:\\Windows\x07listo-osc".into()],
+            cwd: None,
+            size: GridSize::new(80, 24),
+        };
+        let pane = Pane::spawn(opts, || {}).unwrap();
+        assert!(pane.pid().is_some_and(|p| p > 0));
+        assert_eq!(wait_cwd(&pane).as_deref(), Some(std::path::Path::new(r"C:\Windows")));
+        assert!(wait_for(&pane, "listo-osc"));
+        assert!(
+            !pane.with_emulator(|e| e.contains_text("9;9")),
+            "la secuencia no se ve en pantalla"
+        );
+        assert!(pane.last_output_age() < Duration::from_secs(10));
+    }
+
+    #[test]
+    fn el_shell_por_defecto_informa_su_carpeta() {
+        let dir = std::env::current_dir().unwrap();
+        let mut opts = PaneOptions::default_shell(GridSize::new(120, 30));
+        assert!(opts.args.iter().any(|a| a == "-NoExit"));
+        opts.cwd = Some(dir.clone());
+        let pane = Pane::spawn(opts, || {}).unwrap();
+        let got = wait_cwd(&pane).expect("PowerShell no informó la carpeta");
+        let norm = |p: &std::path::Path| p.to_string_lossy().trim_end_matches('\\').to_lowercase();
+        assert_eq!(norm(&got), norm(&dir));
+        assert!(
+            !pane.with_emulator(|e| e.contains_text("9;9")),
+            "el prompt no debe mostrar la secuencia"
+        );
+    }
+
+    /// El mismo script en Windows PowerShell 5.1 (el que se usa si no hay pwsh), que parte la línea de
+    /// comandos distinto.
+    #[test]
+    fn el_script_del_prompt_sirve_en_windows_powershell() {
+        let dir = std::env::current_dir().unwrap();
+        let mut opts = PaneOptions::default_shell(GridSize::new(120, 30));
+        opts.program = "powershell.exe".into();
+        opts.args.insert(1, "-NoProfile".into());
+        opts.cwd = Some(dir.clone());
+        let pane = Pane::spawn(opts, || {}).unwrap();
+        let got = wait_cwd(&pane).expect("Windows PowerShell no informó la carpeta");
+        assert!(
+            got.to_string_lossy()
+                .eq_ignore_ascii_case(dir.to_string_lossy().trim_end_matches('\\'))
+        );
+        assert!(wait_for(&pane, "PS "), "el prompt por defecto sigue visible");
     }
 
     /// Regresión: portable-pty relee el registro y concatena el PATH del sistema y del usuario.
