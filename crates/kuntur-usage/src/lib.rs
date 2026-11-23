@@ -3,6 +3,7 @@
 
 pub mod aggregate;
 pub mod claude;
+pub mod codex;
 pub mod model;
 
 pub use aggregate::{ModelRow, Summary, TaskRow, Totals, pct_change, provider_of, summarize};
