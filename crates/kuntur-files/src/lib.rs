@@ -2,4 +2,3 @@
 //! portapapeles de archivos (CF_HDROP) y arrastre hacia el Explorador (OLE DoDragDrop).
 //!
 //! Ver docs/PLAN.md §5.6.
-
