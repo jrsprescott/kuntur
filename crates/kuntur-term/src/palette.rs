@@ -37,6 +37,16 @@ pub struct Palette {
 }
 
 impl Palette {
+    pub fn new(ansi: [Rgb8; 16], fg: Rgb8, bg: Rgb8, cursor: Rgb8, selection_bg: Rgb8) -> Self {
+        Self {
+            ansi,
+            fg,
+            bg,
+            cursor,
+            selection_bg,
+        }
+    }
+
     /// Tema Dark · Medianoche (themes/dark.toml).
     pub fn dark() -> Self {
         let h = Rgb8::hex;
@@ -135,5 +145,20 @@ mod tests {
             p.resolve(Color::Spec(Rgb { r: 1, g: 2, b: 3 })),
             Rgb8 { r: 1, g: 2, b: 3 }
         );
+    }
+
+    #[test]
+    fn construye_desde_colores_de_tema() {
+        let ansi = [Rgb8::hex(0x000000); 16];
+        let p = Palette::new(
+            ansi,
+            Rgb8::hex(0xffffff),
+            Rgb8::hex(0x101010),
+            Rgb8::hex(0x00ff00),
+            Rgb8::hex(0x333333),
+        );
+        assert_eq!(p.fg, Rgb8::hex(0xffffff));
+        assert_eq!(p.resolve(Color::Named(NamedColor::Background)), Rgb8::hex(0x101010));
+        assert_eq!(p.selection_bg, Rgb8::hex(0x333333));
     }
 }
