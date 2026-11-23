@@ -1,0 +1,37 @@
+# Blue · Océano — degradado azul como la referencia de OpenCode
+name = "Blue · Océano"
+
+[fonts]
+ui = "Inter"
+mono = "JetBrains Mono"
+size = 13
+
+[ui]
+window_gradient = ["#1a379a", "#2156d4", "#3b82f6"]   # 140°
+titlebar = "#09144299"        # rgba(9,20,66,.55)
+surface = "#08144466"
+surface_2 = "#ffffff13"
+border = "#ffffff26"
+popover = "#13308a"
+text = "#eaf2ff"
+muted = "#a9c1ee"
+accent = "#22d3ee"
+accent_2 = "#93c5fd"
+ok = "#4ade80"
+warn = "#fbbf24"
+error = "#f87171"
+terminal_bg = "#050e3466"
+
+[ansi]   # 0-7 normales, 8-15 brillantes
+colors = ["#0b1a4a","#f87171","#4ade80","#fbbf24","#60a5fa","#f0abfc","#22d3ee","#dbeafe",
+          "#3b5bab","#fca5a5","#86efac","#fde68a","#93c5fd","#f5d0fe","#67e8f9","#ffffff"]
+
+[syntax]
+keyword = "#f0abfc"
+function = "#67e8f9"
+string = "#86efac"
+comment = "#8fa8db"
+number = "#fdba74"
+type = "#fde68a"
+variable = "#eaf2ff"
+operator = "#a5b4fc"

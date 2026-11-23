@@ -1,0 +1,13 @@
+[package]
+name = "kuntur-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "kuntur"
+path = "src/main.rs"
+
+[dependencies]
+# Se agregan por fase: kuntur-term (F1), kuntur-config (F2), kuntur-complete (F3), kuntur-agents (F4), kuntur-usage (F5)

@@ -1,0 +1,37 @@
+# White · Papel
+name = "White · Papel"
+
+[fonts]
+ui = "IBM Plex Sans"
+mono = "IBM Plex Mono"
+size = 13
+
+[ui]
+window_gradient = ["#f6f8fc", "#eef2f8"]
+titlebar = "#ffffff"
+surface = "#ffffff"
+surface_2 = "#f3f6fa"
+border = "#dbe2ec"
+popover = "#ffffff"
+text = "#1c2333"
+muted = "#5f6b84"
+accent = "#2563eb"
+accent_2 = "#7c3aed"
+ok = "#15803d"
+warn = "#b45309"
+error = "#dc2626"
+terminal_bg = "#fbfcfe"
+
+[ansi]
+colors = ["#1c2333","#dc2626","#15803d","#b45309","#2563eb","#7c3aed","#0e7490","#e5e7eb",
+          "#5f6b84","#ef4444","#22c55e","#d97706","#3b82f6","#8b5cf6","#0891b2","#ffffff"]
+
+[syntax]
+keyword = "#7c3aed"
+function = "#2563eb"
+string = "#15803d"
+comment = "#8a94a8"
+number = "#c2410c"
+type = "#0e7490"
+variable = "#1c2333"
+operator = "#475569"

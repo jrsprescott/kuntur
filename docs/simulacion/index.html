@@ -1,0 +1,1884 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kuntur — Simulación v4</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:ital,wght@0,400;0,600;1,400&family=Fira+Code:wght@400;600&family=IBM+Plex+Mono:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--ui:'Inter',system-ui,sans-serif;--mono:'JetBrains Mono',Consolas,monospace;--fs:13px}
+
+/* ───────── Paletas ───────── */
+[data-theme=blue]{
+  --backdrop:#0a1433; --win:linear-gradient(140deg,#1a379a 0%,#2156d4 48%,#3b82f6 100%);
+  --title:rgba(9,20,66,.55); --surface:rgba(8,20,68,.40); --surface-2:rgba(255,255,255,.075);
+  --hover:rgba(255,255,255,.11); --border:rgba(255,255,255,.15); --pop:#13308a;
+  --text:#eaf2ff; --muted:#a9c1ee; --faint:#7d99cf;
+  --accent:#22d3ee; --accent-2:#93c5fd; --accent-ink:#03263a;
+  --ok:#4ade80; --warn:#fbbf24; --err:#f87171; --term:rgba(5,14,52,.40); --dock:rgba(3,10,40,.55);
+  --kw:#f0abfc; --fn:#67e8f9; --str:#86efac; --com:#8fa8db; --num:#fdba74; --typ:#fde68a; --var:#eaf2ff; --op:#a5b4fc;
+  --add:rgba(74,222,128,.14); --del:rgba(248,113,113,.14);
+}
+[data-theme=dark]{
+  --backdrop:#05070c; --win:linear-gradient(160deg,#0d121d 0%,#0a0e16 100%);
+  --title:#0c111b; --surface:#0f1522; --surface-2:#151d2e;
+  --hover:#1b2538; --border:#232d42; --pop:#121a29;
+  --text:#d5dcea; --muted:#8290a8; --faint:#5b677e;
+  --accent:#7aa2f7; --accent-2:#bb9af7; --accent-ink:#0b1020;
+  --ok:#9ece6a; --warn:#e0af68; --err:#f7768e; --term:#0b1019; --dock:#080c14;
+  --kw:#bb9af7; --fn:#7aa2f7; --str:#9ece6a; --com:#5f6a8f; --num:#ff9e64; --typ:#2ac3de; --var:#c0caf5; --op:#89ddff;
+  --add:rgba(158,206,106,.12); --del:rgba(247,118,142,.12);
+}
+[data-theme=white]{
+  --backdrop:#d9e0ec; --win:linear-gradient(160deg,#f6f8fc 0%,#eef2f8 100%);
+  --title:#ffffff; --surface:#ffffff; --surface-2:#f3f6fa;
+  --hover:#e9eef6; --border:#dbe2ec; --pop:#ffffff;
+  --text:#1c2333; --muted:#5f6b84; --faint:#98a2b6;
+  --accent:#2563eb; --accent-2:#7c3aed; --accent-ink:#ffffff;
+  --ok:#15803d; --warn:#b45309; --err:#dc2626; --term:#fbfcfe; --dock:#f3f6fa;
+  --kw:#7c3aed; --fn:#2563eb; --str:#15803d; --com:#8a94a8; --num:#c2410c; --typ:#0e7490; --var:#1c2333; --op:#475569;
+  --add:rgba(21,128,61,.09); --del:rgba(220,38,38,.08);
+}
+
+html,body{height:100%}
+body{background:var(--backdrop);font-family:var(--ui);color:var(--text);padding:14px;font-size:13px;overflow:hidden;transition:background .3s}
+button{font:inherit;color:inherit}
+::selection{background:color-mix(in srgb,var(--accent) 38%,transparent)}
+.win{height:100%;border-radius:14px;background:var(--win);display:grid;grid-template-rows:44px minmax(0,1fr) 26px;overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,.45);border:1px solid var(--border)}
+
+/* ───────── Barra de título ───────── */
+.titlebar{display:flex;align-items:center;gap:10px;padding:0 14px 0 10px;background:var(--title);border-bottom:1px solid var(--border)}
+.brand{display:flex;align-items:center;gap:9px;font-weight:700;white-space:nowrap}
+.brand .mark{width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:grid;place-items:center;color:var(--accent-ink);font-family:var(--mono);font-size:12px;font-weight:700}
+.brand small{font-weight:500;color:var(--muted);font-size:12px}
+.tb-search{margin-left:14px;flex:1;max-width:420px;display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:8px;background:var(--surface-2);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-size:12px;white-space:nowrap;overflow:hidden}
+.kbd{font-family:var(--mono);font-size:10.5px;padding:1px 6px;border-radius:5px;border:1px solid var(--border);background:var(--hover);color:var(--text);white-space:nowrap}
+.tb-right{margin-left:auto;display:flex;align-items:center;gap:14px}
+.themes{display:flex;gap:6px;align-items:center}
+.theme-dot{width:18px;height:18px;border-radius:50%;border:2px solid var(--border);cursor:pointer}
+.theme-dot.on{outline:2px solid var(--accent);outline-offset:2px}
+.theme-dot[data-t=blue]{background:linear-gradient(135deg,#1a379a,#3b82f6)}
+.theme-dot[data-t=dark]{background:linear-gradient(135deg,#0a0e16,#232d42)}
+.theme-dot[data-t=white]{background:linear-gradient(135deg,#fff,#dbe2ec)}
+.wbtns{display:flex;gap:8px;padding-left:12px;border-left:1px solid var(--border)}
+.wbtn{width:13px;height:13px;border-radius:50%;border:0;cursor:pointer;position:relative}
+.wbtn.min{background:#febc2e}.wbtn.max{background:#28c840}.wbtn.close{background:#ff5f57}
+.wbtn:hover::after{position:absolute;inset:0;display:grid;place-items:center;font-size:9px;font-weight:700;color:rgba(0,0,0,.6)}
+.wbtn.min:hover::after{content:'–'}.wbtn.max:hover::after{content:'+'}.wbtn.close:hover::after{content:'×'}
+svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+
+/* ───────── Cuerpo ───────── */
+.body{display:grid;grid-template-columns:var(--sideW,250px) minmax(0,1fr) 340px;min-height:0;transition:grid-template-columns .2s}
+body[data-side=icons] .body{--sideW:60px}
+body[data-side=hidden] .body{--sideW:0px}
+body[data-side=hidden] .side{display:none}
+
+/* Pestañas (izquierda) */
+.side{background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;min-height:0;min-width:0}
+.side-h{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:12px 10px 8px 14px;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.side-h .grp{display:flex;gap:4px;position:relative}
+body[data-side=icons] .side-h{flex-direction:column;padding:10px 6px 6px}
+body[data-side=icons] .side-h .lbl{display:none}
+.btn-icon{min-width:26px;height:26px;padding:0 6px;border-radius:7px;border:1px solid var(--border);background:var(--surface-2);cursor:pointer;display:grid;place-items:center;font-size:15px;line-height:1}
+.btn-icon:hover{background:var(--hover);border-color:var(--accent)}
+.btn-icon.ghost{background:none;border-color:transparent}
+.btn-icon.ghost:hover{background:var(--hover)}
+.menu{position:absolute;top:30px;left:0;z-index:30;min-width:220px;background:var(--pop);border:1px solid var(--border);border-radius:10px;padding:5px;box-shadow:0 14px 40px rgba(0,0,0,.35);display:none}
+.menu.open{display:block}
+.menu button{display:flex;width:100%;gap:8px;align-items:center;padding:7px 9px;border:0;background:none;border-radius:7px;cursor:pointer;text-transform:none;letter-spacing:0;font-weight:500;font-size:12.5px;text-align:left}
+.menu button:hover{background:var(--hover)}
+.menu .m-sub{margin-left:auto;color:var(--muted);font-family:var(--mono);font-size:10.5px}
+.tabs{flex:1;overflow:auto;padding:2px 8px 8px;display:flex;flex-direction:column;gap:3px}
+.tab{position:relative;display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 6px 8px 8px;border-radius:10px;cursor:pointer;border:1px solid transparent}
+.tab:hover{background:var(--hover)}
+.tab.active{background:var(--surface-2);border-color:var(--border);box-shadow:inset 3px 0 0 var(--accent)}
+.tile{position:relative;width:34px;height:34px;border-radius:10px;display:grid;place-items:center;color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)}
+.tile svg.i{width:18px;height:18px}
+.tile .dot{position:absolute;right:-3px;bottom:-3px;border:2px solid var(--pop)}
+.tile .badge{position:absolute;top:-7px;right:-9px;font-size:10px;font-weight:700;background:var(--warn);color:#2a1800;border-radius:99px;padding:0 5px;line-height:16px}
+.tab .name{font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tab .name input{width:100%;font:inherit;background:var(--hover);color:var(--text);border:1px solid var(--accent);border-radius:5px;padding:1px 4px;outline:0}
+.tab .sum{font-size:11.5px;color:var(--text);opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.tab .sub{font-family:var(--mono);font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.tab .x{opacity:0;width:22px;height:22px;border-radius:6px;border:0;background:none;cursor:pointer;color:var(--muted);font-size:15px}
+.tab:hover .x,.tab.active .x{opacity:1}
+.tab .x:hover{background:var(--hover);color:var(--err)}
+.tab .sum-i{display:none}
+body[data-side=icons] .tabs{padding:4px 0 8px;gap:8px;align-items:center}
+body[data-side=icons] .tab{grid-template-columns:1fr;justify-items:center;padding:3px;border:0;border-radius:12px;background:none;box-shadow:none}
+body[data-side=icons] .tab:hover,body[data-side=icons] .tab.active{background:none;box-shadow:none}
+body[data-side=icons] .tab::before{content:'';position:absolute;left:-9px;top:50%;width:3px;height:0;border-radius:0 3px 3px 0;background:var(--accent);transform:translateY(-50%);transition:height .15s}
+body[data-side=icons] .tab:hover::before{height:14px}
+body[data-side=icons] .tab.active::before{height:26px}
+body[data-side=icons] .tab .info,body[data-side=icons] .tab .x{display:none}
+body[data-side=icons] .tile{width:36px;height:36px;border-radius:11px;opacity:.72;transition:opacity .15s}
+body[data-side=icons] .tile svg.i{width:18px;height:18px}
+body[data-side=icons] .tab:hover .tile,body[data-side=icons] .tab.active .tile{opacity:1}
+body[data-side=icons] .tab.active .tile{box-shadow:0 0 0 2px var(--accent)}
+.hcard{position:fixed;z-index:65;width:270px;background:var(--pop);border:1px solid var(--border);border-radius:12px;padding:11px 13px;box-shadow:0 16px 44px rgba(0,0,0,.45);pointer-events:none;opacity:0;transform:translateX(-4px);transition:opacity .12s,transform .12s;font-size:12px}
+.hcard.open{opacity:1;transform:none}
+.hcard .h{display:flex;gap:8px;align-items:center;font-weight:700;font-size:13px}
+.hcard .h .k{margin-left:auto;font-weight:500}
+.hcard .s{margin-top:6px;line-height:1.45}
+.hcard .p{margin-top:6px;font-family:var(--mono);font-size:10.5px;color:var(--muted);word-break:break-all}
+.hcard .a{margin-top:7px;display:flex;gap:10px;flex-wrap:wrap;font-size:11px;font-family:var(--mono)}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--faint)}
+.dot.working{background:var(--accent);animation:pulse 1.6s infinite}
+.dot.waiting{background:var(--warn);animation:blink 1s infinite}
+.dot.done{background:var(--ok)}
+@keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 70%,transparent)}100%{box-shadow:0 0 0 7px transparent}}
+@keyframes blink{50%{opacity:.35}}
+.side-f{border-top:1px solid var(--border);padding:10px 12px;font-size:11px;color:var(--muted);display:grid;gap:4px}
+.side-f b{color:var(--text);font-family:var(--mono);font-weight:600}
+body[data-side=icons] .side-f{display:none}
+
+.logo{width:22px;height:22px;border-radius:6px;display:grid;place-items:center;font-weight:700;font-size:11px;color:#fff;flex:none;font-family:var(--mono)}
+.logo.sm{width:16px;height:16px;font-size:9px;border-radius:4px}
+.logo.claude{background:#c96442}.logo.codex{background:#0f8a6a}
+
+/* Centro: sesión + terminal acoplada */
+.main{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--term)}
+.main-h{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid var(--border);font-size:12px;color:var(--muted);flex-wrap:wrap}
+.main-h .t{font-weight:700;color:var(--text);font-size:13px;margin-right:4px}
+.chip{font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:999px;background:var(--surface-2);border:1px solid var(--border);color:var(--text);white-space:nowrap}
+.chip.acc{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+.main-h .sp{flex:1}
+.btn{border:1px solid var(--border);background:var(--surface-2);border-radius:8px;padding:5px 10px;cursor:pointer;font-size:12px;font-weight:600;display:inline-flex;gap:6px;align-items:center;white-space:nowrap}
+.btn:hover{background:var(--hover);border-color:var(--accent)}
+.btn.on{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.btn.sm{padding:3px 8px;font-size:11px;border-radius:7px}
+.session{flex:1;display:flex;flex-direction:column;min-height:0;position:relative}
+.blocks{flex:1;overflow:auto;padding:12px 14px;display:flex;flex-direction:column;gap:10px;font-family:var(--mono);font-size:var(--fs);line-height:1.55}
+.block{border:1px solid var(--border);border-radius:10px;background:var(--surface-2);overflow:hidden;flex:none}
+.block.err{box-shadow:inset 3px 0 0 var(--err)}
+.block-h{display:flex;gap:8px;align-items:center;padding:5px 10px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border);font-family:var(--ui);user-select:none}
+.block-h .r{margin-left:auto;display:flex;gap:6px;align-items:center}
+.bt{border:1px solid transparent;background:none;border-radius:6px;padding:1px 7px;cursor:pointer;font-size:11px;color:var(--muted);opacity:0;transition:opacity .15s}
+.block:hover .bt{opacity:1}
+.bt:hover{border-color:var(--border);color:var(--text);background:var(--hover)}
+.block .cmd{padding:8px 12px 2px;color:var(--text);font-weight:600}
+.block .out{padding:4px 12px 10px;white-space:pre-wrap;word-break:break-word;color:var(--text);opacity:.92}
+.dim{color:var(--muted)}.ok{color:var(--ok)}.warn{color:var(--warn)}.errc{color:var(--err)}.acc{color:var(--accent)}
+.ag-prompt{color:var(--accent);font-weight:600;margin:2px 0 6px}
+.ag-tool b{color:var(--fn)}
+.ag-tool .add-n{color:var(--ok)}.ag-tool .del-n{color:var(--err)}
+.diff,.log{margin:6px 0 8px;border:1px solid var(--border);border-radius:8px;overflow:hidden;white-space:pre;overflow-x:auto}
+.diff div{padding:0 10px}
+.diff .add{background:var(--add)}.diff .del{background:var(--del)}
+.diff .ln{display:inline-block;width:2.2em;color:var(--faint);user-select:none}
+.log{padding:6px 10px;white-space:pre-wrap;color:var(--err);font-size:.95em}
+.ag-note{margin:6px 0 4px;white-space:normal}
+.sug{display:flex;gap:8px;align-items:center;margin:4px 0;padding:6px 8px;border-radius:8px;background:var(--term);border:1px solid var(--border);white-space:normal;flex-wrap:wrap}
+.sug code{flex:1;font-family:var(--mono);min-width:200px}
+.sug button,.ag-ask button,.ag-done button{border:1px solid var(--border);background:var(--surface);border-radius:6px;padding:2px 9px;cursor:pointer;font-family:var(--ui);font-size:11.5px;font-weight:600;user-select:none}
+.sug button.prim{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.ag-live{color:var(--warn)}
+.spin{display:inline-block;animation:spin 1.2s linear infinite;color:var(--accent)}
+@keyframes spin{to{transform:rotate(360deg)}}
+.ag-ask{margin-top:6px;padding:8px 10px;border-radius:8px;border:1px solid color-mix(in srgb,var(--warn) 55%,transparent);background:color-mix(in srgb,var(--warn) 12%,transparent);white-space:normal}
+.ag-ask button.yes{background:var(--ok);color:#06200f;border-color:transparent}
+.ag-done{color:var(--ok);margin-top:4px}
+.ag-subs{color:var(--muted);margin-top:2px}
+
+/* sintaxis */
+.kw{color:var(--kw)}.fn{color:var(--fn)}.str{color:var(--str)}.com{color:var(--com);font-style:italic}.num{color:var(--num)}.typ{color:var(--typ)}.var{color:var(--var)}.op{color:var(--op)}
+.c-cmd{color:var(--fn);font-weight:600}.c-unknown{color:var(--err);text-decoration:underline wavy}.c-flag{color:var(--typ)}.c-str{color:var(--str)}
+.c-path{color:var(--accent);text-decoration:underline;text-decoration-color:color-mix(in srgb,var(--accent) 40%,transparent);text-underline-offset:3px}
+.c-path-bad{color:var(--warn)}.c-num{color:var(--num)}.c-arg{color:var(--var)}
+
+/* editor de entrada (multilínea) + autocompletado */
+.input-wrap{position:relative;margin:0 14px 10px;border:1px solid var(--border);border-radius:12px;background:var(--surface);padding:8px 12px 7px}
+.input-wrap:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent)}
+.prompt-line{display:flex;gap:6px;align-items:center;font-size:11px;color:var(--muted);margin-bottom:4px;font-family:var(--mono);flex-wrap:wrap}
+.editor{position:relative;font-family:var(--mono);font-size:calc(var(--fs) + 1px);height:24px}
+.editor .hl,.editor textarea{position:absolute;inset:0;white-space:pre;font:inherit;line-height:24px;padding:0;letter-spacing:0;font-variant-ligatures:none;overflow:hidden}
+.editor .hl{pointer-events:none}
+.editor textarea{background:transparent;border:0;outline:0;color:transparent;caret-color:var(--accent);width:100%;resize:none}
+.editor textarea::selection{color:transparent}
+.hl .ghost{color:var(--faint)}
+.hint{display:flex;gap:12px;font-size:10.5px;color:var(--faint);margin-top:4px;font-family:var(--ui);flex-wrap:wrap}
+.hint .paste{color:var(--warn);font-weight:600}
+.suggest{position:absolute;left:8px;bottom:calc(100% + 6px);width:min(640px,calc(100% - 16px));background:var(--pop);border:1px solid var(--border);border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,.35);padding:5px;display:none;z-index:20;font-family:var(--mono);font-size:12.5px}
+.suggest.open{display:block}
+.sg{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:10px;padding:5px 8px;border-radius:7px;cursor:pointer;align-items:center}
+.sg.sel,.sg:hover{background:var(--hover)}
+.sg .k{font-family:var(--ui);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:1px 6px;border-radius:5px;text-align:center}
+.k.carpeta{color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.k.archivo{color:var(--muted);background:var(--hover)}
+.k.visitada{color:var(--warn);background:color-mix(in srgb,var(--warn) 14%,transparent)}
+.k.historial{color:var(--accent-2);background:color-mix(in srgb,var(--accent-2) 14%,transparent)}
+.k.comando{color:var(--ok);background:color-mix(in srgb,var(--ok) 14%,transparent)}
+.k.unidad{color:var(--typ);background:var(--hover)}
+.sg .l{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sg .d{color:var(--muted);font-size:11px;font-family:var(--ui)}
+.sg-f{border-top:1px solid var(--border);margin-top:4px;padding:5px 8px 2px;color:var(--faint);font-size:10.5px;font-family:var(--ui)}
+
+/* terminal acoplada */
+.dock{display:none;flex-direction:column;height:var(--dockH,250px);min-height:110px;border-top:2px solid var(--border);background:var(--dock);position:relative}
+.dock.open{display:flex}
+.dock-resize{position:absolute;top:-5px;left:0;right:0;height:9px;cursor:ns-resize;z-index:5}
+.dock-resize:hover{background:color-mix(in srgb,var(--accent) 30%,transparent)}
+.dock-h{display:flex;align-items:center;gap:8px;padding:5px 12px;border-bottom:1px solid var(--border);font-size:11.5px;color:var(--muted);background:var(--surface);flex-wrap:wrap}
+.dock-h b{color:var(--text)}
+.dock-h .sp{flex:1}
+.dock-h select{font:inherit;font-size:11.5px;color:var(--text);background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:2px 6px;max-width:260px}
+.dock-out{flex:1;overflow:auto;padding:8px 14px 4px;font-family:var(--mono);font-size:var(--fs);white-space:pre-wrap;word-break:break-word;line-height:1.5}
+.dock-in{display:flex;gap:8px;align-items:center;padding:4px 14px 8px;font-family:var(--mono);font-size:var(--fs)}
+.dock-in input{flex:1;background:none;border:0;outline:0;color:var(--text);font:inherit;min-width:0}
+.pr{color:var(--ok);white-space:nowrap}.pr .h{color:var(--accent)}
+
+/* Panel derecho */
+.right{background:var(--surface);border-left:1px solid var(--border);display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto;min-height:0;min-width:0;overflow:hidden}
+.panel{display:flex;flex-direction:column;min-height:0}
+.panel+.panel{border-top:1px solid var(--border)}
+.panel-h{display:flex;align-items:center;gap:6px;padding:10px 10px 6px 12px;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.panel-h .cnt{font-family:var(--mono);letter-spacing:0;background:var(--hover);color:var(--text);padding:0 6px;border-radius:99px}
+.panel-h .r{margin-left:auto;display:flex;gap:4px;text-transform:none;letter-spacing:0}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:7px;overflow:hidden}
+.seg button{border:0;background:none;padding:2px 7px;font-size:10.5px;cursor:pointer;color:var(--muted);font-weight:600}
+.seg button.on{background:var(--hover);color:var(--text)}
+.counters{display:flex;gap:10px;padding:0 12px 6px;font-size:11px;font-family:var(--mono)}
+.panel-b{overflow:auto;padding:2px 10px 12px;display:flex;flex-direction:column;gap:8px}
+.alist{overflow:auto;padding:0 6px 6px;flex:1;min-height:0}
+.ar{display:grid;grid-template-columns:12px 16px 84px minmax(0,1fr) auto;gap:6px;align-items:center;padding:3px 6px;border-radius:6px;cursor:pointer;min-height:25px;border-left:2px solid transparent;font-size:12px}
+.ar:hover{background:var(--hover)}
+.ar.sel{background:var(--surface-2);border-left-color:var(--accent)}
+.ar.waiting{background:color-mix(in srgb,var(--warn) 11%,transparent)}
+.ar .tw{color:var(--faint);font-family:var(--mono);font-size:11px;text-align:center;user-select:none}
+.ar .an{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ar.s .an{font-weight:500;color:var(--muted);font-size:11.5px}
+.ar .aa{font-family:var(--mono);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.92}
+.ar .aa b{color:var(--fn);font-weight:600}
+.ar.done .aa{color:var(--muted)}
+.ar .at{font-family:var(--mono);font-size:10.5px;color:var(--muted);white-space:nowrap;display:flex;gap:5px;align-items:center}
+.ar .at button{border:0;background:var(--ok);color:#06200f;border-radius:5px;padding:0 6px;font-size:10.5px;font-weight:700;cursor:pointer;font-family:var(--ui)}
+.sdot{width:8px;height:8px;border-radius:50%;justify-self:center;background:var(--faint)}
+.sdot.working{background:var(--accent);animation:pulse 1.6s infinite}
+.sdot.waiting{background:var(--warn);animation:blink 1s infinite}
+.sdot.done{background:var(--ok)}
+.grp-h{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);font-weight:700;padding:8px 6px 3px}
+.ag-detail{border-top:1px solid var(--border);padding:8px 12px 10px;font-size:11.5px;display:grid;gap:3px;background:var(--surface-2)}
+.ag-detail .m{font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ag-detail .btns{display:flex;gap:5px;margin-top:5px;flex-wrap:wrap}
+.mini{border:1px solid var(--border);background:var(--surface);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:11px;font-weight:600}
+.mini:hover{border-color:var(--accent)}
+.mini.danger:hover{border-color:var(--err);color:var(--err)}
+.empty{border:1px dashed var(--border);border-radius:10px;padding:14px;color:var(--muted);text-align:center;font-size:12px;line-height:1.6;margin:4px 6px}
+
+.u-head{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.u-head .nm{font-weight:700}
+.metric-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.metric{background:var(--surface-2);border:1px solid var(--border);border-radius:9px;padding:6px 9px;min-width:0}
+.metric .l{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;font-weight:600}
+.metric .v{font-family:var(--mono);font-size:15px;font-weight:600;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.metric .v small{font-size:11px;color:var(--muted);font-weight:400}
+.metric.wide{grid-column:1/-1}
+.spark{width:100%;height:38px;display:block;margin-top:4px}
+.bar{height:7px;border-radius:99px;background:var(--hover);overflow:hidden;margin-top:5px}
+.bar>i{display:block;height:100%;background:var(--accent);border-radius:99px;transition:width .6s}
+.bar>i.w{background:var(--warn)}.bar>i.e{background:var(--err)}
+.sec-t{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-top:4px}
+.limit{display:grid;grid-template-columns:minmax(0,1fr) auto;font-size:11.5px;gap:0 8px}
+.limit .rs{color:var(--muted);font-size:10.5px;text-align:right}
+.limit .bar{grid-column:1/-1}
+.foot{font-size:10px;color:var(--faint);line-height:1.5}
+
+.status{display:flex;align-items:center;gap:14px;padding:0 12px;background:var(--title);border-top:1px solid var(--border);font-size:11px;color:var(--muted);font-family:var(--mono);white-space:nowrap;overflow:hidden}
+.status .sp{flex:1}
+.status b{color:var(--text);font-weight:600}
+
+/* hoja Ctrl+K */
+.overlay{position:fixed;inset:0;background:rgba(2,6,20,.45);display:none;place-items:center;z-index:50;backdrop-filter:blur(3px)}
+.overlay.open{display:grid}
+.sheet{width:min(880px,94vw);max-height:86vh;background:var(--pop);border:1px solid var(--border);border-radius:14px;display:grid;grid-template-rows:auto auto minmax(0,1fr);overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.5)}
+.sheet-h{display:flex;align-items:center;gap:10px;padding:14px 16px 6px}
+.sheet-h h2{font-size:15px;font-family:'Space Grotesk',var(--ui)}
+.sheet-h .x{margin-left:auto}
+.sheet-tabs{display:flex;gap:2px;padding:0 12px;border-bottom:1px solid var(--border);overflow-x:auto}
+.sheet-tab{padding:9px 12px;cursor:pointer;color:var(--muted);border:0;background:none;border-bottom:2px solid transparent;font-weight:600;font-size:12.5px;white-space:nowrap}
+.sheet-tab.on{color:var(--text);border-bottom-color:var(--accent)}
+.sheet-b{overflow:auto;padding:16px;display:flex;flex-direction:column;gap:14px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.card{border:1px solid var(--border);border-radius:10px;background:var(--surface-2);padding:12px}
+.mcp-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:8px}
+.mcp{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;border:1px solid var(--border);border-radius:10px;padding:9px 11px;background:var(--surface-2)}
+.mcp .n{font-weight:700;font-family:var(--mono);font-size:12px}
+.mcp .d{font-size:11px;color:var(--muted);grid-column:1}
+.mcp .sw{grid-row:1/3;grid-column:2}
+.sw{width:36px;height:20px;border-radius:99px;background:var(--hover);position:relative;cursor:pointer;border:1px solid var(--border);flex:none;display:inline-block}
+.sw::after{content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--muted);transition:.2s}
+.sw.on{background:var(--accent);border-color:transparent}
+.sw.on::after{left:18px;background:var(--accent-ink)}
+pre.code{font-family:var(--mono);font-size:12px;background:var(--term);border:1px solid var(--border);border-radius:9px;padding:10px 12px;white-space:pre-wrap;word-break:break-all;line-height:1.55}
+label.f{display:grid;gap:4px;font-size:11.5px;color:var(--muted);font-weight:600}
+.inp,select.inp{font:inherit;font-size:12.5px;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:6px 9px;outline:0;min-width:0}
+.inp:focus{border-color:var(--accent)}
+table.t{width:100%;border-collapse:collapse;font-size:12px}
+table.t th{text-align:left;color:var(--muted);font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;padding:6px 8px;border-bottom:1px solid var(--border)}
+table.t td{padding:7px 8px;border-bottom:1px solid var(--border);vertical-align:middle}
+table.t td.m{font-family:var(--mono);font-size:11.5px}
+.scope{font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:99px}
+.scope.tab{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent)}
+.scope.global{background:var(--hover);color:var(--muted)}
+.theme-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.tcard{border:2px solid var(--border);border-radius:12px;overflow:hidden;cursor:pointer;background:none;text-align:left;padding:0}
+.tcard.on{border-color:var(--accent)}
+.tcard .pv{height:84px;padding:10px;font-family:var(--mono);font-size:11px;line-height:1.5}
+.tcard .lb{padding:7px 10px;font-weight:700;font-size:12px;border-top:1px solid var(--border);background:var(--surface-2)}
+.tcard .lb small{display:block;font-weight:500;color:var(--muted);font-size:10.5px}
+.ansi{display:grid;grid-template-columns:repeat(8,1fr);gap:4px}
+.ansi i{height:26px;border-radius:6px;border:1px solid var(--border);display:grid;place-items:end start;padding:2px 4px;font-style:normal;font-size:9px;font-family:var(--mono);color:#fff;text-shadow:0 0 3px #000}
+.samples{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.samples pre.code{white-space:pre;overflow-x:auto;word-break:normal;font-size:11.5px}
+.samples .cap{font-size:10.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
+.note{font-size:12px;line-height:1.6;color:var(--muted);border-left:3px solid var(--accent);padding:4px 0 4px 10px}
+.note b{color:var(--text)}
+
+/* pestañas del panel derecho: Agentes | Archivos */
+.ptabs{display:flex;align-items:center;gap:2px;padding:4px 8px 0;border-bottom:1px solid var(--border)}
+.ptabs>button{border:0;background:none;padding:7px 6px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;display:flex;gap:6px;align-items:center}
+.ptabs>button.on{color:var(--text);border-bottom-color:var(--accent)}
+.ptabs .cnt{font-family:var(--mono);letter-spacing:0;background:var(--hover);color:var(--text);padding:0 6px;border-radius:99px}
+.ptabs .r{margin-left:auto;display:flex;gap:4px;padding-bottom:3px}
+.pview{display:none;flex-direction:column;min-height:0;flex:1}
+.pview.on{display:flex}
+.counters{padding-top:7px}
+
+/* explorador de archivos (local Windows + remoto Linux) */
+.fpane{display:flex;flex-direction:column;min-height:0;flex:1}
+.fpane+.fpane{border-top:1px solid var(--border)}
+.fbar{display:flex;align-items:center;gap:2px;padding:6px 8px 2px 12px}
+.fbar .os{font-size:10.5px;font-weight:700;color:var(--text);display:flex;gap:6px;align-items:center;white-space:nowrap;overflow:hidden}
+.fbar .os svg.i{width:14px;height:14px;color:var(--muted)}
+.fbar .sp{flex:1}
+.fbtn{border:0;background:none;border-radius:6px;width:24px;height:24px;display:grid;place-items:center;cursor:pointer;color:var(--muted);flex:none}
+.fbtn svg.i{width:14px;height:14px}
+.fbtn:hover{background:var(--hover);color:var(--text)}
+.fbtn.on{color:var(--accent)}
+.crumbs{display:flex;overflow:hidden;padding:0 10px 4px;font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap}
+.crumbs span{cursor:pointer;padding:0 1px;border-radius:4px}
+.crumbs span:hover{background:var(--hover);color:var(--text)}
+.crumbs span:last-child{color:var(--text)}
+.flist{flex:1;overflow:auto;padding:0 6px 6px;outline:0;min-height:70px;border-radius:8px}
+.flist:focus-visible{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 50%,transparent)}
+.fr{display:grid;grid-template-columns:16px minmax(0,1fr) 54px 42px;gap:7px;align-items:center;padding:2px 6px;border-radius:6px;font-size:12px;cursor:default;user-select:none;min-height:23px}
+.fr:hover{background:var(--hover)}
+.fr.sel{background:color-mix(in srgb,var(--accent) 22%,transparent)}
+.fr .n{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fr .z,.fr .d{font-family:var(--mono);font-size:10px;color:var(--muted);text-align:right;white-space:nowrap}
+.fr svg.i{width:15px;height:15px}
+.ic{display:grid;place-items:center;color:var(--muted)}
+.ic.dir{color:var(--accent)}.ic.code{color:var(--fn)}.ic.img{color:var(--kw)}.ic.arc{color:var(--warn)}.ic.cfg{color:var(--typ)}
+.fr.new{animation:flash 1.4s}
+@keyframes flash{0%{background:color-mix(in srgb,var(--ok) 40%,transparent)}100%{background:transparent}}
+.flist.drop,.session.drop{outline:2px dashed var(--accent);outline-offset:-4px;background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.fhint{font-size:10.5px;color:var(--faint);padding:5px 12px 6px;text-align:center;line-height:1.4}
+.xfers{border-top:1px solid var(--border);padding:6px 12px 8px;display:grid;gap:5px;font-size:11px}
+.xf{display:grid;grid-template-columns:12px minmax(0,1fr) auto;gap:6px;align-items:center}
+.xf .n{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.xf .m{font-family:var(--mono);font-size:10px;color:var(--muted);white-space:nowrap}
+.xf .pb{grid-column:2/-1;height:2px;background:var(--hover);border-radius:2px;overflow:hidden}
+.xf .pb i{display:block;height:100%;background:var(--accent)}
+.xf.done .pb i{background:var(--ok)}
+.dropmsg{position:absolute;inset:10px;display:none;place-items:center;border-radius:10px;font-weight:700;color:var(--accent);pointer-events:none;z-index:6;text-align:center;line-height:1.6}
+.session.drop .dropmsg{display:grid}
+
+/* uso minimalista */
+.usage-panel .panel-b{padding:2px 12px 10px}
+.um{display:grid;gap:6px;font-size:11.5px}
+.um-top{display:flex;align-items:center;gap:6px}
+.um-top b{font-size:12px}
+.um-top .r{margin-left:auto;font-family:var(--mono);font-weight:600}
+.um-row{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:10.5px;color:var(--muted);white-space:nowrap}
+.um-row b{color:var(--text);font-weight:600;font-size:11.5px}
+.um-row .r{margin-left:auto}
+canvas.spk{width:70px;height:16px;display:block}
+.lim{display:grid;grid-template-columns:66px minmax(0,1fr) 30px 46px;gap:8px;align-items:center;font-size:10.5px}
+.lim .l{color:var(--muted);white-space:nowrap}
+.lim .p{font-family:var(--mono);text-align:right}
+.lim .t{font-family:var(--mono);font-size:10px;color:var(--faint);text-align:right;white-space:nowrap}
+.thin{height:3px;border-radius:3px;background:var(--hover);overflow:hidden}
+.thin i{display:block;height:100%;background:var(--accent);border-radius:3px;transition:width .6s}
+.thin i.w{background:var(--warn)}.thin i.e{background:var(--err)}
+.um hr{border:0;border-top:1px solid var(--border);margin:2px 0}
+
+/* menú contextual y avisos */
+.ctx{position:fixed;z-index:70;min-width:250px;background:var(--pop);border:1px solid var(--border);border-radius:10px;padding:5px;box-shadow:0 16px 44px rgba(0,0,0,.45);display:none;font-size:12.5px}
+.ctx.open{display:block}
+.ctx button{display:flex;width:100%;gap:8px;align-items:center;padding:6px 9px;border:0;background:none;border-radius:7px;cursor:pointer;text-align:left}
+.ctx button:hover:not(:disabled){background:var(--hover)}
+.ctx button:disabled{opacity:.4;cursor:default}
+.ctx button .k{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+.ctx hr{border:0;border-top:1px solid var(--border);margin:4px 2px}
+.toasts{position:fixed;right:24px;bottom:44px;display:flex;flex-direction:column;gap:8px;z-index:60}
+.toast{background:var(--pop);border:1px solid var(--border);border-left:4px solid var(--warn);border-radius:10px;padding:10px 12px;min-width:280px;max-width:380px;box-shadow:0 14px 40px rgba(0,0,0,.4);font-size:12.5px;display:flex;gap:10px;align-items:center;animation:in .25s ease-out}
+.toast.info{border-left-color:var(--accent)}
+.toast .sp{flex:1}
+@keyframes in{from{transform:translateY(10px);opacity:0}}
+
+/* ═════════ v4 · capa minimalista ═════════ */
+[data-theme=blue]{--line:rgba(255,255,255,.09);--border:rgba(255,255,255,.10);--surface:rgba(6,16,58,.26);--surface-2:rgba(255,255,255,.05);--term:rgba(4,12,46,.20);--title:transparent}
+[data-theme=dark]{--line:#1b2334;--border:#1f293b;--surface:#0b1019;--surface-2:#111827;--term:#0b1019;--title:#0b1019;--win:#0b1019}
+[data-theme=white]{--line:#e7ebf1;--border:#e3e8ef;--surface:#fbfcfd;--surface-2:#f4f6f9;--term:#ffffff;--title:#fbfcfd;--win:#ffffff}
+.win{grid-template-rows:40px minmax(0,1fr);border-radius:12px}
+.status,.main-h,.prompt-line{display:none}
+.titlebar{position:relative;gap:2px;padding:0 12px 0 6px;background:var(--title);border-bottom:1px solid var(--line)}
+.ib{width:30px;height:30px;border:0;background:none;border-radius:8px;color:var(--muted);display:grid;place-items:center;cursor:pointer;flex:none}
+.ib:hover{background:var(--hover);color:var(--text)}
+.ib.on{color:var(--accent)}
+.ib svg.i{width:16px;height:16px;stroke-width:1.8}
+.tb-title{position:absolute;left:50%;transform:translateX(-50%);display:flex;gap:10px;align-items:baseline;font-size:12.5px;color:var(--muted);cursor:pointer;padding:5px 12px;border-radius:8px;max-width:52%;white-space:nowrap;overflow:hidden}
+.tb-title:hover{background:var(--hover)}
+.tb-title b{color:var(--text);font-weight:600}
+.tb-title .mono{font-family:var(--mono);font-size:11.5px;overflow:hidden;text-overflow:ellipsis}
+.tb-right{gap:2px}
+.wbtns{border-left:0;padding-left:12px;gap:8px}
+.wbtn{width:12px;height:12px;background:var(--faint)!important;opacity:.45;transition:opacity .15s,background .15s}
+.titlebar:hover .wbtn{opacity:1}
+.titlebar:hover .wbtn.min{background:#febc2e!important}.titlebar:hover .wbtn.max{background:#28c840!important}.titlebar:hover .wbtn.close{background:#ff5f57!important}
+.body{grid-template-columns:var(--sideW,232px) minmax(0,1fr) 316px}
+body[data-right=off] .body{grid-template-columns:var(--sideW,232px) minmax(0,1fr) 0}
+body[data-right=off] .right{display:none}
+/* Cada panel con su columna fija: ocultar uno nunca corre a los demás */
+.side{grid-column:1;grid-row:1}.main{grid-column:2;grid-row:1}.right{grid-column:3;grid-row:1}
+.body{transition:none}
+.side,.right,.panel+.panel{border-color:var(--line)}
+.side-h .lbl{font-weight:600;letter-spacing:.02em;text-transform:none;font-size:12px}
+.tile{background:none!important;box-shadow:none;color:var(--muted)}
+.tab.active .tile{background:var(--hover)!important;color:var(--text)}
+.tile .dot{width:7px;height:7px;border:0;right:2px;bottom:2px}
+.tile .dot.idle{display:none}
+.tile .badge{top:-3px;right:-4px;font-size:9px;line-height:14px;padding:0 4px}
+.tab.active{box-shadow:inset 2px 0 0 var(--accent);border-color:transparent}
+.tab .x{color:var(--faint)}
+body[data-side=icons] .tile{opacity:1;width:36px;height:36px;border-radius:10px}
+body[data-side=icons] .tab.active .tile{box-shadow:none}
+body[data-side=icons] .side-h{order:2;padding:6px 0 10px}
+body[data-side=icons] #new-tab-menu{display:none}
+body[data-side=icons] .menu{top:auto;bottom:34px}
+body[data-side=icons] #new-tab{border:0;background:none;color:var(--muted);width:36px;height:36px;border-radius:10px;font-size:18px}
+body[data-side=icons] #new-tab:hover{background:var(--hover);color:var(--text)}
+.blocks{padding:6px 24px 14px;gap:0;line-height:1.6}
+.block{border:0;border-radius:0;background:none;border-top:1px solid var(--line);padding:12px 0;overflow:visible}
+.blocks>.block:first-child{border-top:0}
+.block.err{box-shadow:none}
+.block .cmd{display:flex;align-items:baseline;gap:9px;padding:0;font-weight:500}
+.block .cmd .cx{white-space:pre-wrap;min-width:0}
+.pm{color:var(--accent);user-select:none}
+.block.err .pm{color:var(--err)}
+.meta{margin-left:auto;display:flex;gap:4px;align-items:center;font-family:var(--ui);font-size:11px;color:var(--faint);font-weight:400;white-space:nowrap}
+.block .out{padding:5px 0 0 19px;opacity:.82}
+.block-h{border:0;background:none;padding:0 0 6px;font-size:11.5px}
+.block[data-ab] .out{margin-left:7px;padding:2px 0 2px 14px;border-left:2px solid var(--line);opacity:1}
+.chip{background:none;border:0;padding:0;color:var(--muted)}
+.chip.acc{color:var(--accent)}
+.state{background:none!important;padding:0;font-weight:600;font-size:11px}
+.diff,.log{border:0;background:color-mix(in srgb,var(--text) 3.5%,transparent);border-radius:6px}
+.sug{background:none;border:0;border-left:2px solid var(--accent);border-radius:0;padding:2px 0 2px 10px;margin:2px 0}
+.sug button{background:none;border:0;color:var(--muted);padding:2px 6px}
+.sug button:hover{color:var(--text);background:var(--hover)}
+.sug button.prim{background:none;color:var(--accent)}
+.ag-ask{background:none;border:0;border-left:2px solid var(--warn);border-radius:0;padding:4px 0 4px 10px}
+.ag-done button,.ag-ask button:not(.yes){background:none}
+.input-wrap{margin:0 20px 16px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);padding:9px 12px}
+.input-wrap:focus-within{border-color:color-mix(in srgb,var(--accent) 50%,var(--line));box-shadow:none}
+.hint{display:none}
+.hint:has(.paste){display:flex}
+.editor::before{content:'❯';position:absolute;left:0;top:0;line-height:24px;color:var(--accent)}
+.editor .hl,.editor textarea{left:20px}
+.ptabs{padding:0 8px 0 12px;height:40px;align-items:stretch;border-bottom:1px solid var(--line)}
+.ptabs>button{text-transform:none;letter-spacing:0;font-size:12.5px;font-weight:500;padding:0 6px}
+.ptabs>button.on{font-weight:600}
+.ptabs .r{align-items:center;padding:0}
+.ptabs .cnt{background:none;color:var(--muted);padding:0}
+.wdot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--warn);margin-left:5px;vertical-align:middle}
+#ag-scope,#sim8{opacity:0;transition:opacity .15s}
+.ptabs:hover #ag-scope,.ptabs:hover #sim8{opacity:1}
+.ptabs .btn.sm{border:0;background:none;color:var(--muted)}
+.ptabs .btn.sm:hover{background:var(--hover);color:var(--text)}
+.seg{border:0}
+.counters{display:none}
+.alist{padding-top:6px}
+.ar.sel{background:var(--hover)}
+.ar.waiting{background:none}
+.ar.waiting .aa{color:var(--warn)}
+.ag-detail{background:none;border-top:1px solid var(--line)}
+.ag-detail .mini{background:none;border:0;padding:2px 7px;color:var(--muted);font-weight:500}
+.ag-detail .mini:hover{background:var(--hover);color:var(--text)}
+.ag-detail .btns{gap:2px;margin-left:-7px}
+.ucompact{gap:8px}
+.fpane .fbtn{opacity:0;transition:opacity .15s}
+.fpane:hover .fbtn,.fbtn.on{opacity:1}
+.fbar .os{font-weight:600;color:var(--muted)}
+#pv-files>.fhint{display:none}
+.fpane+.fpane,.xfers{border-color:var(--line)}
+.usage-panel .panel-h{display:none}
+.usage-panel .panel-b{padding:0}
+.ucompact{display:flex;align-items:center;gap:9px;padding:11px 14px;font-size:11.5px;color:var(--muted);cursor:pointer;white-space:nowrap;overflow:hidden}
+.ucompact:hover,.um:hover{background:var(--hover)}
+.ucompact b{color:var(--text);font-weight:600}
+.ucompact .mono{font-family:var(--mono);font-size:11px}
+.ucompact .r{margin-left:auto;color:var(--faint)}
+.um{padding:11px 14px 12px;cursor:pointer}
+.dock{border-top:1px solid var(--line)}
+.dock-h{background:none;border-bottom:1px solid var(--line)}
+.toast{border-left-width:2px;font-size:12px;padding:8px 12px;min-width:240px;box-shadow:0 10px 30px rgba(0,0,0,.3)}
+
+@media (max-width:1180px){.body{grid-template-columns:var(--sideW,220px) minmax(0,1fr) 300px}}
+@media (max-width:960px){
+  body{padding:0}.win{border-radius:0}
+  .body{grid-template-columns:var(--sideW,200px) minmax(0,1fr)}
+  .right{display:none}.tb-search{display:none}
+  .theme-cards,.samples{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body data-theme="blue" data-side="full">
+<div class="win">
+  <header class="titlebar">
+    <button class="ib" id="side-toggle" title="Sesiones: íconos ↔ completa (Alt+B)"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg></button>
+    <div class="tb-title" id="tb-title" title="Acciones, MCP y apariencia (Ctrl+K)"></div>
+    <div class="tb-right">
+      <button class="ib" data-toggledock title="Terminal acoplada (Ctrl+`)"><svg class="i" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg></button>
+      <button class="ib" id="open-sheet" title="Acciones, MCP y apariencia (Ctrl+K)"><svg class="i" viewBox="0 0 24 24"><path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z"/></svg></button>
+      <button class="ib" id="right-toggle" title="Panel de agentes y archivos (Alt+J)"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/></svg></button>
+      <div class="wbtns">
+        <button class="wbtn min" title="Minimizar"></button>
+        <button class="wbtn max" title="Maximizar"></button>
+        <button class="wbtn close" title="Cerrar"></button>
+      </div>
+    </div>
+  </header>
+
+  <div class="body">
+    <aside class="side">
+      <div class="side-h"><span class="lbl">Sesiones</span>
+        <div class="grp">
+          <button class="btn-icon" id="new-tab" title="Nueva pestaña (Alt+T)">+</button>
+          <button class="btn-icon" id="new-tab-menu" title="Elegir shell o SSH" style="font-size:10px">▾</button>
+          <div class="menu" id="shell-menu">
+            <button data-shell="PowerShell 7">⚡ PowerShell 7 <span class="m-sub">pwsh</span></button>
+            <button data-shell="Git Bash">🐚 Git Bash <span class="m-sub">bash</span></button>
+            <button data-shell="WSL Ubuntu">🐧 WSL Ubuntu <span class="m-sub">wsl</span></button>
+            <button data-shell="SSH">🌐 SSH · admin@srv-web <span class="m-sub">~/.ssh/config</span></button>
+          </div>
+        </div>
+      </div>
+      <div class="tabs" id="tabs"></div>
+      <div class="side-f" id="side-f"></div>
+    </aside>
+
+    <main class="main">
+      <div class="main-h" id="main-h"></div>
+      <div class="session">
+        <div class="dropmsg" id="dropmsg"></div>
+        <div class="blocks" id="blocks"></div>
+        <div class="input-wrap">
+          <div class="suggest" id="suggest"></div>
+          <div class="prompt-line" id="prompt-line"></div>
+          <div class="editor" id="editor">
+            <div class="hl" id="hl"></div>
+            <textarea id="cmd" rows="1" wrap="off" autocomplete="off" spellcheck="false"></textarea>
+          </div>
+          <div class="hint" id="hint"></div>
+        </div>
+      </div>
+      <div class="dock" id="dock">
+        <div class="dock-resize" id="dock-resize" title="Arrastra para cambiar el alto"></div>
+        <div class="dock-h" id="dock-h"></div>
+        <div class="dock-out" id="dock-out"></div>
+        <div class="dock-in"><span id="dock-pr"></span><input id="dock-cmd" autocomplete="off" spellcheck="false" placeholder="comando…"></div>
+      </div>
+    </main>
+
+    <aside class="right">
+      <section class="panel">
+        <div class="ptabs">
+          <button data-ptab="agents" class="on">Agentes <span class="cnt" id="ag-count">0</span></button>
+          <button data-ptab="files">Archivos</button>
+          <span class="r" id="ag-tools">
+            <span class="seg" id="ag-scope"><button data-scope="tab" class="on" title="Solo esta pestaña">Esta</button><button data-scope="all" title="Agentes de todas las pestañas">Todas</button></span>
+            <button class="btn sm" id="sim8" title="Simula una instrucción que lanza 8 subagentes en paralelo">⚡8</button>
+            <button class="btn sm" id="new-agent" title="Nuevo agente (Alt+A)">+</button>
+          </span>
+        </div>
+        <div class="pview on" id="pv-agents">
+          <div class="counters" id="ag-counters"></div>
+          <div class="alist" id="agents"></div>
+          <div class="ag-detail" id="ag-detail"></div>
+        </div>
+        <div class="pview" id="pv-files"></div>
+      </section>
+      <section class="panel usage-panel">
+        <div class="panel-h">Uso <span class="r dim" id="u-src" style="font-size:10.5px"></span></div>
+        <div class="panel-b" id="usage"></div>
+      </section>
+    </aside>
+  </div>
+
+  <footer class="status" id="status"></footer>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="sheet">
+    <div class="sheet-h"><h2 id="sheet-title">Sesión</h2><span class="chip acc" id="sheet-tabname"></span><button class="btn-icon x" id="sheet-close">×</button></div>
+    <div class="sheet-tabs" id="sheet-tabs">
+      <button class="sheet-tab" data-v="mcp">MCP y opciones</button>
+      <button class="sheet-tab" data-v="cmds">Comandos personalizados</button>
+      <button class="sheet-tab" data-v="look">Apariencia y sintaxis</button>
+      <button class="sheet-tab" data-v="keys">Atajos</button>
+      <button class="sheet-tab" data-v="agent">Nuevo agente</button>
+    </div>
+    <div class="sheet-b" id="sheet-b"></div>
+  </div>
+</div>
+<div class="ctx" id="ctx"></div>
+<div class="hcard" id="hcard"></div>
+<input type="file" id="fpick" multiple hidden>
+<div class="toasts" id="toasts"></div>
+
+<script>
+'use strict';
+/* ════════════ utilidades ════════════ */
+const $ = s => document.querySelector(s);
+const W = s => s.replace(/\//g, '\\');
+const HOME = W('C:/Users/dev');
+const short = p => p && p.toLowerCase().startsWith(HOME.toLowerCase()) ? '~' + p.slice(HOME.length) : p;
+const tail = p => { const sep = p.includes('\\') ? '\\' : '/'; const s = short(p).split(sep).filter((x, i) => x || i === 0); return s.length > 2 ? '…' + sep + s.slice(-2).join(sep) : short(p); };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const rnd = (a, b) => a + Math.random() * (b - a);
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const fmtK = n => n >= 1e6 ? (n/1e6).toFixed(2)+'M' : n >= 1e3 ? (n/1e3).toFixed(1)+'k' : String(Math.round(n));
+const fmtUSD = n => '$' + n.toFixed(n < 1 ? 3 : 2);
+const fmtDur = s => { s = Math.round(s); const h = Math.floor(s/3600), m = Math.floor(s%3600/60), x = s%60; return h ? `${h}h ${m}m` : m ? `${m}m ${x}s` : `${x}s`; };
+const fmtS = s => { s = Math.round(s); return s >= 3600 ? Math.floor(s/3600)+'h' : s >= 60 ? Math.floor(s/60)+'m' : s+'s'; };
+const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random()*16|0; return (c==='x'?r:(r&3|8)).toString(16); }));
+const slug = s => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,28) || 'tarea';
+const now = () => new Date().toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+const selText = () => (getSelection() || '').toString();
+
+/* ════════════ íconos (trazos estilo Lucide) ════════════ */
+const SVG = {
+  rust:'<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.3 7 12 12 20.7 7"/><line x1="12" y1="22" x2="12" y2="12"/>',
+  web:'<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
+  cad:'<path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.6 7.6"/><circle cx="11" cy="11" r="2"/>',
+  shell:'<polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>',
+  ssh:'<rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>',
+};
+const ICON_BG = {rust:'linear-gradient(135deg,#ea580c,#9a3412)', web:'linear-gradient(135deg,#8b5cf6,#5b21b6)', cad:'linear-gradient(135deg,#0891b2,#155e75)', shell:'linear-gradient(135deg,#475569,#1e293b)', ssh:'linear-gradient(135deg,#10b981,#065f46)'};
+const icon = (k, cls = 'i') => `<svg class="${cls}" viewBox="0 0 24 24">${SVG[k] || SVG.shell}</svg>`;
+const detectIcon = p => /kuntur/i.test(p) ? 'rust' : /astro|web/i.test(p) ? 'web' : /autocad|cad/i.test(p) ? 'cad' : null;
+
+/* ════════════ sistema de archivos simulado + memoria de carpetas ════════════ */
+const norm = p => p.replace(/[\\/]+$/, '');
+const FS = {};
+[
+  ['C:', 'Users,Program Files,Windows'],
+  ['C:/Users', 'dev,Public'],
+  ['C:/Users/dev', 'Desktop,Documents,Downloads,.claude,.codex,.cargo,.ssh,AppData'],
+  ['C:/Users/dev/.claude', 'projects,skills,settings.json'],
+  ['C:/Users/dev/.codex', 'sessions,config.toml'],
+  ['E:', 'proyectos,BACKUPS,ISOs'],
+  ['E:/proyectos', 'dev,ERP,pruebas'],
+  ['E:/proyectos/dev', 'astro,mcp,kuntur,docs,scripts'],
+  ['E:/proyectos/dev/mcp', 'autocad,notebooklm,firewall'],
+  ['E:/proyectos/dev/mcp/autocad', 'config,complementos,iniciar.py'],
+  ['E:/proyectos/dev/kuntur', 'crates,docs,spikes,themes,.wt,Cargo.toml,README.md'],
+  ['E:/proyectos/dev/kuntur/crates', 'kuntur-app,kuntur-term,kuntur-agents,kuntur-usage,kuntur-complete,kuntur-config'],
+  ['E:/proyectos/dev/kuntur/.wt', 'refactoriza-el-lector-del-pt,parser-de-rate-limits-del-ro'],
+  ['E:/proyectos/dev/astro', 'src,public,dist,package.json,astro.config.mjs'],
+  ['E:/proyectos/dev/astro/src', 'data,pages,components,layouts'],
+].forEach(([p, c]) => { FS[W(p)] = c.split(','); });
+const REMOTE = {
+  '/': ['etc','home','var','opt'], '/var': ['www','log'], '/var/www': ['acme','html'],
+  '/var/www/acme': ['public','storage','app','artisan','composer.json','.env'],
+  '/var/log': ['nginx','syslog'], '/var/log/nginx': ['access.log','error.log'],
+  '/etc': ['nginx','php'], '/etc/nginx': ['nginx.conf','sites-enabled'], '/home': ['admin'], '/home/admin': ['scripts','backups'],
+};
+const isFile = n => /\.[a-z0-9]+$/i.test(n) && !n.startsWith('.') || /^(artisan)$/.test(n);
+const fsKey = p => Object.keys(FS).find(k => k.toLowerCase() === norm(p).toLowerCase());
+function canon(p){
+  const segs = norm(p).split('\\'); let cur = segs[0].toUpperCase();
+  if (!FS[cur]) return null;
+  for (const s of segs.slice(1)) {
+    const hit = (FS[cur] || []).find(k => k.toLowerCase() === s.toLowerCase());
+    if (!hit || isFile(hit)) return null; cur = cur + '\\' + hit;
+  }
+  return cur;
+}
+function resolve(cwd, rel){
+  rel = rel.replace(/^~/, HOME).replace(/\//g, '\\');
+  if (/^[a-z]:/i.test(rel)) return norm(rel);
+  const segs = norm(cwd).split('\\');
+  rel.split('\\').filter(Boolean).forEach(s => { if (s === '..') { if (segs.length > 1) segs.pop(); } else if (s !== '.') segs.push(s); });
+  return segs.join('\\');
+}
+function presolve(cwd, rel){
+  rel = rel.replace(/^~/, '/home/admin');
+  const segs = rel.startsWith('/') ? [] : cwd.split('/').filter(Boolean);
+  rel.split('/').filter(Boolean).forEach(s => { if (s === '..') segs.pop(); else if (s !== '.') segs.push(s); });
+  return '/' + segs.join('/');
+}
+const VISITS = [
+  {p:'E:/proyectos/dev/astro', n:42, h:2}, {p:'E:/proyectos/dev/kuntur', n:31, h:.1},
+  {p:'E:/proyectos/dev/mcp/autocad', n:17, h:26}, {p:'C:/Users/dev/.claude', n:12, h:5},
+  {p:'E:/proyectos/dev/mcp/firewall', n:9, h:72}, {p:'E:/proyectos/dev/astro/src/data', n:8, h:30},
+  {p:'E:/proyectos/ERP', n:5, h:200},
+].map(v => ({...v, p: W(v.p)}));
+const frec = v => v.n * (v.h < 1 ? 4 : v.h < 24 ? 2 : v.h < 168 ? 1 : .25);
+function visit(p){ const v = VISITS.find(x => x.p.toLowerCase() === p.toLowerCase()); if (v) { v.n++; v.h = 0; } else VISITS.push({p, n:1, h:0}); }
+const HISTORY = ['claude','claude --resume','codex','git status','git log --oneline -5','cargo build --release','cargo run -p kuntur-app','cargo test -p kuntur-usage','npm run build','npm run dev','winget upgrade --all','z astro','sudo apt update','systemctl status nginx'];
+const BUILTINS = ['cd','ls','dir','z','claude','codex','git','cargo','npm','code','clear','cls','help','winget','explorer','pwd','sudo','apt','systemctl','df','tail','cat','ssh'];
+const KNOWN = new Set(BUILTINS);
+
+/* ════════════ catálogos ════════════ */
+const MODELS = {
+  claude: [{id:'claude-opus-5-5', name:'Opus 5.5', p:{in:5e-6,out:25e-6,cache:.5e-6}}, {id:'claude-sonnet-5-5', name:'Sonnet 5.5', p:{in:3e-6,out:15e-6,cache:.3e-6}}, {id:'claude-haiku-5-5', name:'Haiku 5.5', p:{in:1e-6,out:5e-6,cache:.1e-6}}],
+  codex: [{id:'gpt-5-codex', name:'GPT-5 Codex', p:{in:1.25e-6,out:10e-6,cache:.125e-6}}],
+};
+const KIND = {claude:{label:'Claude Code', exe:'claude.exe', L:'C'}, codex:{label:'Codex CLI', exe:'codex.exe', L:'X'}};
+const MCP_CATALOG = [
+  ['filesystem','Lectura/escritura de archivos del proyecto'], ['github','Issues, PRs y repos vía gh'],
+  ['claude-in-chrome','Automatiza tu Chrome con sesión iniciada'], ['notebooklm','Consulta cuadernos de NotebookLM'],
+  ['autocad','Dibujo y normas (dev\\mcp\\autocad)'], ['firewall-ro','Firewall por SSH, solo lectura'],
+  ['gmail','Lectura y borradores de correo'], ['context7','Documentación de librerías al día'],
+];
+const MCP_PRESETS = {'Mínimo':['filesystem'], 'Web / Astro':['filesystem','github','claude-in-chrome','context7'], 'CAD':['filesystem','autocad'], 'Redes':['filesystem','firewall-ro']};
+const STATE_TXT = {working:'trabajando', waiting:'esperando', done:'listo', idle:'inactivo'};
+const VERBS = ['Pensando','Leyendo archivos','Editando','Ejecutando pruebas','Analizando dependencias','Planificando'];
+const SUB_TYPES = ['Explore','Explore','Explore','general-purpose','general-purpose','Plan','code-reviewer','test-runner'];
+const SUB_ACTS = ['Grep "OSC 7501" crates/','Read docs/PLAN.md','Glob crates/**/*.rs','WebSearch "alacritty_terminal selection"','Read crates/kuntur-term/src/lib.rs','Bash cargo test -p kuntur-term','Grep "rate_limits" crates/','Read themes/blue.toml','WebFetch code.claude.com/docs/en/hooks','Edit crates/kuntur-agents/src/lib.rs','Bash cargo clippy -p kuntur-usage','Read crates/kuntur-app/src/main.rs'];
+const THEMES = {
+  blue:  {name:'Blue · Océano', ui:"'Inter'", mono:"'JetBrains Mono'", ansi:['#0b1a4a','#f87171','#4ade80','#fbbf24','#60a5fa','#f0abfc','#22d3ee','#dbeafe','#3b5bab','#fca5a5','#86efac','#fde68a','#93c5fd','#f5d0fe','#67e8f9','#ffffff'], pv:['linear-gradient(140deg,#1a379a,#3b82f6)','#eaf2ff','#f0abfc','#67e8f9','#86efac','#8fa8db']},
+  dark:  {name:'Dark · Medianoche', ui:"'Inter'", mono:"'Fira Code'", ansi:['#15161e','#f7768e','#9ece6a','#e0af68','#7aa2f7','#bb9af7','#7dcfff','#a9b1d6','#414868','#ff899d','#9fe044','#faba4a','#8db0ff','#c7a9ff','#a4daff','#c0caf5'], pv:['#0b1019','#c0caf5','#bb9af7','#7aa2f7','#9ece6a','#5f6a8f']},
+  white: {name:'White · Papel', ui:"'IBM Plex Sans'", mono:"'IBM Plex Mono'", ansi:['#1c2333','#dc2626','#15803d','#b45309','#2563eb','#7c3aed','#0e7490','#e5e7eb','#5f6b84','#ef4444','#22c55e','#d97706','#3b82f6','#8b5cf6','#0891b2','#ffffff'], pv:['#fbfcfe','#1c2333','#7c3aed','#2563eb','#15803d','#8a94a8']},
+};
+const FONT_PAIRS = [
+  ['Inter + JetBrains Mono', "'Inter'", "'JetBrains Mono'"], ['Inter + Fira Code (ligaduras)', "'Inter'", "'Fira Code'"],
+  ['IBM Plex Sans + IBM Plex Mono', "'IBM Plex Sans'", "'IBM Plex Mono'"], ['Space Grotesk + JetBrains Mono', "'Space Grotesk'", "'JetBrains Mono'"],
+  ['Segoe UI + Cascadia Code (Windows)', "'Segoe UI Variable','Segoe UI'", "'Cascadia Code','Cascadia Mono'"],
+];
+
+/* ════════════ resaltado ════════════ */
+const KW = {
+  rust: 'fn let mut pub struct impl use match if else for in return async await self Self enum mod where loop while const move ref as',
+  ts: 'const let function return import from export async await if else for of new class interface type extends typeof',
+  py: 'def return import from as if elif else for in while class with async await None True False self lambda',
+};
+function hlCode(src, lang){
+  const kw = new Set((KW[lang] || KW.ts).split(' '));
+  const com = lang === 'py' ? '#.*$' : '\\/\\/.*$';
+  const re = new RegExp(`(${com})|("(?:\\\\.|[^"])*"|'(?:\\\\.|[^'])*')|(\\b\\d[\\w.]*)|([A-Za-z_]\\w*)|([^\\sA-Za-z_\\d"'#/]+|\\/)|(\\s+)|(.)`, 'gm');
+  let out = '', m;
+  while ((m = re.exec(src))) {
+    const [t, c, s, n, id, op] = m;
+    if (c) out += `<span class="com">${esc(t)}</span>`;
+    else if (s) out += `<span class="str">${esc(t)}</span>`;
+    else if (n) out += `<span class="num">${esc(t)}</span>`;
+    else if (id) { const nx = src[re.lastIndex]; out += `<span class="${kw.has(id) ? 'kw' : (nx === '(' || nx === '!') ? 'fn' : /^[A-Z]/.test(id) ? 'typ' : 'var'}">${esc(id)}</span>`; }
+    else if (op) out += `<span class="op">${esc(t)}</span>`;
+    else out += esc(t);
+  }
+  return out;
+}
+function hlLine(text, t){
+  let first = true;
+  return text.split(/(\s+)/).map(tok => {
+    if (!tok || /^\s+$/.test(tok)) return tok;
+    let cls;
+    if (first || /^(&&|\|\||\||;)$/.test(tok)) { if (/^(&&|\|\||\||;)$/.test(tok)) { first = true; return `<span class="op">${esc(tok)}</span>`; } cls = KNOWN.has(tok.toLowerCase()) ? 'c-cmd' : 'c-unknown'; first = false; }
+    else if (/^--?\w/.test(tok)) cls = 'c-flag';
+    else if (/^["']/.test(tok)) cls = 'c-str';
+    else if (t && t.kind === 'ssh' && /^[\/~.]/.test(tok)) cls = 'c-path';
+    else if (/^[a-z]:|\\|^~|^\.{1,2}/i.test(tok)) cls = t && canon(resolve(t.cwd, tok)) ? 'c-path' : 'c-path-bad';
+    else if (/^\d+$/.test(tok)) cls = 'c-num';
+    else cls = 'c-arg';
+    return `<span class="${cls}">${esc(tok)}</span>`;
+  }).join('');
+}
+const hlCmd = (text, t = tab()) => text.split('\n').map(l => hlLine(l, t)).join('\n');
+const actHTML = s => { const i = s.indexOf(' '); return i < 0 ? `<b>${esc(s)}</b>` : `<b>${esc(s.slice(0, i))}</b> ${esc(s.slice(i + 1))}`; };
+
+/* ════════════ estado ════════════ */
+const S = { theme:'blue', side:'full', tabs:[], active:null, nextId:1, sheet:'mcp', sugg:[], sel:0, closed:null,
+  selAgent:{}, selSub:{}, scope:'tab', pendingBlocks:new Set(), pasteNote:'',
+  ptab:'agents', xfers:[], fclip:null, pendingPaste:null, pickTarget:null, right:true, usageOpen:false,
+  limits:{ c5:{pct:38, reset:Date.now()+(2*3600+14*60)*1000}, c7:{pct:61, reset:Date.now()+3.4*86400e3}, x5:{pct:12, reset:Date.now()+4.1*3600e3}, x7:{pct:44, reset:Date.now()+5.2*86400e3} },
+  today:{cost:3.87, tok:1.94e6},
+  cmds:[
+    {name:'Compilar release', cmd:'cargo build --release', keys:'Ctrl+Alt+B', scope:'tab', tab:1},
+    {name:'Build web', cmd:'npm run build', keys:'Ctrl+Alt+B', scope:'tab', tab:2},
+    {name:'Actualizar paquetes', cmd:'sudo apt update && sudo apt upgrade -y', keys:'Ctrl+Alt+U', scope:'tab', tab:5},
+    {name:'Estado git', cmd:'git status', keys:'Ctrl+Alt+G', scope:'global'},
+    {name:'Reanudar Claude', cmd:'claude --resume', keys:'Ctrl+Alt+R', scope:'global'},
+  ],
+};
+const tab = () => S.tabs.find(t => t.id === S.active);
+const allAgents = () => S.tabs.flatMap(t => t.agents);
+
+const TEMPLATES = {
+  rust: { lang:'rust', tools:[['Read','crates/kuntur-term/src/pty.rs'],['Update','crates/kuntur-term/src/pty.rs']], ask:'cargo build --release',
+    acts:['Read crates/kuntur-term/src/pty.rs','Grep "advance(" crates/','Edit crates/kuntur-term/src/pty.rs','Bash cargo check -p kuntur-term','Read crates/kuntur-term/Cargo.toml'],
+    diff:[[' ','pub async fn leer_pty(mut pty: PtyReader, term: &mut Term) -> Result<usize> {'],['-','    let mut buf = Vec::new();'],['+','    // buffer fijo: sin realocar en cada lectura'],['+','    let mut buf = [0u8; 4096];'],[' ','    let n = pty.read(&mut buf).await?;'],['+','    term.advance(&buf[..n]);'],[' ','    Ok(n)'],[' ','}']] },
+  rust2: { lang:'rust', tools:[['Read','crates/kuntur-usage/src/codex.rs'],['Update','crates/kuntur-usage/src/codex.rs']], ask:'cargo test -p kuntur-usage',
+    acts:['Read crates/kuntur-usage/src/codex.rs','Edit crates/kuntur-usage/src/codex.rs','Bash cargo test -p kuntur-usage','Grep "token_count" ~/.codex/sessions'],
+    diff:[['+','/// Lee el último evento token_count del rollout JSONL'],['+','pub fn ultimo_limite(linea: &str) -> Option<RateLimits> {'],['+','    let ev: Evento = serde_json::from_str(linea).ok()?;'],['+','    ev.payload.rate_limits'],['+','}']] },
+  ts: { lang:'ts', tools:[['Read','src/data/site.ts'],['Update','src/data/site.ts']], ask:'npm run build', suggest:['npm run build','npm run preview'],
+    note:'Listo el cambio. Para verificarlo ejecuta en la terminal:',
+    acts:['Read src/data/site.ts','Grep "menu" src/','Edit src/data/site.ts','Bash npm run build'],
+    diff:[[' ','export const menu: MenuItem[] = ['],[' ','  { label: "Inicio", href: "/" },'],['+','  // enlace pedido en la última revisión'],['+','  { label: "Contacto", href: "/contacto", nuevo: true },'],[' ','];']] },
+  ssh: { lang:'sh', tools:[['Bash','tail -n 50 /var/log/nginx/error.log'],['Bash','systemctl status php8.3-fpm']], ask:'sudo systemctl restart php8.3-fpm',
+    acts:['Bash tail -n 50 /var/log/nginx/error.log','Bash systemctl status php8.3-fpm','Read /etc/nginx/sites-enabled/acme','Grep "pm.max_children" /etc/php/'],
+    log:'connect() to unix:/run/php/php8.3-fpm.sock failed (11: Resource temporarily unavailable)\nWARNING: [pool www] server reached pm.max_children setting (5)',
+    note:'El pool de PHP-FPM está saturado y hay 12 paquetes pendientes (incluye php8.3 y openssl). Ejecuta en el servidor:',
+    suggest:['sudo apt update && sudo apt upgrade -y','sudo systemctl restart php8.3-fpm nginx'] },
+};
+function mkSub(state = 'working'){ return {id:uuid(), type:pick(SUB_TYPES), state, action:pick(SUB_ACTS), elapsed:rnd(3, 90)}; }
+function mkAgent(t, kind, task, {modelIdx=0, worktree=true, tpl, state='working', remote=false} = {}){
+  const model = MODELS[kind][Math.min(modelIdx, MODELS[kind].length-1)];
+  const T = TEMPLATES[tpl || (kind === 'codex' ? 'rust2' : 'rust')];
+  const sl = slug(task);
+  const a = {
+    id: uuid(), kind, task, model: model.name, modelId: model.id, price: model.p, tpl: T, remote,
+    effort: t.opts.effort, thinking: t.opts.thinking, pid: Math.floor(rnd(2000, 32000)),
+    cwd: worktree ? resolve(t.cwd, '.wt\\' + sl) : t.cwd, worktree: worktree ? {branch:'agent/' + sl, path:'.wt\\' + sl} : null,
+    state, tokIn: rnd(8e3, 40e3), tokOut: rnd(1e3, 6e3), cacheR: rnd(20e3, 120e3), cost: 0, ctx: rnd(8, 30), ctxSize: 200000,
+    tps: 0, hist: Array.from({length:60}, () => 0), elapsed: rnd(20, 400), verb: pick(VERBS), action: pick(T.acts),
+    subs: [], open: true, mcp: Object.keys(t.mcp).filter(k => t.mcp[k]),
+  };
+  a.cost = a.tokIn * a.price.in + a.tokOut * a.price.out + a.cacheR * a.price.cache;
+  return a;
+}
+function mkTab(name, cwd, shell = 'PowerShell 7', o = {}){
+  const ssh = shell === 'SSH';
+  const t = { id: S.nextId++, name, cwd: ssh ? cwd : W(cwd), shell, kind: ssh ? 'ssh' : 'local', host: o.host || null, branch: o.branch || null,
+    icon: o.icon || (ssh ? 'ssh' : detectIcon(cwd) || 'shell'), summary: o.summary || (ssh ? 'Sesión remota' : 'Shell local'),
+    agents:[], blocks:[], badge:0,
+    mcp: Object.fromEntries(MCP_CATALOG.map(([k]) => [k, k === 'filesystem'])),
+    opts: {model:0, effort:'high', thinking:true, perm:'default'}, dock:null };
+  t.dock = {open:false, lines:[], cwd:t.cwd, hist:[], hi:-1, target:'session'};
+  // v4: los datos técnicos de la conexión ya no ensucian la salida; van en la tarjeta de la sesión.
+  return t;
+}
+function seed(){
+  const t1 = mkTab('kuntur', 'E:/proyectos/dev/kuntur', 'PowerShell 7', {branch:'main', summary:'Terminal Rust · PTY, uso y agentes'});
+  t1.mcp.github = true; t1.mcp.context7 = true;
+  t1.blocks.push({type:'cmd', cmd:'git status', cwd:t1.cwd, branch:'main', ok:true, t:'0.08s', out:'En la rama <span class="acc">main</span>\nCambios no rastreados:\n  <span class="errc">crates/kuntur-usage/</span>\n  <span class="errc">docs/PLAN.md</span>'});
+  const a1 = mkAgent(t1, 'claude', 'Refactoriza el lector del PTY con buffer fijo de 4 KB', {tpl:'rust'});
+  a1.subs = [mkSub('working'), mkSub('working'), mkSub('working'), mkSub('done'), mkSub('working'), mkSub('done')];
+  const a2 = mkAgent(t1, 'codex', 'Parser de rate_limits del rollout JSONL de Codex', {tpl:'rust2'});
+  t1.agents.push(a1, a2); t1.blocks.push({type:'agent', id:a1.id}, {type:'agent', id:a2.id});
+
+  const t2 = mkTab('web-acme (astro)', 'E:/proyectos/dev/astro', 'PowerShell 7', {branch:'main', summary:'Web ACME · enlace Contacto'});
+  Object.assign(t2.mcp, {github:true, 'claude-in-chrome':true, context7:true}); t2.opts.model = 1; t2.opts.effort = 'medium';
+  const a3 = mkAgent(t2, 'claude', 'Agrega el enlace de Contacto al menú', {tpl:'ts', modelIdx:1, worktree:false, state:'waiting'});
+  t2.agents.push(a3); t2.blocks.push({type:'agent', id:a3.id}); t2.badge = 1;
+
+  const t3 = mkTab('mcp-autocad', 'E:/proyectos/dev/mcp/autocad', 'PowerShell 7', {branch:'main', summary:'Validar capas P{n} con la norma'});
+  t3.mcp.autocad = true;
+  const a4 = mkAgent(t3, 'claude', 'Valida capas P{n} contra la norma', {tpl:'rust', worktree:false, state:'done'});
+  t3.agents.push(a4); t3.blocks.push({type:'agent', id:a4.id});
+
+  const t4 = mkTab('PowerShell', 'C:/Users/dev', 'PowerShell 7', {summary:'Shell local · winget'});
+  t4.blocks.push({type:'cmd', cmd:'winget upgrade --all', cwd:t4.cwd, ok:true, t:'41.2s', out:'Se encontraron 3 actualizaciones…\n<span class="ok">✓</span> Git.Git 2.52.0\n<span class="ok">✓</span> Rustlang.Rustup 1.29.3\n<span class="ok">✓</span> Microsoft.PowerShell 7.5.4'});
+
+  const t5 = mkTab('srv-web (ssh)', '/var/www/acme', 'SSH', {host:'admin@srv-web', summary:'Servidor web · error 502 y paquetes'});
+  const a5 = mkAgent(t5, 'claude', 'Revisa por qué nginx devuelve 502', {tpl:'ssh', worktree:false, state:'done', remote:true});
+  a5.subs = [mkSub('done'), mkSub('done')]; a5.subs[0].type = 'Explore'; a5.subs[0].action = 'Bash journalctl -u nginx -n 100'; a5.subs[1].type = 'general-purpose'; a5.subs[1].action = 'Bash apt list --upgradable';
+  t5.agents.push(a5); t5.blocks.push({type:'cmd', cmd:'claude', cwd:t5.cwd, ok:true, t:'0.4s', out:'<span class="dim">Claude Code corriendo en el servidor · estado vía OSC 7501</span>'}, {type:'agent', id:a5.id});
+
+  S.tabs.push(t1, t2, t3, t4, t5); S.active = t1.id;
+  S.selAgent[t1.id] = a1.id; S.selAgent[t2.id] = a3.id; S.selAgent[t3.id] = a4.id; S.selAgent[t5.id] = a5.id;
+}
+
+/* ════════════ render: pestañas ════════════ */
+function tabState(t){
+  const st = t.agents.flatMap(a => [a.state, ...a.subs.map(s => s.state)]);
+  return st.includes('waiting') ? 'waiting' : st.includes('working') ? 'working' : st.includes('done') ? 'done' : 'idle';
+}
+function renderTabs(){
+  $('#tabs').innerHTML = S.tabs.map((t, i) => {
+    const nAg = t.agents.length, nSub = t.agents.reduce((n, a) => n + a.subs.length, 0);
+    return `<div class="tab ${t.id===S.active?'active':''}" data-tab="${t.id}" data-idx="${i+1}">
+      <div class="tile" style="background:${ICON_BG[t.icon]}">${icon(t.icon)}<span class="dot ${tabState(t)}"></span>${t.badge && t.id !== S.active ? `<span class="badge">${t.badge}</span>` : ''}</div>
+      <div class="info" style="min-width:0">
+        <div class="name" data-rename="${t.id}">${esc(t.name)}</div>
+        <div class="sum">${esc(t.summary)}</div>
+        <div class="sub">${t.kind==='ssh' ? esc(t.host) + ':' : ''}${esc(tail(t.cwd))}${nAg ? ` · ${nAg} ag${nSub ? ` · ${nSub} sub` : ''}` : ''}</div>
+      </div>
+      <button class="x" data-close="${t.id}" title="Cerrar (Alt+W)">×</button>
+    </div>`; }).join('');
+  $('#side-f').innerHTML = `<div>Sesiones <b>${S.tabs.length}</b> · Agentes <b>${allAgents().length}</b></div><div>Doble clic en el nombre para renombrar · Alt+B cambia la vista</div>`;
+}
+
+/* ════════════ render: centro ════════════ */
+function agentBlockInner(a){
+  const T = a.tpl, L = [];
+  L.push(`<div class="ag-prompt">› ${esc(a.task)}</div>`);
+  T.tools.forEach(([tool, arg]) => {
+    if (tool === 'Update' && T.diff) { const ad = T.diff.filter(d => d[0]==='+').length, de = T.diff.filter(d => d[0]==='-').length; L.push(`<div class="ag-tool">● <b>${tool}</b>(${esc(arg)}) <span class="add-n">+${ad}</span> <span class="del-n">−${de}</span></div>`); }
+    else L.push(`<div class="ag-tool">● <b>${tool}</b>(${esc(arg)})</div>`);
+  });
+  if (T.diff) L.push(`<div class="diff">${T.diff.map((d, i) => `<div class="${d[0]==='+'?'add':d[0]==='-'?'del':''}"><span class="ln">${d[0]===' '?i+12:d[0]}</span>${hlCode(d[1], T.lang)}</div>`).join('')}</div>`);
+  if (T.log) L.push(`<div class="log">${esc(T.log)}</div>`);
+  if (a.subs.length) { const act = a.subs.filter(s => s.state !== 'done').length; L.push(`<div class="ag-subs">⑂ ${a.subs.length} subagentes en paralelo · ${act} activos <span class="dim">(detalle en el panel Agentes)</span></div>`); }
+  if (T.note && a.state !== 'working') L.push(`<div class="ag-note">${esc(T.note)}</div>`);
+  if (T.suggest && a.state !== 'working') T.suggest.forEach(c => L.push(`<div class="sug"><code>${hlCmd(c)}</code><button class="nocopy" data-copytext="${esc(c)}">⧉ Copiar</button><button class="nocopy prim" data-todock="${esc(c)}">↧ Enviar a terminal</button></div>`));
+  if (a.state === 'working') L.push(`<div class="ag-live"><span class="spin">✻</span> <span data-live="${a.id}">${liveText(a)}</span></div>`);
+  if (a.state === 'waiting') L.push(`<div class="ag-ask nocopy">⚠ <b>Permiso requerido</b> — Bash(<span class="c-cmd">${esc(T.ask)}</span>) <button class="yes" data-allow="${a.id}">Permitir</button><button data-deny="${a.id}">Denegar</button></div>`);
+  if (a.state === 'done') L.push(`<div class="ag-done">✓ Listo · ${fmtDur(a.elapsed)} · ${fmtUSD(a.cost)} <button class="nocopy" data-again="${a.id}">Nueva tarea</button></div>`);
+  return L.join('');
+}
+const liveText = a => `${esc(a.verb)}… (${fmtDur(a.elapsed)} · ↓ ${fmtK(a.tokOut)} tokens · esfuerzo ${a.effort}${a.thinking?' · thinking':''})`;
+function agentBlock(a){
+  return `<div class="block" data-ab="${a.id}">
+    <div class="block-h"><span class="logo sm ${a.kind}">${KIND[a.kind].L}</span><b style="color:var(--text)">${KIND[a.kind].label}</b> · ${esc(a.model)}
+      ${a.worktree ? `<span class="chip">⎇ ${esc(a.worktree.branch)}</span>` : a.remote ? '<span class="chip">remoto</span>' : '<span class="chip">sin worktree</span>'}
+      <span class="r"><button class="bt" data-copy="out" title="Copiar salida">⧉ copiar</button><button class="bt" data-dockhere="${a.id}" title="Abrir terminal acoplada en la carpeta de este agente">↧ terminal aquí</button><span class="state ${a.state}">${STATE_TXT[a.state]}</span></span></div>
+    <div class="out">${agentBlockInner(a)}</div></div>`;
+}
+function renderBlocks(force){
+  const t = tab(), el = $('#blocks');
+  const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+  el.innerHTML = t.blocks.map((b, bi) => {
+    if (b.type === 'info') return `<div style="font-size:11.5px;padding:0 2px">${b.html}</div>`;
+    if (b.type === 'agent') { const a = t.agents.find(x => x.id === b.id); return a ? agentBlock(a) : ''; }
+    return `<div class="block ${b.ok?'':'err'}">
+      <div class="cmd"><span class="pm nocopy">❯</span><span class="cx">${hlCmd(b.cmd)}</span><span class="meta nocopy"><button class="bt" data-copy="cmd" title="Copiar comando">⧉</button>${b.out?'<button class="bt" data-copy="out" title="Copiar salida">⧉ salida</button>':''}<button class="bt" data-rerun="${bi}" title="Volver a ejecutar">↻</button><span title="${esc(short(b.cwd))}">${b.t}</span>${b.ok?'':'<span class="errc">✗ 1</span>'}</span></div>${b.out?`<div class="out">${b.out}</div>`:''}</div>`;
+  }).join('');
+  S.pendingBlocks.clear();
+  if (atBottom || force) el.scrollTop = el.scrollHeight;
+}
+const prompt = (t, cwd) => t.kind === 'ssh' ? `<span class="pr"><span class="h">${esc(t.host)}</span>:${esc(cwd)}$</span>` : `<span class="pr">${t.shell==='PowerShell 7'?'PS ':''}${esc(short(cwd))}${t.shell==='PowerShell 7'?'&gt;':'$'}</span>`;
+function renderMainHead(){
+  const t = tab();
+  $('#main-h').innerHTML = `<span class="t">${esc(t.name)}</span>
+    ${t.kind==='ssh'?`<span class="chip acc">ssh ${esc(t.host)}</span>`:''}<span class="chip">${esc(short(t.cwd))}</span>${t.branch?`<span class="chip acc">⎇ ${esc(t.branch)}</span>`:''}
+    <span class="chip" title="MCP activos en esta pestaña">MCP ${Object.values(t.mcp).filter(Boolean).length}</span>
+    <span class="sp"></span>
+    <button class="btn ${t.dock.open?'on':''}" data-toggledock title="Terminal acoplada sin IA (Ctrl+\`)">⌄ Terminal</button>
+    <button class="btn" data-open="mcp">⚙ MCP</button>
+    <button class="btn" data-open="cmds">⌨ Comandos</button>`;
+  $('#prompt-line').innerHTML = `${t.kind==='ssh'?`<span class="acc">${esc(t.host)}</span>`:`<span class="acc">${t.shell==='PowerShell 7'?'PS':'$'}</span>`}<span>${esc(short(t.cwd))}</span>${t.branch?`<span class="chip acc" style="padding:0 7px">⎇ ${esc(t.branch)}</span>`:''}`;
+  $('#tb-title').innerHTML = `<b>${esc(t.name)}</b><span class="mono">${t.kind==='ssh'?esc(t.host)+':':''}${esc(short(t.cwd))}</span>${t.branch?`<span class="mono acc">⎇ ${esc(t.branch)}</span>`:''}`;
+  document.querySelectorAll('.ib[data-toggledock]').forEach(b => b.classList.toggle('on', t.dock.open));
+  $('#right-toggle').classList.toggle('on', S.right);
+}
+function renderHint(){
+  $('#hint').innerHTML = S.pasteNote
+    ? `<span class="paste">${S.pasteNote}</span><span><span class="kbd">Enter</span> ejecutar todo</span><span><span class="kbd">Shift+Enter</span> nueva línea</span><span><span class="kbd">Esc</span> cancelar</span>`
+    : `<span><span class="kbd">Tab</span> aceptar</span><span><span class="kbd">→</span> completar gris</span><span><span class="kbd">Shift+Enter</span> nueva línea</span><span><span class="kbd">Ctrl+\`</span> terminal acoplada</span><span>clic derecho: copiar / pegar</span><span>arrastra archivos aquí: ${tab().kind === 'ssh' ? 'se suben al servidor' : 'se inserta la ruta'}</span>`;
+}
+
+/* ════════════ render: lista de agentes ════════════ */
+function agRows(t){
+  const sa = S.selAgent[t.id], ss = S.selSub[t.id];
+  return t.agents.map(a => {
+    const act = a.state === 'waiting' ? `<b>Bash</b>(${esc(a.tpl.ask)}) — ¿permitir?` : a.state === 'done' ? `✓ listo · ${fmtUSD(a.cost)}` : actHTML(a.action);
+    const nAct = a.subs.filter(s => s.state !== 'done').length;
+    let h = `<div class="ar p ${a.state} ${sa===a.id && !ss ? 'sel' : ''}" data-sel="${a.id}" data-tabid="${t.id}" title="${esc(a.task)}">
+      <span class="tw" ${a.subs.length ? `data-fold="${a.id}"` : ''}>${a.subs.length ? (a.open ? '▾' : '▸') : ''}</span>
+      <span class="logo sm ${a.kind}">${KIND[a.kind].L}</span>
+      <span class="an">${KIND[a.kind].label.split(' ')[0]}${a.subs.length ? ` <span class="dim" style="font-weight:500">·${nAct}/${a.subs.length}</span>` : ''}</span>
+      <span class="aa">${act}</span>
+      <span class="at">${a.state==='waiting' ? `<button data-allow="${a.id}">✓</button>` : ''}<span class="sdot ${a.state}"></span>${fmtS(a.elapsed)}</span></div>`;
+    if (a.open) a.subs.forEach((s, i) => {
+      const sact = s.state === 'waiting' ? `${actHTML(s.action)} — ¿permitir?` : s.state === 'done' ? `✓ ${esc(s.action)}` : actHTML(s.action);
+      h += `<div class="ar s ${s.state} ${sa===a.id && ss===s.id ? 'sel' : ''}" data-sel="${a.id}" data-sub="${s.id}" data-tabid="${t.id}" title="${esc(s.type)} · ${esc(s.action)}">
+        <span class="tw">${i === a.subs.length - 1 ? '└' : '├'}</span><span class="sdot ${s.state}"></span>
+        <span class="an">${esc(s.type)}</span><span class="aa">${sact}</span>
+        <span class="at">${s.state==='waiting' ? `<button data-allowsub="${a.id}|${s.id}">✓</button>` : ''}${fmtS(s.elapsed)}</span></div>`;
+    });
+    return h;
+  }).join('');
+}
+function renderAgents(){
+  const t = tab();
+  const list = S.scope === 'all' ? S.tabs.filter(x => x.agents.length) : [t];
+  const rows = list.flatMap(x => x.agents.flatMap(a => [a, ...a.subs]));
+  const c = s => rows.filter(r => r.state === s).length;
+  $('#ag-count').innerHTML = rows.length + (c('waiting') ? '<i class="wdot" title="Hay agentes esperando"></i>' : '');
+  $('#ag-counters').innerHTML = `<span class="acc">● ${c('working')} trabajando</span><span class="warn">⚠ ${c('waiting')} esperando</span><span class="ok">✓ ${c('done')} listos</span>`;
+  document.querySelectorAll('#ag-scope button').forEach(b => b.classList.toggle('on', b.dataset.scope === S.scope));
+  const el = $('#agents'), st = el.scrollTop;
+  if (!rows.length) el.innerHTML = `<div class="empty">Sin agentes en esta pestaña.<br>Escribe <span class="kbd">claude</span> o usa <b>+</b>.<br><span class="dim">⚡8 simula una instrucción que lanza 8 subagentes.</span></div>`;
+  else el.innerHTML = list.map(x => (S.scope === 'all' ? `<div class="grp-h">${esc(x.name)}</div>` : '') + agRows(x)).join('');
+  el.scrollTop = st;
+  renderDetail();
+}
+function renderDetail(){
+  const t = tab(), a = t.agents.find(x => x.id === S.selAgent[t.id]);
+  const d = $('#ag-detail');
+  if (!a) { d.style.display = 'none'; return; }
+  d.style.display = '';
+  const s = a.subs.find(x => x.id === S.selSub[t.id]);
+  d.innerHTML = s
+    ? `<div><b>${esc(s.type)}</b> <span class="dim">· subagente de ${KIND[a.kind].label} · ${STATE_TXT[s.state]} · ${fmtDur(s.elapsed)}</span></div>
+       <div class="m">${esc(s.action)}</div>
+       <div class="btns"><button class="mini" data-goto="${a.id}">Ver salida</button>${s.state==='waiting'?`<button class="mini" data-allowsub="${a.id}|${s.id}" style="border-color:var(--ok);color:var(--ok)">Permitir</button>`:''}${s.state==='working'?`<button class="mini" data-stopsub="${a.id}|${s.id}">Detener</button>`:''}</div>`
+    : `<div><b>${KIND[a.kind].label}</b> <span class="dim">· ${esc(a.model)} · ${a.remote ? `claude (remoto @${esc((t.host||'').split('@')[1]||'')})` : KIND[a.kind].exe} · PID ${a.pid}</span></div>
+       <div class="m" title="${esc(a.cwd)}">${a.worktree ? `⎇ ${esc(a.worktree.branch)} · ` : ''}${esc(short(a.cwd))}</div>
+       <div class="m">MCP: ${a.mcp.length ? esc(a.mcp.join(', ')) : 'ninguno'}${a.subs.length ? ` · ${a.subs.length} subagentes` : ''}</div>
+       <div class="btns"><button class="mini" data-goto="${a.id}">Ver salida</button>${a.state==='waiting'?`<button class="mini" data-allow="${a.id}" style="border-color:var(--ok);color:var(--ok)">Permitir</button>`:''}${a.state==='working'?`<button class="mini" data-stop="${a.id}">Interrumpir</button>`:''}<button class="mini" data-dockhere="${a.id}">↧ Terminal aquí</button><button class="mini danger" data-kill="${a.id}">Cerrar</button></div>`;
+}
+
+/* ════════════ render: uso y costos ════════════ */
+function bar(p){ const c = p > 85 ? 'e' : p > 65 ? 'w' : ''; return `<div class="bar"><i class="${c}" style="width:${Math.min(100,p).toFixed(1)}%"></i></div>`; }
+const until = ts => { const s = Math.max(0, (ts - Date.now())/1000); return s > 86400 ? `${Math.floor(s/86400)}d ${Math.floor(s%86400/3600)}h` : fmtDur(s - s%60); };
+function renderUsage(){
+  const t = tab(), a = t.agents.find(x => x.id === S.selAgent[t.id]) || t.agents[0], L = S.limits;
+  if (!S.usageOpen) {
+    $('#usage').innerHTML = `<div class="ucompact" title="Clic para ver el detalle de uso">${a ? `<span class="logo sm ${a.kind}">${KIND[a.kind].L}</span><b>${esc(a.model)}</b><span class="mono">${fmtUSD(a.cost)}</span><span class="mono">ctx ${a.ctx.toFixed(0)}%</span>` : '<span>Sin agente</span>'}<span class="mono">5 h ${L.c5.pct.toFixed(0)}%</span><span class="mono">sem ${L.c7.pct.toFixed(0)}%</span><span class="r">▴</span></div>`;
+    return;
+  }
+  const thin = p => `<div class="thin"><i class="${p > 85 ? 'e' : p > 65 ? 'w' : ''}" style="width:${Math.min(100, p).toFixed(1)}%"></i></div>`;
+  const lim = (l, x, t2) => `<div class="lim"><span class="l">${l}</span>${thin(x.pct)}<span class="p">${x.pct.toFixed(0)}%</span><span class="t">${t2 || until(x.reset)}</span></div>`;
+  let h = '<div class="um">';
+  if (a) {
+    h += `<div class="um-top"><span class="logo sm ${a.kind}">${KIND[a.kind].L}</span><b>${esc(a.model)}</b><span class="dim">${a.effort}${a.thinking ? ' · thinking' : ''}${a.subs.length ? ` · +${a.subs.length} sub` : ''}</span><span class="r">${fmtUSD(a.cost)}</span></div>
+      <div class="um-row"><canvas class="spk" id="spark"></canvas><b>${a.tps.toFixed(0)}</b> tok/s<span class="r">${fmtDur(a.elapsed)}</span></div>
+      <div class="um-row">↑ ${fmtK(a.tokIn)} · ↓ ${fmtK(a.tokOut)} · caché ${fmtK(a.cacheR)}</div>
+      ${lim('contexto', {pct: a.ctx}, fmtK(a.ctx / 100 * a.ctxSize))}<hr>`;
+  }
+  h += lim('Claude 5 h', L.c5) + lim('Claude sem.', L.c7) + lim('Codex 5 h', L.x5) + lim('Codex sem.', L.x7)
+    + `<div class="um-row">hoy <b>${fmtUSD(S.today.cost)}</b> · ${fmtK(S.today.tok)} tokens<span class="r" title="Valores simulados. Real: Claude Code → statusLine (rate_limits, cost, context_window, effort, thinking) + hooks; Codex → token_count del rollout JSONL; sesiones remotas → OSC 7501">ⓘ</span></div></div>`;
+  $('#usage').innerHTML = h;
+  $('#u-src').textContent = a ? KIND[a.kind].label : '';
+  if (a) drawSpark(a);
+}
+function drawSpark(a){
+  const c = $('#spark'); if (!c) return;
+  const dpr = devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight; if (!w) return;
+  c.width = w*dpr; c.height = h*dpr; const g = c.getContext('2d'); g.scale(dpr, dpr);
+  const acc = getComputedStyle(document.body).getPropertyValue('--accent').trim();
+  const max = Math.max(100, ...a.hist), n = a.hist.length, pts = a.hist.map((v, i) => [i/(n-1)*w, h - 3 - v/max*(h-6)]);
+  const grd = g.createLinearGradient(0, 0, 0, h); grd.addColorStop(0, acc + '55'); grd.addColorStop(1, acc + '00');
+  g.beginPath(); g.moveTo(0, h); pts.forEach(p => g.lineTo(p[0], p[1])); g.lineTo(w, h); g.closePath(); g.fillStyle = grd; g.fill();
+  g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); g.strokeStyle = acc; g.lineWidth = 1.6; g.stroke();
+}
+function renderStatus(){
+  const ag = allAgents().flatMap(a => [a, ...a.subs]), t = tab();
+  const w = ag.filter(a => a.state==='working').length, q = ag.filter(a => a.state==='waiting').length;
+  $('#status').innerHTML = `<span>● <b>${esc(t.kind==='ssh' ? 'SSH ' + t.host : t.shell)}</b> · UTF-8 · ${t.kind==='ssh'?'russh':'ConPTY'}</span><span>${esc(short(t.cwd))}</span>
+    <span class="sp"></span><span>agentes: <b class="acc">${w}</b> trabajando · <b class="warn">${q}</b> esperando</span>
+    <span>GPU DX12</span><span>RAM objetivo <b>&lt; 120 MB</b> <span class="dim">(Warp: ~903 MB)</span></span><span>${new Date().toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'})}</span>`;
+}
+
+/* ════════════ terminal acoplada ════════════ */
+function renderDock(){
+  const t = tab(), d = t.dock, el = $('#dock');
+  el.classList.toggle('open', d.open);
+  if (!d.open) return;
+  const opts = [`<option value="session" ${d.target==='session'?'selected':''}>Ruta de la sesión · ${esc(tail(t.cwd))}</option>`]
+    .concat(t.agents.filter(a => a.worktree || a.cwd !== t.cwd).map(a => `<option value="${a.id}" ${d.target===a.id?'selected':''}>${KIND[a.kind].label} · ${a.worktree ? '⎇ ' + esc(a.worktree.branch) : esc(tail(a.cwd))}</option>`));
+  $('#dock-h').innerHTML = `${icon(t.kind==='ssh'?'ssh':'shell')}<b>Terminal</b><span class="chip">${t.kind==='ssh' ? 'ssh ' + esc(t.host) : esc(t.shell)}</span><span class="dim">sin IA · mismo ${t.kind==='ssh'?'servidor':'equipo'}</span>
+    <label>en: <select id="dock-target">${opts.join('')}</select></label><span class="sp"></span>
+    <button class="mini" data-dockact="copy" title="Copiar todo">⧉</button><button class="mini" data-dockact="clear" title="Limpiar (Ctrl+L)">Limpiar</button><button class="mini" data-dockact="max" title="Maximizar">⤢</button><button class="mini" data-dockact="close" title="Ocultar (Ctrl+\`)">×</button>`;
+  $('#dock-out').innerHTML = d.lines.join('');
+  $('#dock-out').scrollTop = 1e9;
+  $('#dock-pr').innerHTML = prompt(t, d.cwd);
+}
+function openDock(t, {cwd, cmd, focus = true} = {}){
+  const d = t.dock;
+  if (!d.open) { d.open = true; if (!d.lines.length) d.lines.push(`<span class="dim">${t.kind==='ssh' ? `Nuevo canal en la misma conexión SSH (${esc(t.host)}) · sin volver a autenticar` : `${esc(t.shell)} sin IA, en la misma carpeta de la sesión`}</span>\n`); }
+  if (cwd && cwd !== d.cwd) { d.cwd = cwd; d.lines.push(`${prompt(t, d.cwd)} <span class="dim"># cambio de carpeta</span>\n`); }
+  render();
+  if (cmd !== undefined) $('#dock-cmd').value = cmd;
+  if (focus) { $('#dock-cmd').focus(); const i = $('#dock-cmd'); i.setSelectionRange(i.value.length, i.value.length); }
+}
+function dockRun(t, cmd){
+  const d = t.dock; cmd = cmd.trim();
+  if (!cmd) { d.lines.push(prompt(t, d.cwd) + '\n'); renderDock(); return; }
+  d.hist.unshift(cmd); d.hi = -1;
+  if (/^(clear|cls)$/.test(cmd)) { d.lines = []; renderDock(); return; }
+  const r = /^(claude|codex)\b/.test(cmd) ? {ok:true, out:'<span class="warn">Esta terminal es sin IA. Los agentes se lanzan en la sesión principal (arriba) o con + en el panel Agentes.</span>'} : execCmd(t, d.cwd, cmd);
+  d.lines.push(`${prompt(t, d.cwd)} ${hlCmd(cmd)}\n${r.out ? r.out + '\n' : ''}`);
+  if (r.cwd) d.cwd = r.cwd;
+  renderDock();
+}
+
+/* ════════════ ejecución simulada (local y SSH) ════════════ */
+function execCmd(t, cwd, text){
+  const parts = text.split(/\s+/), c = parts[0].toLowerCase(), arg = parts.slice(1).join(' ');
+  if (t.kind === 'ssh') {
+    if (c === 'pwd') return {ok:true, out:esc(cwd)};
+    if (c === 'cd') { const p = presolve(cwd, arg || '~'); return REMOTE[p] ? {ok:true, out:'', cwd:p} : {ok:false, out:`<span class="errc">bash: cd: ${esc(arg)}: No existe el archivo o el directorio</span>`}; }
+    if (c === 'ls') { const p = arg && !arg.startsWith('-') ? presolve(cwd, arg) : cwd; return {ok:true, out:(REMOTE[p] || []).map(n => REMOTE[presolve(p, n)] ? `<span class="acc">${esc(n)}/</span>` : esc(n)).join('  ')}; }
+    if (/apt (update|upgrade)/.test(text)) {
+      let o = '';
+      if (/apt update/.test(text)) o += 'Obj:1 http://archive.ubuntu.com/ubuntu noble InRelease\nDes:2 http://security.ubuntu.com/ubuntu noble-security InRelease [126 kB]\nLeyendo lista de paquetes... Hecho\n<span class="warn">Se pueden actualizar 12 paquetes.</span>';
+      if (/upgrade/.test(text)) o += (o ? '\n' : '') + 'Se actualizarán los siguientes paquetes:\n  nginx nginx-common openssl libssl3t64 php8.3-fpm php8.3-cli php8.3-common …\n12 actualizados, 0 nuevos, 0 para eliminar.\n<span class="ok">Procesando disparadores para man-db…  Hecho</span>';
+      return {ok:true, out:o};
+    }
+    if (/systemctl (restart|reload)/.test(text)) return {ok:true, out:''};
+    if (/systemctl status/.test(text)) return {ok:true, out:`<span class="ok">●</span> ${esc(parts[parts.length-1])}.service\n     Active: <span class="ok">active (running)</span> since ${new Date().toLocaleString('es-PE')}`};
+    if (c === 'df') return {ok:true, out:'S.ficheros  Tamaño Usados Disp Uso% Montado en\n/dev/sda1      79G    41G  35G  55% /'};
+    if (c === 'tail' || c === 'cat') return {ok:true, out:`<span class="errc">${esc(TEMPLATES.ssh.log)}</span>`};
+    if (c === 'git') return {ok:true, out:'Ya está actualizado.'};
+    if (c === 'help') return {ok:true, out:'Simulado en SSH: pwd, cd, ls, sudo apt update/upgrade, systemctl status/restart, df -h, tail, git pull'};
+    return {ok:true, out:`<span class="dim">(simulación remota) ${esc(c)}</span>`};
+  }
+  if (c === 'cd' || c === 'z') {
+    const target = c === 'z' && !/^[a-z]:/i.test(arg) ? (VISITS.filter(v => arg.toLowerCase().split(/\s+/).every(w => v.p.toLowerCase().includes(w))).sort((x,y)=>frec(y)-frec(x))[0]||{}).p : resolve(cwd, arg || '~');
+    const k = target && canon(target);
+    if (k) { visit(k); return {ok:true, out: c === 'z' ? `<span class="dim">→ ${esc(k)}</span>` : '', cwd:k}; }
+    return {ok:false, out:`<span class="errc">No se encuentra la ruta: ${esc(arg)}</span>`};
+  }
+  if (c === 'pwd') return {ok:true, out:esc(cwd)};
+  if (c === 'ls' || c === 'dir') { const k = canon(arg ? resolve(cwd, arg) : cwd); return {ok:true, out:(FS[k] || []).map(n => isFile(n) ? esc(n) : `<span class="acc">${esc(n)}\\</span>`).join('   ') || '<span class="dim">(vacío)</span>'}; }
+  if (c === 'git') return {ok:true, out: parts[1] === 'status' ? `En la rama <span class="acc">main</span>\nnada para confirmar, el árbol de trabajo está limpio` : `<span class="typ">a1f3c2e</span> feat: panel de uso\n<span class="typ">9b0d7e1</span> feat: pestañas verticales\n<span class="typ">51c88aa</span> chore: workspace inicial`};
+  if (c === 'cargo') return {ok:true, out:`   <span class="ok">Compiling</span> kuntur-term v0.1.0\n   <span class="ok">Compiling</span> kuntur-app v0.1.0\n    <span class="ok">Finished</span> \`release\` profile [optimized] target(s)`};
+  if (c === 'npm') return {ok:true, out:/preview/.test(text) ? `<span class="dim">astro preview</span>\n  ┃ Local    <span class="acc">http://localhost:4321/</span>` : `<span class="dim">astro build</span>\n<span class="ok">✓</span> 46 páginas generadas en 3.8s`};
+  if (c === 'winget') return {ok:true, out:'No se encontraron actualizaciones disponibles.'};
+  if (c === 'help') return {ok:true, out:'Simulado: cd, z, ls/dir, pwd, claude, codex, git, cargo, npm, winget, clear\nAtajos: Alt+T/W pestañas · Alt+B vista de pestañas · Ctrl+` terminal acoplada · Ctrl+K panel'};
+  if (!KNOWN.has(c)) return {ok:false, out:`<span class="errc">${esc(parts[0])}: el término no se reconoce como nombre de un cmdlet</span>`};
+  return {ok:true, out:'<span class="dim">(simulación)</span>'};
+}
+function run(raw, t = tab()){
+  const lines = raw.split('\n').map(s => s.trim()).filter(Boolean);
+  if (lines.length > 1) { lines.forEach(l => run(l, t)); return; }
+  const text = lines[0]; if (!text) return;
+  if (!HISTORY.includes(text)) HISTORY.unshift(text);
+  const c = text.split(/\s+/)[0].toLowerCase(), arg = text.split(/\s+/).slice(1).join(' ');
+  if (c === 'clear' || c === 'cls') { t.blocks = []; render(); return; }
+  const blk = {type:'cmd', cmd:text, cwd:t.cwd, branch:t.branch, ok:true, t:(rnd(.02,.4)).toFixed(2)+'s', out:''};
+  if (c === 'claude' || c === 'codex') {
+    t.blocks.push(blk);
+    const a = mkAgent(t, c, arg && !arg.startsWith('-') ? arg : (c === 'claude' ? 'Sesión interactiva' : 'Sesión de Codex'), {modelIdx:t.opts.model, worktree:false, remote:t.kind==='ssh', tpl: t.kind==='ssh' ? 'ssh' : c==='codex' ? 'rust2' : (/astro/i.test(t.cwd) ? 'ts' : 'rust')});
+    blk.out = `<span class="dim">Iniciando ${KIND[c].label} · sesión ${a.id.slice(0,8)} · ${t.kind==='ssh'?'estado por OSC 7501':'hooks → Kuntur'} · ${a.mcp.length} MCP</span>`;
+    t.agents.push(a); t.blocks.push({type:'agent', id:a.id}); S.selAgent[t.id] = a.id; S.selSub[t.id] = null;
+    if (a.task !== 'Sesión interactiva') t.summary = a.task;
+    render(); return;
+  }
+  const r = execCmd(t, t.cwd, text);
+  blk.ok = r.ok; blk.out = r.out;
+  if (c === 'cargo') blk.t = rnd(4, 40).toFixed(1) + 's';
+  if (r.cwd) { t.cwd = r.cwd; if (t.kind === 'local') { t.branch = /proyectos\\dev\\(astro|kuntur|mcp)/i.test(r.cwd) ? 'main' : null; t.icon = detectIcon(r.cwd) || t.icon; } if (t.dock.target === 'session') t.dock.cwd = t.cwd; }
+  t.blocks.push(blk); render();
+}
+
+/* ════════════ autocompletado (línea actual) ════════════ */
+function suggest(text){
+  const t = tab(); if (!text.trim() || text.includes('\n')) return [];
+  const parts = text.split(' '), last = parts[parts.length-1], cmd = parts[0].toLowerCase();
+  const pre = parts.length > 1 ? parts.slice(0, -1).join(' ') + ' ' : '';
+  const out = [], seen = new Set(), add = s => { const k = s.insert.toLowerCase(); if (!seen.has(k)) { seen.add(k); out.push(s); } };
+  HISTORY.filter(h => h.toLowerCase().startsWith(text.toLowerCase()) && h.length > text.length).slice(0, 3).forEach(h => add({kind:'historial', label:h, insert:h, detail:'usado antes'}));
+  if (t.kind === 'ssh') {
+    if (parts.length > 1 && /^(cd|ls|cat|tail)$/.test(cmd)) {
+      const i = last.lastIndexOf('/'), base = i < 0 ? t.cwd : presolve(t.cwd, last.slice(0, i) || '/'), frag = last.slice(i + 1);
+      (REMOTE[base] || []).filter(n => n.startsWith(frag)).forEach(n => { const dir = !!REMOTE[presolve(base, n)]; add({kind: dir ? 'carpeta' : 'archivo', label:n + (dir ? '/' : ''), insert: pre + last.slice(0, i + 1) + n + (dir ? '/' : ''), detail:'remoto'}); });
+    } else if (parts.length === 1) BUILTINS.filter(b => b.startsWith(text.toLowerCase()) && b !== text.toLowerCase()).forEach(b => add({kind:'comando', label:b, insert:b + ' ', detail:'comando'}));
+    return out.slice(0, 8);
+  }
+  if (cmd === 'z' && parts.length > 1) {
+    const q = parts.slice(1).join(' ').toLowerCase().split(/\s+/).filter(Boolean);
+    VISITS.filter(v => q.every(w => v.p.toLowerCase().includes(w))).sort((x, y) => frec(y) - frec(x)).forEach(v => add({kind:'visitada', label:short(v.p), insert:'z ' + v.p, detail:`★ ${v.n} visitas`}));
+    return out.slice(0, 8);
+  }
+  const pathCtx = (parts.length > 1 && ['cd','ls','dir','code','cat','explorer'].includes(cmd)) || /^[a-z]:|\\|^~|^\.{1,2}/i.test(last);
+  if (pathCtx) {
+    const l = last.replace(/^~/, HOME), i = l.lastIndexOf('\\');
+    let base, frag;
+    if (/^[a-z]:?$/i.test(l)) { base = null; frag = l; }
+    else if (i < 0) { base = t.cwd; frag = l; }
+    else { base = /^[a-z]:/i.test(l) ? l.slice(0, i) : resolve(t.cwd, l.slice(0, i)); frag = l.slice(i + 1); }
+    const typed = last.slice(0, last.length - frag.length);
+    if (base === null) ['C:','E:'].filter(d => d.toLowerCase().startsWith(frag.toLowerCase())).forEach(d => add({kind:'unidad', label:d + '\\', insert:pre + d + '\\', detail:'unidad'}));
+    else { const k = canon(base) || fsKey(base); (FS[k] || []).filter(n => n.toLowerCase().startsWith(frag.toLowerCase())).sort((x, y) => isFile(x) - isFile(y)).forEach(n => add({kind: isFile(n) ? 'archivo' : 'carpeta', label: n + (isFile(n) ? '' : '\\'), insert: pre + typed + n + (isFile(n) ? '' : '\\'), detail: isFile(n) ? 'archivo' : 'carpeta'})); }
+    if (frag.length >= 2) VISITS.filter(v => v.p.toLowerCase().includes(frag.toLowerCase())).sort((x, y) => frec(y) - frec(x)).slice(0, 4).forEach(v => add({kind:'visitada', label:short(v.p), insert:pre + v.p + '\\', detail:`★ ${v.n} visitas`}));
+  } else if (parts.length === 1) BUILTINS.filter(b => b.startsWith(text.toLowerCase()) && b !== text.toLowerCase()).forEach(b => add({kind:'comando', label:b, insert:b + ' ', detail:'comando'}));
+  return out.slice(0, 8);
+}
+function fitEditor(){ const n = Math.min(6, $('#cmd').value.split('\n').length); $('#editor').style.height = (n * 24) + 'px'; }
+function renderHL(){
+  const v = $('#cmd').value, s = S.sugg[S.sel];
+  let ghost = '';
+  if (s && s.insert.toLowerCase().startsWith(v.toLowerCase()) && s.insert.length > v.length) ghost = s.insert.slice(v.length);
+  $('#hl').innerHTML = v ? hlCmd(v) + `<span class="ghost">${esc(ghost)}</span>` : `<span class="ghost">${tab().kind === 'ssh' ? 'Comando en ' + esc(tab().host) : 'Escribe un comando'}   ·   Tab completa   ·   Ctrl+K acciones</span>`;
+  $('#hl').scrollTop = $('#cmd').scrollTop; $('#hl').scrollLeft = $('#cmd').scrollLeft;
+  fitEditor();
+}
+function renderSuggest(){
+  const box = $('#suggest');
+  if (!S.sugg.length) { box.classList.remove('open'); return; }
+  box.innerHTML = S.sugg.map((s, i) => `<div class="sg ${i===S.sel?'sel':''}" data-sg="${i}"><span class="k ${s.kind}">${s.kind}</span><span class="l">${esc(s.label)}</span><span class="d">${esc(s.detail)}</span></div>`).join('')
+    + `<div class="sg-f">Fuentes: carpetas del disco · carpetas visitadas (frecuencia × recencia) · historial · comandos</div>`;
+  box.classList.add('open');
+}
+function refreshSuggest(){ S.sugg = suggest($('#cmd').value); S.sel = 0; renderSuggest(); renderHL(); }
+function accept(i = S.sel){ const s = S.sugg[i]; if (!s) return; $('#cmd').value = s.insert; refreshSuggest(); $('#cmd').focus(); }
+
+/* ════════════ portapapeles ════════════ */
+async function copyText(txt, label = 'Copiado'){
+  if (!txt) return;
+  try { await navigator.clipboard.writeText(txt); }
+  catch (e) { const ta = document.createElement('textarea'); ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch (_) {} ta.remove(); }
+  toast(`⧉ ${label} · ${txt.length} caracteres${txt.includes('\n') ? ` · ${txt.split('\n').length} líneas` : ''}`, null, null, 'info');
+}
+async function readClip(){ try { return await navigator.clipboard.readText(); } catch (e) { toast('El navegador no dejó leer el portapapeles: usa Ctrl+V dentro del campo.', null, null, 'info'); return null; } }
+function plain(el){
+  if (!el) return '';
+  const c = el.cloneNode(true);
+  c.querySelectorAll('.nocopy,.ln,button').forEach(x => x.remove());
+  c.querySelectorAll('div').forEach(d => d.append('\n'));
+  return c.textContent.replace(/\n{3,}/g, '\n\n').trim();
+}
+function pasteInto(target, txt){
+  if (txt == null) return;
+  if (target === 'dock') { openDock(tab(), {cmd: $('#dock-cmd').value + txt.replace(/\r?\n$/, '')}); return; }
+  const ta = $('#cmd'); ta.focus(); ta.setRangeText(txt.replace(/\r\n/g, '\n'), ta.selectionStart, ta.selectionEnd, 'end');
+  notePaste(txt); refreshSuggest();
+}
+function notePaste(txt){ const n = txt.replace(/\r?\n$/, '').split(/\r?\n/).length; S.pasteNote = n > 1 ? `Pegaste ${n} líneas (modo pegado entre corchetes: no se ejecuta nada hasta que presiones Enter)` : ''; renderHint(); }
+let ctxSel = '', ctxBlock = null;
+function openCtx(e){
+  ctxSel = selText(); ctxBlock = e.target.closest('.block');
+  const inDock = !!e.target.closest('#dock-out');
+  const items = [
+    ['Copiar selección', 'Ctrl+Shift+C', !ctxSel, () => copyText(ctxSel)],
+    ['Copiar bloque completo', '', !ctxBlock && !inDock, () => copyText(inDock ? plain($('#dock-out')) : plain(ctxBlock))],
+    ['Enviar selección a la terminal acoplada', '', !ctxSel, () => openDock(tab(), {cmd: ctxSel.trim()})],
+    '-',
+    ['Pegar en la entrada de la sesión', 'Ctrl+Shift+V', false, async () => pasteInto('main', await readClip())],
+    ['Pegar en la terminal acoplada', '', false, async () => pasteInto('dock', await readClip())],
+    '-',
+    ['Abrir terminal acoplada aquí', 'Ctrl+`', false, () => openDock(tab())],
+  ];
+  showCtx(e, items);
+}
+function showCtx(e, items){
+  const m = $('#ctx');
+  m.innerHTML = items.map((it, i) => it === '-' ? '<hr>' : `<button data-ci="${i}" ${it[2] ? 'disabled' : ''}>${it[0]}<span class="k">${it[1]}</span></button>`).join('');
+  m.querySelectorAll('[data-ci]').forEach(b => b.onclick = () => { closeCtx(); items[+b.dataset.ci][3](); });
+  m.classList.add('open');
+  const r = m.getBoundingClientRect();
+  m.style.left = Math.min(e.clientX, innerWidth - r.width - 8) + 'px'; m.style.top = Math.min(e.clientY, innerHeight - r.height - 8) + 'px';
+}
+const closeCtx = () => $('#ctx').classList.remove('open');
+
+/* ════════════ acciones ════════════ */
+function newTab(shell = 'PowerShell 7'){
+  const t = shell === 'SSH'
+    ? mkTab('srv-web (ssh) ' + (S.tabs.filter(x => x.kind === 'ssh').length + 1), '/home/admin', 'SSH', {host:'admin@srv-web', summary:'Sesión remota nueva'})
+    : mkTab(shell + (S.tabs.filter(x => x.shell === shell).length ? ' ' + (S.tabs.filter(x => x.shell === shell).length + 1) : ''), 'C:/Users/dev', shell, {summary:'Nueva sesión'});
+  S.tabs.push(t); S.active = t.id; render(); $('#cmd').focus();
+}
+function closeTab(id){
+  const i = S.tabs.findIndex(t => t.id === id); if (i < 0) return;
+  const [t] = S.tabs.splice(i, 1); S.closed = {t, i};
+  if (!S.tabs.length) newTab();
+  if (S.active === id) S.active = S.tabs[Math.max(0, i - 1)].id;
+  const n = t.agents.filter(a => a.state !== 'done').length;
+  toast(`Pestaña «${esc(t.name)}» cerrada${n ? ` · ${n} agente(s) detenido(s), worktrees conservados` : ''}`, 'Deshacer', () => { S.tabs.splice(S.closed.i, 0, S.closed.t); S.active = S.closed.t.id; render(); }, 'info');
+  render();
+}
+function switchTab(id){ S.active = id; tab().badge = 0; S.sugg = []; renderSuggest(); render(true); }
+function cycleSide(){ S.side = S.side === 'full' ? 'icons' : 'full'; /* nunca se oculta: el mínimo es el riel de íconos */ document.body.dataset.side = S.side; try { localStorage.setItem('kuntur-side', S.side); } catch (e) {} setTimeout(renderUsage, 220); }
+function findAgent(id){ for (const t of S.tabs) { const a = t.agents.find(x => x.id === id); if (a) return [t, a]; } return []; }
+function sim8(){
+  const t = tab();
+  let a = t.agents.find(x => x.id === S.selAgent[t.id] && x.kind === 'claude') || t.agents.find(x => x.kind === 'claude');
+  if (!a) { a = mkAgent(t, 'claude', 'Revisa todo el workspace en paralelo', {worktree:false, remote:t.kind==='ssh', tpl:t.kind==='ssh'?'ssh':'rust'}); t.agents.push(a); t.blocks.push({type:'agent', id:a.id}); }
+  a.subs = SUB_TYPES.map(type => ({id:uuid(), type, state:'working', action:pick(SUB_ACTS), elapsed:0}));
+  a.state = 'working'; a.open = true; S.selAgent[t.id] = a.id; S.selSub[t.id] = null;
+  render(); toast(`⑂ Una instrucción lanzó <b>8 subagentes</b> en paralelo`, null, null, 'info');
+}
+function toast(html, act, fn, kind = 'warn'){
+  const el = document.createElement('div'); el.className = 'toast ' + kind;
+  el.innerHTML = `<span>${html}</span><span class="sp"></span>${act ? `<button class="mini">${act}</button>` : ''}`;
+  if (act) el.querySelector('button').onclick = () => { fn(); el.remove(); };
+  $('#toasts').appendChild(el); setTimeout(() => el.remove(), 6000);
+  while ($('#toasts').children.length > 3) $('#toasts').firstChild.remove();
+}
+
+/* ════════════ hoja Ctrl+K ════════════ */
+function openSheet(v = 'mcp'){ S.sheet = v; $('#overlay').classList.add('open'); renderSheet(); }
+function closeSheet(){ $('#overlay').classList.remove('open'); }
+function renderSheet(){
+  const t = tab();
+  document.querySelectorAll('.sheet-tab').forEach(b => b.classList.toggle('on', b.dataset.v === S.sheet));
+  $('#sheet-tabname').textContent = 'pestaña: ' + t.name;
+  const B = $('#sheet-b');
+  if (S.sheet === 'mcp') {
+    const on = Object.keys(t.mcp).filter(k => t.mcp[k]), off = Object.keys(t.mcp).filter(k => !t.mcp[k]);
+    $('#sheet-title').textContent = 'MCP y opciones de la pestaña';
+    B.innerHTML = `
+      <div class="row"><b>Perfiles:</b>${Object.keys(MCP_PRESETS).map(p => `<button class="btn" data-preset="${p}">${p}</button>`).join('')}</div>
+      <div class="mcp-list">${MCP_CATALOG.map(([k, d]) => `<div class="mcp"><span class="n">${k}</span><span class="sw ${t.mcp[k]?'on':''}" data-mcp="${k}"></span><span class="d">${esc(d)}</span></div>`).join('')}</div>
+      <div class="row">
+        <label class="f">Modelo (Claude)<select class="inp" data-opt="model">${MODELS.claude.map((m, i) => `<option value="${i}" ${t.opts.model==i?'selected':''}>${m.name}</option>`).join('')}</select></label>
+        <label class="f">Esfuerzo<select class="inp" data-opt="effort">${['low','medium','high','xhigh','max'].map(e => `<option ${t.opts.effort===e?'selected':''}>${e}</option>`).join('')}</select></label>
+        <label class="f">Permisos<select class="inp" data-opt="perm">${['default','acceptEdits','plan'].map(e => `<option ${t.opts.perm===e?'selected':''}>${e}</option>`).join('')}</select></label>
+        <label class="f">Thinking<span class="sw ${t.opts.thinking?'on':''}" data-thinking></span></label>
+      </div>
+      <div><div class="sec-t" style="margin-bottom:6px">Así se lanzarán los agentes nuevos de esta pestaña</div>
+      <pre class="code"><span class="com"># .kuntur\\tabs\\${slug(t.name)}.mcp.json ← solo: ${on.join(', ') || '(ninguno)'}</span>
+<span class="fn">claude</span> <span class="typ">--session-id</span> &lt;uuid&gt; <span class="typ">--model</span> ${MODELS.claude[t.opts.model].id} <span class="typ">--permission-mode</span> ${t.opts.perm} <span class="typ">--strict-mcp-config</span> <span class="typ">--mcp-config</span> <span class="str">.kuntur\\tabs\\${slug(t.name)}.mcp.json</span>
+<span class="fn">codex</span> ${off.map(k => `<span class="typ">-c</span> <span class="str">mcp_servers.${k}.enabled=false</span>`).join(' ')}</pre></div>
+      <div class="note">Los cambios aplican a <b>agentes nuevos</b> de esta pestaña. En una sesión de Claude ya abierta se usa <b>/mcp</b> para activar/desactivar en caliente.</div>`;
+  } else if (S.sheet === 'cmds') {
+    $('#sheet-title').textContent = 'Comandos personalizados';
+    const vis = S.cmds.map((c, i) => ({...c, i})).filter(c => c.scope === 'global' || c.tab === t.id);
+    B.innerHTML = `
+      <table class="t"><thead><tr><th>Nombre</th><th>Comando</th><th>Atajo</th><th>Ámbito</th><th></th></tr></thead><tbody>
+      ${vis.map(c => `<tr><td><b>${esc(c.name)}</b></td><td class="m">${hlCmd(c.cmd)}</td><td><span class="kbd">${esc(c.keys)}</span></td><td><span class="scope ${c.scope}">${c.scope==='tab'?'esta pestaña':'global'}</span></td>
+        <td style="text-align:right;white-space:nowrap"><button class="mini" data-runcmd="${c.i}">▶ Sesión</button> <button class="mini" data-runcmddock="${c.i}">↧ Terminal</button> <button class="mini danger" data-delcmd="${c.i}">×</button></td></tr>`).join('')}
+      </tbody></table>
+      <div class="card"><div class="sec-t" style="margin-bottom:8px">Agregar comando</div>
+        <div class="row">
+          <label class="f" style="flex:1">Nombre<input class="inp" id="nc-name" placeholder="Desplegar web"></label>
+          <label class="f" style="flex:2">Comando<input class="inp" id="nc-cmd" placeholder="npm run build" style="font-family:var(--mono)"></label>
+          <label class="f">Atajo<input class="inp" id="nc-keys" placeholder="clic y presiona" readonly style="width:150px;font-family:var(--mono)"></label>
+          <label class="f">Ámbito<select class="inp" id="nc-scope"><option value="tab">Esta pestaña</option><option value="global">Global</option></select></label>
+          <button class="btn primary" id="nc-add" style="align-self:end">Agregar</button>
+        </div></div>
+      <div class="note">El mismo atajo puede hacer cosas distintas en cada pestaña: <span class="kbd">Ctrl+Alt+B</span> compila Rust en <b>kuntur</b> y hace <b>npm run build</b> en <b>web-acme</b>. En <b>srv-web</b>, <span class="kbd">Ctrl+Alt+U</span> actualiza paquetes en la terminal acoplada.</div>`;
+  } else if (S.sheet === 'look') {
+    $('#sheet-title').textContent = 'Apariencia y sintaxis';
+    const th = THEMES[S.theme];
+    B.innerHTML = `
+      <div class="theme-cards">${Object.entries(THEMES).map(([k, v]) => `<button class="tcard ${S.theme===k?'on':''}" data-theme-set="${k}">
+        <div class="pv" style="background:${v.pv[0]};color:${v.pv[1]};font-family:${v.mono}"><span style="color:${v.pv[2]}">fn</span> <span style="color:${v.pv[3]}">main</span>() {<br>&nbsp;&nbsp;<span style="color:${v.pv[5]};font-style:italic">// hola</span><br>&nbsp;&nbsp;print(<span style="color:${v.pv[4]}">"Kuntur"</span>)<br>}</div>
+        <div class="lb">${v.name}<small>${v.ui.replace(/'/g,'')} + ${v.mono.replace(/'/g,'')}</small></div></button>`).join('')}</div>
+      <div class="row"><label class="f">Tipografías<select class="inp" id="font-pair">${FONT_PAIRS.map((f, i) => `<option value="${i}" ${f[1]===th.ui && f[2]===th.mono ? 'selected' : ''}>${f[0]}</option>`).join('')}</select></label>
+        <label class="f">Tamaño<input type="range" min="11" max="17" value="${parseInt(getComputedStyle(document.documentElement).getPropertyValue('--fs'))||13}" id="font-size"></label>
+        <label class="f">Vista de pestañas<select class="inp" id="side-mode"><option value="full" ${S.side==='full'?'selected':''}>Completa</option><option value="icons" ${S.side==='icons'?'selected':''}>Íconos</option></select></label></div>
+      <div><div class="sec-t" style="margin-bottom:6px">Paleta ANSI de 16 colores · ${th.name}</div><div class="ansi">${th.ansi.map((c, i) => `<i style="background:${c}">${i}</i>`).join('')}</div></div>
+      <div><div class="sec-t" style="margin-bottom:6px">La misma paleta en cualquier lenguaje</div>
+      <div class="samples">
+        <div><div class="cap">Rust</div><pre class="code">${hlCode(`// Lee el PTY y alimenta el parser VT\npub async fn leer(pty: &mut Pty) -> Result<usize> {\n    let mut buf = [0u8; 4096];\n    let n = pty.read(&mut buf).await?;\n    Ok(n)\n}`, 'rust')}</pre></div>
+        <div><div class="cap">TypeScript</div><pre class="code">${hlCode(`// Estado del agente según el hook\nexport function estado(e: HookEvent): Estado {\n  if (e.hook_event_name === "Stop") return "listo";\n  return e.notification ? "esperando" : "trabajando";\n}`, 'ts')}</pre></div>
+        <div><div class="cap">Python</div><pre class="code">${hlCode(`# Tokens por segundo de una sesión\ndef tps(salida: int, ms: float) -> float:\n    return round(salida / (ms / 1000), 1) if ms else 0.0`, 'py')}</pre></div>
+      </div></div>
+      <div class="note"><b>¿Quién pone los colores?</b> El <b>programa</b> (Claude Code, bat, delta, nvim, git) decide <i>qué</i> es palabra clave, texto o comentario y envía códigos ANSI; la <b>terminal</b> decide <i>el tono exacto</i> de esos 16 colores con su paleta. Por eso, con la misma paleta, todo el código se ve con el mismo estilo en cualquier lenguaje. La terminal colorea por sí misma la <b>línea de comandos</b> mientras escribes.</div>`;
+  } else if (S.sheet === 'keys') {
+    $('#sheet-title').textContent = 'Atajos de teclado';
+    const K = [['Alt+T','Nueva pestaña','Ctrl+T'],['Alt+W','Cerrar pestaña','Ctrl+W'],['Alt+1 … 9','Ir a la pestaña N','Ctrl+1 … 9'],['Alt+B','Sesiones: completa ↔ íconos (nunca se ocultan)','Ctrl+B'],['Ctrl+`','Mostrar/ocultar terminal acoplada','Ctrl+`'],['Ctrl+K','Panel MCP / comandos / apariencia','Ctrl+K'],['Alt+A','Nuevo agente','Ctrl+Shift+A'],['Ctrl+Shift+C','Copiar selección','Ctrl+Shift+C (o Ctrl+C con selección)'],['Ctrl+Shift+V','Pegar','Ctrl+Shift+V / Ctrl+V / clic derecho'],['Shift+Enter','Nueva línea en la entrada','Shift+Enter'],['Tab / →','Aceptar sugerencia','Tab / →']];
+    B.innerHTML = `<table class="t"><thead><tr><th>Simulación</th><th>Acción</th><th>App real</th></tr></thead><tbody>${K.map(k => `<tr><td><span class="kbd">${k[0]}</span></td><td>${k[1]}</td><td><span class="kbd">${k[2]}</span></td></tr>`).join('')}
+      ${S.cmds.filter(c => c.scope==='global' || c.tab===t.id).map(c => `<tr><td><span class="kbd">${esc(c.keys)}</span></td><td>${esc(c.name)} <span class="scope ${c.scope}">${c.scope==='tab'?'esta pestaña':'global'}</span></td><td><span class="kbd">${esc(c.keys)}</span></td></tr>`).join('')}</tbody></table>
+      <div class="note">En el navegador <b>Ctrl+T/W/B</b> pertenecen a Chrome, por eso la simulación usa <b>Alt</b>. En Kuntur todo se define en <b>keybindings.toml</b>, global o por pestaña.</div>`;
+  } else if (S.sheet === 'agent') {
+    $('#sheet-title').textContent = 'Nuevo agente';
+    B.innerHTML = `
+      <div class="row">
+        <label class="f">Agente<select class="inp" id="na-kind"><option value="claude">Claude Code</option><option value="codex">Codex CLI</option></select></label>
+        <label class="f" style="flex:1">Tarea<input class="inp" id="na-task" value="Implementa el panel de MCP"></label>
+        <label class="f">Worktree aislado<span class="sw ${t.kind==='ssh'?'':'on'}" id="na-wt"></span></label>
+      </div>
+      <pre class="code" id="na-prev"></pre>
+      <div class="note">Cada agente trabaja en su <b>propio git worktree</b> (carpeta y rama separadas), así dos agentes pueden editar el mismo repo sin pisarse. Al terminar: revisar diff → merge → <b>git worktree remove</b>.</div>
+      <div class="row"><span style="flex:1"></span><button class="btn" id="na-cancel">Cancelar</button><button class="btn primary" id="na-go">Lanzar agente</button></div>`;
+    const prev = () => {
+      const k = $('#na-kind').value, sl = slug($('#na-task').value), wt = $('#na-wt').classList.contains('on');
+      $('#na-prev').innerHTML = (wt ? `<span class="fn">git</span> worktree add <span class="str">.wt\\${sl}</span> <span class="typ">-b</span> agent/${sl}\n<span class="fn">cd</span> <span class="str">.wt\\${sl}</span>\n` : `<span class="com"># sin worktree: trabaja directo en ${esc(short(t.cwd))}</span>\n`)
+        + (k === 'claude' ? `<span class="fn">claude</span> <span class="typ">--session-id</span> &lt;uuid&gt; <span class="typ">-n</span> <span class="str">"${esc($('#na-task').value)}"</span> <span class="typ">--strict-mcp-config</span> <span class="typ">--mcp-config</span> <span class="str">.kuntur\\tabs\\${slug(t.name)}.mcp.json</span>` : `<span class="fn">codex</span> <span class="str">"${esc($('#na-task').value)}"</span>`);
+    };
+    prev(); $('#na-kind').onchange = prev; $('#na-task').oninput = prev;
+    $('#na-wt').onclick = e => { e.target.classList.toggle('on'); prev(); };
+    $('#na-cancel').onclick = closeSheet;
+    $('#na-go').onclick = () => {
+      const k = $('#na-kind').value, task = $('#na-task').value.trim() || 'Tarea', wt = $('#na-wt').classList.contains('on');
+      const a = mkAgent(t, k, task, {modelIdx:t.opts.model, worktree:wt, remote:t.kind==='ssh', tpl: t.kind==='ssh' ? 'ssh' : k === 'codex' ? 'rust2' : (/astro/i.test(t.cwd) ? 'ts' : 'rust')});
+      a.elapsed = 0; a.tokOut = 0; a.tokIn = rnd(6e3, 12e3); a.cacheR = 0; a.cost = a.tokIn * a.price.in; a.ctx = 4;
+      t.agents.push(a); t.blocks.push({type:'agent', id:a.id}); S.selAgent[t.id] = a.id; S.selSub[t.id] = null; t.summary = task;
+      if (wt) { const k2 = canon(t.cwd); if (k2) { const wk = k2 + '\\.wt'; FS[wk] = FS[wk] || []; FS[k2].includes('.wt') || FS[k2].push('.wt'); FS[wk].push(slug(task)); } }
+      closeSheet(); render(); toast(`${KIND[k].label} lanzado${wt ? ` en ⎇ agent/${esc(slug(task))}` : ''}`, null, null, 'info');
+    };
+  }
+}
+
+/* ════════════ simulación en vivo ════════════ */
+function tick(){
+  const t = tab();
+  for (const tb of S.tabs) for (const a of tb.agents) {
+    const prev = a.state;
+    if (a.state === 'working') {
+      const out = rnd(25, 95) + a.subs.filter(s => s.state === 'working').length * rnd(10, 30);
+      const inp = Math.random() < .3 ? rnd(800, 4000) : 0, cache = inp ? rnd(2000, 12000) : 0;
+      a.tokOut += out; a.tokIn += inp; a.cacheR += cache;
+      const c = out * a.price.out + inp * a.price.in + cache * a.price.cache;
+      a.cost += c; S.today.cost += c; S.today.tok += out + inp + cache;
+      a.tps = out; a.ctx = Math.min(96, a.ctx + (inp + cache) / a.ctxSize * 12); a.elapsed++;
+      if (Math.random() < .1) a.verb = pick(VERBS);
+      if (Math.random() < .22) a.action = pick(a.tpl.acts);
+      const L = a.kind === 'claude' ? [S.limits.c5, S.limits.c7] : [S.limits.x5, S.limits.x7];
+      L[0].pct = Math.min(100, L[0].pct + out / 9000); L[1].pct = Math.min(100, L[1].pct + out / 60000);
+      const r = Math.random(), busySubs = a.subs.some(s => s.state !== 'done');
+      if (r < .025) a.state = 'waiting'; else if (r < .04 && !busySubs) a.state = 'done';
+    } else a.tps = Math.max(0, a.tps * .5 - 1);
+    for (const s of a.subs) {
+      if (s.state === 'working') {
+        s.elapsed++;
+        if (Math.random() < .25) s.action = pick(SUB_ACTS);
+        const r = Math.random();
+        if (r < .012) { s.state = 'waiting'; if (tb.id !== S.active) tb.badge++; toast(`⚠ Subagente <b>${esc(s.type)}</b> en «${esc(tb.name)}» espera permiso`, tb.id === S.active ? null : 'Ir', () => switchTab(tb.id)); }
+        else if (r < .05) s.state = 'done';
+      }
+      if (a.state === 'done' && s.state === 'working') s.state = 'done';
+    }
+    a.hist.push(a.tps); a.hist.shift();
+    if (a.state !== prev) {
+      if (tb.id === S.active) S.pendingBlocks.add(a.id);
+      if (a.state === 'waiting') { if (tb.id !== S.active) tb.badge++; toast(`⚠ <b>${KIND[a.kind].label}</b> en «${esc(tb.name)}» espera permiso: <span class="c-cmd">${esc(a.tpl.ask)}</span>`, tb.id === S.active ? null : 'Ir', () => switchTab(tb.id)); }
+    }
+  }
+  renderTabs(); renderAgents(); renderUsage(); renderStatus();
+  // Solo se tocan los textos "en vivo"; si hay texto seleccionado en un bloque, ese bloque no se redibuja (así copiar no falla).
+  const sel = getSelection(), selNode = sel && sel.rangeCount && !sel.isCollapsed ? sel.getRangeAt(0).commonAncestorContainer : null;
+  t.agents.forEach(a => {
+    const el = document.querySelector(`[data-ab="${a.id}"]`); if (!el) return;
+    const locked = selNode && el.contains(selNode);
+    if (S.pendingBlocks.has(a.id) && !locked) { el.outerHTML = agentBlock(a); S.pendingBlocks.delete(a.id); }
+    else if (a.state === 'working') { const lv = el.querySelector(`[data-live="${a.id}"]`); if (lv && !(selNode && lv.contains(selNode))) lv.innerHTML = liveText(a); const sb = el.querySelector('.ag-subs'); if (sb && !locked && a.subs.length) sb.innerHTML = `⑂ ${a.subs.length} subagentes en paralelo · ${a.subs.filter(s => s.state !== 'done').length} activos <span class="dim">(detalle en el panel Agentes)</span>`; }
+  });
+}
+
+/* ════════════ eventos ════════════ */
+function setTheme(k){
+  S.theme = k; document.body.dataset.theme = k;
+  document.documentElement.style.setProperty('--ui', THEMES[k].ui + ',system-ui,sans-serif');
+  document.documentElement.style.setProperty('--mono', THEMES[k].mono + ',Consolas,monospace');
+  document.querySelectorAll('.theme-dot').forEach(d => d.classList.toggle('on', d.dataset.t === k));
+  try { localStorage.setItem('kuntur-theme', k); } catch (e) {}
+  renderUsage(); if ($('#overlay').classList.contains('open')) renderSheet();
+}
+function render(force){ renderTabs(); renderMainHead(); renderBlocks(force); renderAgents(); renderUsage(); renderStatus(); renderDock(); renderHL(); renderHint(); renderFiles(); }
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('#ctx')) closeCtx();
+  if (!$('#new-tab-menu').contains(e.target)) $('#shell-menu').classList.remove('open');
+  const d = e.target.closest('[data-tab],[data-close],[data-sel],[data-fold],[data-goto],[data-allow],[data-allowsub],[data-stopsub],[data-deny],[data-stop],[data-kill],[data-again],[data-open],[data-sg],[data-mcp],[data-preset],[data-runcmd],[data-runcmddock],[data-delcmd],[data-theme-set],[data-thinking],[data-shell],[data-copy],[data-copytext],[data-todock],[data-dockhere],[data-dockact],[data-toggledock],[data-rerun],[data-scope],.theme-dot');
+  if (!d) return;
+  const ds = d.dataset, t = tab();
+  if (ds.close) { e.stopPropagation(); closeTab(+ds.close); return; }
+  if (ds.tab) { if (+ds.tab !== S.active) switchTab(+ds.tab); return; }
+  if (ds.sg) { accept(+ds.sg); return; }
+  if (ds.open) { openSheet(ds.open); return; }
+  if (ds.scope) { S.scope = ds.scope; renderAgents(); return; }
+  if (ds.shell) { newTab(ds.shell); $('#shell-menu').classList.remove('open'); return; }
+  if (d.classList.contains('theme-dot')) { setTheme(ds.t); return; }
+  if (ds.themeSet) { setTheme(ds.themeSet); return; }
+  if (ds.copy) { const b = d.closest('.block'); copyText(plain(b.querySelector('.' + ds.copy)), ds.copy === 'cmd' ? 'Comando copiado' : 'Salida copiada'); return; }
+  if (ds.copytext) { copyText(ds.copytext, 'Comando copiado'); return; }
+  if (ds.todock) { openDock(t, {cmd: ds.todock}); toast('↧ Comando listo en la terminal acoplada: revísalo y presiona <b>Enter</b>', null, null, 'info'); return; }
+  if (ds.toggledock !== undefined) { t.dock.open ? (t.dock.open = false, render()) : openDock(t); return; }
+  if (ds.dockact) {
+    if (ds.dockact === 'close') { t.dock.open = false; render(); }
+    if (ds.dockact === 'clear') { t.dock.lines = []; renderDock(); }
+    if (ds.dockact === 'copy') copyText(plain($('#dock-out')), 'Terminal copiada');
+    if (ds.dockact === 'max') { const h = $('.main').clientHeight; const cur = $('#dock').offsetHeight; document.documentElement.style.setProperty('--dockH', (cur < h * .6 ? Math.round(h * .72) : 250) + 'px'); }
+    return;
+  }
+  if (ds.rerun) { const b = t.blocks[+ds.rerun]; if (b) run(b.cmd); return; }
+  if (ds.mcp) { t.mcp[ds.mcp] = !t.mcp[ds.mcp]; renderSheet(); renderMainHead(); return; }
+  if (ds.preset) { Object.keys(t.mcp).forEach(k => t.mcp[k] = MCP_PRESETS[ds.preset].includes(k)); renderSheet(); renderMainHead(); return; }
+  if (ds.thinking !== undefined) { t.opts.thinking = !t.opts.thinking; renderSheet(); return; }
+  if (ds.runcmd) { const c = S.cmds[+ds.runcmd]; closeSheet(); run(c.cmd); return; }
+  if (ds.runcmddock) { const c = S.cmds[+ds.runcmddock]; closeSheet(); openDock(t); dockRun(t, c.cmd); return; }
+  if (ds.delcmd) { S.cmds.splice(+ds.delcmd, 1); renderSheet(); return; }
+  if (ds.fold) { e.stopPropagation(); const [, a] = findAgent(ds.fold); if (a) { a.open = !a.open; renderAgents(); } return; }
+  if (ds.allowsub || ds.stopsub) { const [pid, sid] = (ds.allowsub || ds.stopsub).split('|'); const [tb, a] = findAgent(pid); const s = a && a.subs.find(x => x.id === sid); if (s) { s.state = ds.allowsub ? 'working' : 'done'; if (ds.allowsub) tb.badge = Math.max(0, tb.badge - 1); renderAgents(); renderTabs(); } return; }
+  const id = ds.sel || ds.goto || ds.allow || ds.deny || ds.stop || ds.kill || ds.again || ds.dockhere;
+  const [tb, a] = findAgent(id); if (!a) return;
+  if (ds.sel) { if (e.target.closest('button')) return; if (tb.id !== S.active) switchTab(tb.id); S.selAgent[tb.id] = a.id; S.selSub[tb.id] = ds.sub || null; renderAgents(); renderUsage(); return; }
+  if (ds.goto) { S.selAgent[tb.id] = a.id; if (tb.id !== S.active) switchTab(tb.id); document.querySelector(`[data-ab="${a.id}"]`)?.scrollIntoView({behavior:'smooth', block:'center'}); renderAgents(); return; }
+  if (ds.dockhere) { if (tb.id !== S.active) switchTab(tb.id); tb.dock.target = a.worktree || a.cwd !== tb.cwd ? a.id : 'session'; openDock(tb, {cwd: a.cwd}); return; }
+  if (ds.allow) { a.state = 'working'; tb.badge = Math.max(0, tb.badge - 1); S.pendingBlocks.add(a.id); }
+  if (ds.deny || ds.stop) { a.state = 'done'; S.pendingBlocks.add(a.id); }
+  if (ds.again) { a.state = 'working'; a.elapsed = 0; a.verb = pick(VERBS); }
+  if (ds.kill) { tb.agents = tb.agents.filter(x => x !== a); tb.blocks = tb.blocks.filter(b => b.id !== a.id); toast(`${KIND[a.kind].label} cerrado${a.worktree ? ` · worktree ⎇ ${esc(a.worktree.branch)} conservado` : ''}`, null, null, 'info'); }
+  render();
+});
+document.addEventListener('contextmenu', e => {
+  if (e.target.closest('#blocks,#dock-out')) { e.preventDefault(); openCtx(e); }
+  else if (e.target.closest('#pv-files .flist')) { e.preventDefault(); fileCtx(e); }
+});
+document.addEventListener('scroll', closeCtx, true);
+document.addEventListener('change', e => {
+  const t = tab();
+  if (e.target.dataset.opt) { t.opts[e.target.dataset.opt] = e.target.dataset.opt === 'model' ? +e.target.value : e.target.value; renderSheet(); }
+  if (e.target.id === 'font-pair') { const f = FONT_PAIRS[+e.target.value]; document.documentElement.style.setProperty('--ui', f[1] + ',system-ui,sans-serif'); document.documentElement.style.setProperty('--mono', f[2] + ',Consolas,monospace'); }
+  if (e.target.id === 'side-mode') { S.side = e.target.value; document.body.dataset.side = S.side; }
+  if (e.target.id === 'dock-target') {
+    const v = e.target.value; t.dock.target = v;
+    const a = t.agents.find(x => x.id === v); openDock(t, {cwd: a ? a.cwd : t.cwd});
+  }
+});
+document.addEventListener('input', e => { if (e.target.id === 'font-size') document.documentElement.style.setProperty('--fs', e.target.value + 'px'); });
+document.addEventListener('dblclick', e => {
+  const n = e.target.closest('[data-rename]'); if (!n) return;
+  const t = S.tabs.find(x => x.id === +n.dataset.rename);
+  n.innerHTML = `<input value="${esc(t.name)}">`; const i = n.querySelector('input'); i.focus(); i.select();
+  i.onblur = () => { t.name = i.value.trim() || t.name; render(); };
+  i.onkeydown = k => { if (k.key === 'Enter') i.blur(); if (k.key === 'Escape') { i.value = t.name; i.blur(); } };
+});
+document.addEventListener('focusin', e => {
+  if (e.target.id !== 'nc-keys') return;
+  e.target.value = ''; e.target.placeholder = 'presiona la combinación…';
+  e.target.onkeydown = k => { k.preventDefault(); if (['Control','Alt','Shift','Meta'].includes(k.key)) return; e.target.value = combo(k); };
+});
+document.addEventListener('click', e => {
+  if (e.target.id !== 'nc-add') return;
+  const name = $('#nc-name').value.trim(), cmd = $('#nc-cmd').value.trim(), keys = $('#nc-keys').value.trim();
+  if (!name || !cmd) return;
+  S.cmds.push({name, cmd, keys: keys || '—', scope: $('#nc-scope').value, tab: S.active}); renderSheet();
+});
+
+const combo = k => [k.ctrlKey && 'Ctrl', k.altKey && 'Alt', k.shiftKey && 'Shift', k.key.length === 1 ? k.key.toUpperCase() : k.key].filter(Boolean).join('+');
+document.addEventListener('keydown', e => {
+  if (e.target.id === 'nc-keys') return;
+  const k = e.key.toLowerCase();
+  if (e.key === 'Escape') { closeCtx(); if ($('#overlay').classList.contains('open')) { closeSheet(); return; } }
+  if (e.ctrlKey && !e.altKey && !e.shiftKey && k === 'k') { e.preventDefault(); $('#overlay').classList.contains('open') ? closeSheet() : openSheet('mcp'); return; }
+  if (e.ctrlKey && (e.key === '`' || e.code === 'Backquote')) { e.preventDefault(); const t = tab(); t.dock.open ? (t.dock.open = false, render(), $('#cmd').focus()) : openDock(t); return; }
+  if (e.ctrlKey && e.shiftKey && k === 'c') { e.preventDefault(); copyText(selText()); return; }
+  if (e.ctrlKey && e.shiftKey && k === 'v') { e.preventDefault(); readClip().then(txt => pasteInto(document.activeElement && document.activeElement.id === 'dock-cmd' ? 'dock' : 'main', txt)); return; }
+  if (e.altKey && !e.ctrlKey) {
+    if (k === 't') { e.preventDefault(); newTab(); return; }
+    if (k === 'w') { e.preventDefault(); closeTab(S.active); return; }
+    if (k === 'a') { e.preventDefault(); openSheet('agent'); return; }
+    if (k === 'b') { e.preventDefault(); cycleSide(); return; }
+    if (/^[1-9]$/.test(k) && S.tabs[+k - 1]) { e.preventDefault(); switchTab(S.tabs[+k - 1].id); return; }
+  }
+  if (e.ctrlKey || e.altKey) {
+    const c = combo(e);
+    const hit = S.cmds.find(x => x.keys === c && x.scope === 'tab' && x.tab === S.active) || S.cmds.find(x => x.keys === c && x.scope === 'global');
+    if (hit) { e.preventDefault(); closeSheet(); const t = tab(); if (t.kind === 'ssh' && /apt|systemctl/.test(hit.cmd)) { openDock(t); dockRun(t, hit.cmd); } else run(hit.cmd); toast(`⌨ ${esc(hit.keys)} → <span class="c-cmd">${esc(hit.cmd)}</span>`, null, null, 'info'); }
+  }
+});
+
+const ta = $('#cmd');
+ta.addEventListener('input', () => { if (!ta.value) { S.pasteNote = ''; renderHint(); } refreshSuggest(); });
+ta.addEventListener('scroll', () => { $('#hl').scrollLeft = ta.scrollLeft; $('#hl').scrollTop = ta.scrollTop; });
+ta.addEventListener('paste', e => { const txt = (e.clipboardData || window.clipboardData).getData('text'); setTimeout(() => notePaste(txt), 0); });
+ta.addEventListener('keydown', e => {
+  const open = S.sugg.length > 0;
+  if (e.key === 'Tab') { e.preventDefault(); if (open) accept(); return; }
+  if (e.key === 'ArrowRight' && ta.selectionStart === ta.value.length && open) { e.preventDefault(); accept(); return; }
+  if (e.key === 'ArrowDown' && open) { e.preventDefault(); S.sel = (S.sel + 1) % S.sugg.length; renderSuggest(); renderHL(); return; }
+  if (e.key === 'ArrowUp' && open) { e.preventDefault(); S.sel = (S.sel - 1 + S.sugg.length) % S.sugg.length; renderSuggest(); renderHL(); return; }
+  if (e.key === 'Escape') { if (S.pasteNote) { ta.value = ''; S.pasteNote = ''; } S.sugg = []; renderSuggest(); renderHL(); renderHint(); return; }
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); const v = ta.value; ta.value = ''; S.sugg = []; S.pasteNote = ''; renderSuggest(); run(v); renderHL(); renderHint(); }
+  if (e.key === 'Enter' && e.shiftKey) setTimeout(renderHL, 0);
+});
+ta.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== ta) { S.sugg = []; renderSuggest(); renderHL(); } }, 150));
+
+const dIn = $('#dock-cmd');
+dIn.addEventListener('keydown', e => {
+  const t = tab(), d = t.dock;
+  if (e.key === 'Enter') { e.preventDefault(); const v = dIn.value; dIn.value = ''; dockRun(t, v); }
+  if (e.key === 'ArrowUp' && d.hist.length) { e.preventDefault(); d.hi = Math.min(d.hist.length - 1, d.hi + 1); dIn.value = d.hist[d.hi]; }
+  if (e.key === 'ArrowDown') { e.preventDefault(); d.hi = Math.max(-1, d.hi - 1); dIn.value = d.hi < 0 ? '' : d.hist[d.hi]; }
+  if (e.ctrlKey && e.key.toLowerCase() === 'l') { e.preventDefault(); d.lines = []; renderDock(); }
+});
+let drag = null;
+$('#dock-resize').addEventListener('mousedown', e => { drag = {y:e.clientY, h:$('#dock').offsetHeight}; document.body.style.userSelect = 'none'; });
+addEventListener('mousemove', e => { if (!drag) return; const max = $('.main').clientHeight - 140; document.documentElement.style.setProperty('--dockH', Math.max(110, Math.min(max, drag.h + drag.y - e.clientY)) + 'px'); });
+addEventListener('mouseup', () => { if (drag) { drag = null; document.body.style.userSelect = ''; } });
+
+$('#new-tab').onclick = () => newTab();
+$('#new-tab-menu').onclick = e => { e.stopPropagation(); $('#shell-menu').classList.toggle('open'); };
+$('#new-agent').onclick = () => openSheet('agent');
+$('#sim8').onclick = sim8;
+$('#side-toggle').onclick = cycleSide;
+$('#open-sheet').onclick = () => openSheet('mcp');
+$('#sheet-close').onclick = closeSheet;
+$('#overlay').addEventListener('mousedown', e => { if (e.target.id === 'overlay') closeSheet(); });
+document.querySelectorAll('.sheet-tab').forEach(b => b.onclick = () => { S.sheet = b.dataset.v; renderSheet(); });
+document.querySelector('.wbtn.close').onclick = () => toast('En la app real esto cierra Kuntur (las sesiones se guardan y se restauran).', null, null, 'info');
+document.querySelector('.wbtn.min').onclick = () => toast('Minimizar (simulado).', null, null, 'info');
+document.querySelector('.wbtn.max').onclick = () => toast('Maximizar (simulado).', null, null, 'info');
+addEventListener('resize', () => renderUsage());
+
+/* ════════════ archivos: Windows (local) + Linux (SFTP por la misma conexión SSH) ════════════ */
+Object.assign(SVG, {
+  folder:'<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>',
+  file:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>',
+  win:'<rect x="3" y="3" width="8" height="8"/><rect x="13" y="3" width="8" height="8"/><rect x="3" y="13" width="8" height="8"/><rect x="13" y="13" width="8" height="8"/>',
+  up:'<polyline points="18 15 12 9 6 15"/>',
+  newdir:'<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/>',
+  upload:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
+  link:'<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>',
+});
+FS[W('C:/Users/dev/Downloads')] = ['acme-backup-2026-11.sql','informe-mensual.pdf','logo-acme.png','instalador.msi'];
+FS[W('C:/Users/dev/Desktop')] = ['notas.txt','capturas'];
+FS[W('C:/Users/dev/Desktop/capturas')] = [];
+Object.assign(REMOTE, {
+  '/var/www/html':[], '/opt':[], '/etc/nginx/sites-enabled':['acme'], '/etc/php':[],
+  '/var/www/acme/public':['index.php','css','js','img'], '/var/www/acme/public/css':['app.css'], '/var/www/acme/public/js':['app.js'], '/var/www/acme/public/img':['logo.png'],
+  '/var/www/acme/storage':['logs','app'], '/var/www/acme/storage/logs':['laravel.log'], '/var/www/acme/storage/app':[],
+  '/var/www/acme/app':['Http','Models'], '/var/www/acme/app/Http':[], '/var/www/acme/app/Models':[],
+  '/home/admin/scripts':['backup.sh','deploy.sh'], '/home/admin/backups':['db-2026-11-20.sql.gz'],
+});
+const META = {};
+const hashN = s => { let h = 2166136261; for (const c of s) h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0; return h; };
+const fmtB = b => b == null ? '' : b < 1024 ? b + ' B' : b < 1048576 ? Math.round(b/1024) + ' KB' : b < 1073741824 ? (b/1048576).toFixed(1) + ' MB' : (b/1073741824).toFixed(2) + ' GB';
+const fmtAgo = ms => { const d = Math.floor((Date.now() - ms) / 86400e3); return d < 1 ? 'hoy' : d < 30 ? d + ' d' : new Date(ms).toLocaleDateString('es-PE', {day:'2-digit', month:'short'}); };
+const qp = p => /\s/.test(p) ? `"${p}"` : p;
+const FT = n => /\.(rs|ts|js|py|php|sh|css)$/i.test(n) ? 'code' : /\.(png|jpe?g|gif|svg|webp)$/i.test(n) ? 'img' : /\.(zip|gz|sql|msi|tar|7z)$/i.test(n) ? 'arc' : /\.(env|json|conf|ini|ya?ml|toml)$|^\./i.test(n) ? 'cfg' : 'doc';
+const SIDES = {
+  l: { list: p => FS[canon(p) || fsKey(p)] || [], guess: (p, n) => !isFile(n), join: (p, n) => norm(p) + '\\' + n,
+       up: p => { const s = norm(p).split('\\'); return s.length > 1 ? s.slice(0, -1).join('\\') : p; },
+       segs: p => norm(p).split('\\'), fromSegs: a => a.join('\\'), sep: '\\',
+       add: (p, n, dir) => { const k = canon(p) || fsKey(p); if (!k) return; if (!FS[k].includes(n)) FS[k].push(n); if (dir) FS[k + '\\' + n] = FS[k + '\\' + n] || []; } },
+  r: { list: p => REMOTE[p] || [], guess: (p, n) => !!REMOTE[presolve(p, n)], join: (p, n) => (p === '/' ? '' : p) + '/' + n,
+       up: p => presolve(p, '..'), segs: p => ['/', ...p.split('/').filter(Boolean)], fromSegs: a => '/' + a.slice(1).join('/'), sep: '/',
+       add: (p, n, dir) => { REMOTE[p] = REMOTE[p] || []; if (!REMOTE[p].includes(n)) REMOTE[p].push(n); if (dir) REMOTE[presolve(p, n)] = REMOTE[presolve(p, n)] || []; } },
+};
+const fIsDir = (s, p, n) => { const m = META[SIDES[s].join(p, n)]; return m ? !!m.dir : SIDES[s].guess(p, n); };
+function fMeta(s, p, n){
+  const full = SIDES[s].join(p, n); if (META[full]) return META[full];
+  const h = hashN(full), dir = fIsDir(s, p, n);
+  return {dir, size: dir ? null : 300 + h % 4800000, m: Date.now() - (h % 45) * 86400e3 - h % 86400e3};
+}
+function uniqueName(s, p, n){
+  const L = SIDES[s].list(p); if (!L.includes(n)) return n;
+  const m = n.match(/^(.*?)(\.[^.]*)?$/); let i = 2;
+  while (L.includes(`${m[1]} (${i})${m[2] || ''}`)) i++;
+  return `${m[1]} (${i})${m[2] || ''}`;
+}
+function fstate(t){
+  if (!t.files) t.files = { follow:true, l: t.kind === 'ssh' ? W('C:/Users/dev/Downloads') : t.cwd, r: t.kind === 'ssh' ? t.cwd : null, sel:{l:new Set(), r:new Set()}, fresh:new Set() };
+  const f = t.files;
+  if (f.follow) { if (t.kind === 'ssh') f.r = t.cwd; else f.l = t.cwd; }
+  return f;
+}
+const dockSide = t => t.kind === 'ssh' ? 'r' : 'l';
+function paneHTML(t, f, s){
+  const SD = SIDES[s], P = f[s];
+  const names = SD.list(P).slice().sort((a, b) => (fIsDir(s, P, b) - fIsDir(s, P, a)) || a.localeCompare(b, 'es', {sensitivity:'base'}));
+  const segs = SD.segs(P);
+  const head = s === 'r' ? `${icon('ssh')}${esc(t.host)} <span class="dim">· Linux</span>` : `${icon('win')}Este equipo <span class="dim">· Windows</span>`;
+  return `<div class="fpane"><div class="fbar"><span class="os">${head}</span><span class="sp"></span>
+      <button class="fbtn" data-fact="up" data-s="${s}" title="Subir un nivel">${icon('up')}</button>
+      <button class="fbtn" data-fact="mk" data-s="${s}" title="Nueva carpeta">${icon('newdir')}</button>
+      <button class="fbtn" data-fact="pick" data-s="${s}" title="${s === 'r' ? 'Subir archivos al servidor' : 'Copiar archivos aquí'}">${icon('upload')}</button>
+      ${s === dockSide(t) ? `<button class="fbtn ${f.follow ? 'on' : ''}" data-fact="follow" data-s="${s}" title="Seguir la carpeta de la sesión">${icon('link')}</button><button class="fbtn" data-fact="term" data-s="${s}" title="Abrir terminal acoplada aquí">${icon('shell')}</button>` : ''}
+    </div>
+    <div class="crumbs" title="${esc(P)}">${segs.map((x, i) => `<span data-fcrumb="${i}" data-s="${s}">${esc(s === 'r' ? (i === 0 ? '/' : x + (i < segs.length - 1 ? '/' : '')) : x + (i < segs.length - 1 ? '\\' : ''))}</span>`).join('')}</div>
+    <div class="flist" tabindex="0" data-side="${s}">${names.length ? names.map(n => {
+      const m = fMeta(s, P, n), full = SD.join(P, n);
+      return `<div class="fr ${f.sel[s].has(n) ? 'sel' : ''} ${f.fresh.has(full) ? 'new' : ''}" draggable="true" data-fside="${s}" data-fname="${esc(n)}" title="${esc(full)}"><span class="ic ${m.dir ? 'dir' : FT(n)}">${icon(m.dir ? 'folder' : 'file')}</span><span class="n">${esc(n)}</span><span class="z">${m.dir ? '' : fmtB(m.size)}</span><span class="d">${fmtAgo(m.m)}</span></div>`;
+    }).join('') : '<div class="fhint">Carpeta vacía · arrastra archivos aquí</div>'}</div></div>`;
+}
+function xfersHTML(){
+  const xs = S.xfers.filter(x => x.tabId === S.active).slice(-4);
+  if (!xs.length) return '<div class="xfers" style="display:none"></div>';
+  return `<div class="xfers">${xs.map(x => { const p = Math.min(100, x.done / x.size * 100); return `<div class="xf ${x.state}"><span class="${x.kind === 'up' ? 'acc' : x.kind === 'down' ? 'ok' : 'dim'}">${x.kind === 'up' ? '↑' : x.kind === 'down' ? '↓' : '⧉'}</span><span class="n" title="${esc(x.dstLabel)}">${esc(x.name)}</span><span class="m">${x.state === 'done' ? '✓ ' + (x.dir ? 'carpeta' : fmtB(x.size)) : p.toFixed(0) + '% · ' + fmtB(x.speed) + '/s'}</span><div class="pb"><i style="width:${p.toFixed(1)}%"></i></div></div>`; }).join('')}</div>`;
+}
+function renderPtabs(){
+  document.querySelectorAll('[data-ptab]').forEach(b => b.classList.toggle('on', b.dataset.ptab === S.ptab));
+  $('#pv-agents').classList.toggle('on', S.ptab === 'agents'); $('#pv-files').classList.toggle('on', S.ptab === 'files');
+  $('#ag-tools').style.display = S.ptab === 'agents' ? '' : 'none';
+}
+function renderFiles(){
+  renderPtabs();
+  if (S.ptab !== 'files') return;
+  const t = tab(), f = fstate(t), el = $('#pv-files');
+  const act = document.activeElement, focusSide = act && act.classList && act.classList.contains('flist') ? act.dataset.side : null;
+  const st = {}; el.querySelectorAll('.flist').forEach(x => st[x.dataset.side] = x.scrollTop);
+  el.innerHTML = (t.kind === 'ssh' ? ['r', 'l'] : ['l']).map(s => paneHTML(t, f, s)).join('')
+    + `<div class="fhint">${t.kind === 'ssh' ? 'Arrastra entre servidor ↔ este equipo para copiar · desde el Explorador de Windows para subir · a la terminal para insertar la ruta' : 'Arrastra desde el Explorador de Windows para copiar aquí · arrastra una fila a la terminal para insertar su ruta'}</div>`
+    + xfersHTML();
+  el.querySelectorAll('.flist').forEach(x => { x.scrollTop = st[x.dataset.side] || 0; if (x.dataset.side === focusSide) x.focus({preventScroll:true}); });
+}
+function nav(t, s, p){ const f = fstate(t); if (s === dockSide(t)) f.follow = false; f[s] = p; f.sel[s].clear(); renderFiles(); }
+function startXfer(t, o){
+  const name = uniqueName(o.dst.side, o.dst.path, o.name), size = Math.max(1, o.dir ? 3e6 : (o.size || 4096));
+  const speed = Math.max(o.kind === 'copy' ? 150e6 : rnd(9e6, 26e6), size / 6);
+  S.xfers.push({id:uuid(), tabId:t.id, kind:o.kind, name, size, dir:!!o.dir, dst:o.dst, done:0, speed, state:'run',
+    dstLabel: (o.dst.side === 'r' ? t.host + ':' : '') + SIDES[o.dst.side].join(o.dst.path, name)});
+  if (S.xfers.length > 16) S.xfers.shift();
+  if (S.ptab === 'files') { const b = document.querySelector('#pv-files .xfers'); if (b) b.outerHTML = xfersHTML(); }
+}
+function transferNames(t, ss, sp, names, ds, dp){
+  if (ss === ds && sp === dp) { toast('Ya está en esta carpeta.', null, null, 'info'); return; }
+  names.forEach(n => { const m = fMeta(ss, sp, n); startXfer(t, {kind: ss === ds ? 'copy' : ds === 'r' ? 'up' : 'down', name:n, size:m.size, dir:m.dir, dst:{side:ds, path:dp}}); });
+  toast(`${ss === ds ? '⧉ Copiando' : ds === 'r' ? '↑ Subiendo al servidor' : '↓ Descargando a este equipo'} · ${names.length} elemento(s) → <span style="font-family:var(--mono)">${esc(ds === 'r' ? t.host + ':' + dp : short(dp))}</span>`, null, null, 'info');
+}
+function dropInto(t, side, dt, path){
+  const f = fstate(t); path = path || f[side];
+  const raw = dt.getData ? dt.getData('application/x-nodo') : '';
+  if (raw) { const d = JSON.parse(raw); transferNames(t, d.s, d.path, d.names, side, path); return; }
+  const files = [...(dt.files || [])];
+  if (!files.length) return;
+  files.forEach(fl => startXfer(t, {kind: side === 'r' ? 'up' : 'copy', name: fl.name, size: fl.size || 4096, dst:{side, path}}));
+  toast(`${side === 'r' ? '↑ Subiendo' : '⧉ Copiando'} ${files.length} archivo(s) de Windows → <span style="font-family:var(--mono)">${esc(side === 'r' ? t.host + ':' + path : short(path))}</span>`, null, null, 'info');
+}
+function openItem(t, s, n){
+  const f = fstate(t), P = f[s];
+  if (fIsDir(s, P, n)) { nav(t, s, SIDES[s].join(P, n)); return; }
+  if (s === 'l') toast(`Abriendo <b>${esc(n)}</b> con la aplicación predeterminada de Windows (simulado)`, null, null, 'info');
+  else { startXfer(t, {kind:'down', name:n, size:fMeta(s, P, n).size, dst:{side:'l', path:W('C:/Users/dev/AppData/Local/Temp')}}); toast(`↓ <b>${esc(n)}</b> se descarga a una carpeta temporal y se abre; si lo editas, Kuntur ofrece volver a subirlo.`, null, null, 'info'); }
+}
+function delAsk(t, s){
+  const f = fstate(t), names = [...f.sel[s]]; if (!names.length) return;
+  toast(`¿Eliminar ${names.length} elemento(s) de ${s === 'r' ? esc(t.host) + ' <b>(no se puede deshacer)</b>' : 'este equipo (van a la Papelera)'}?`, 'Eliminar', () => {
+    const L = SIDES[s].list(f[s]); names.forEach(n => { const i = L.indexOf(n); if (i >= 0) L.splice(i, 1); }); f.sel[s].clear(); renderFiles();
+  });
+}
+function copyFiles(t, s){
+  const f = fstate(t), names = [...f.sel[s]]; if (!names.length) return;
+  S.fclip = {s, path:f[s], names};
+  toast(`⧉ ${names.length} elemento(s) copiado(s) · Ctrl+V en otra carpeta${t.kind === 'ssh' ? ' o en la otra lista' : ''} (en la app real también en el Explorador de Windows)`, null, null, 'info');
+}
+function fileAct(t, s, act){
+  const f = fstate(t);
+  if (act === 'up') nav(t, s, SIDES[s].up(f[s]));
+  if (act === 'mk') { const n = uniqueName(s, f[s], 'nueva carpeta'), full = SIDES[s].join(f[s], n); SIDES[s].add(f[s], n, true); META[full] = {dir:true, size:null, m:Date.now()}; f.fresh.add(full); setTimeout(() => f.fresh.delete(full), 1500); renderFiles(); }
+  if (act === 'pick') { S.pickTarget = {t, s}; $('#fpick').click(); }
+  if (act === 'follow') { f.follow = !f.follow; renderFiles(); }
+  if (act === 'term') { t.dock.target = 'session'; openDock(t, {cwd: f[s]}); }
+}
+function fileCtx(e){
+  const t = tab(), f = fstate(t), r = e.target.closest('.fr'), s = e.target.closest('.flist').dataset.side, P = f[s], other = s === 'r' ? 'l' : 'r';
+  if (r && !f.sel[s].has(r.dataset.fname)) { f.sel[s].clear(); f.sel[s].add(r.dataset.fname); renderFiles(); }
+  const names = [...f.sel[s]], one = r ? r.dataset.fname : null, full = one ? SIDES[s].join(P, one) : P, canDock = s === dockSide(t);
+  const paste = ['Pegar aquí', 'Ctrl+V', !S.fclip, () => transferNames(t, S.fclip.s, S.fclip.path, S.fclip.names, s, P)];
+  const items = r ? [
+    ['Abrir', 'Enter', false, () => openItem(t, s, one)],
+    ...(t.kind === 'ssh' ? [[s === 'r' ? '↓ Descargar a este equipo' : '↑ Subir al servidor', '', false, () => transferNames(t, s, P, names, other, f[other])]] : []),
+    ['Copiar', 'Ctrl+C', false, () => copyFiles(t, s)], paste, '-',
+    ['Copiar ruta', '', false, () => copyText(full, 'Ruta copiada')],
+    ['Insertar ruta en la terminal', '', false, () => pasteInto('main', qp(full))],
+    ['Abrir terminal acoplada aquí', '', !canDock, () => openDock(t, {cwd: fIsDir(s, P, one) ? full : P})], '-',
+    ['Eliminar…', 'Supr', false, () => delAsk(t, s)],
+  ] : [
+    paste, ['Nueva carpeta', '', false, () => fileAct(t, s, 'mk')], ['Subir / copiar archivos aquí…', '', false, () => fileAct(t, s, 'pick')], '-',
+    ['Copiar ruta', '', false, () => copyText(P, 'Ruta copiada')], ['Abrir terminal acoplada aquí', '', !canDock, () => openDock(t, {cwd: P})],
+  ];
+  showCtx(e, items);
+}
+setInterval(() => {
+  let fin = false;
+  for (const x of S.xfers) if (x.state === 'run') {
+    x.done = Math.min(x.size, x.done + x.speed * .2 * rnd(.7, 1.2));
+    if (x.done >= x.size) {
+      x.state = 'done'; fin = true;
+      const SD = SIDES[x.dst.side], full = SD.join(x.dst.path, x.name);
+      SD.add(x.dst.path, x.name, x.dir); META[full] = {dir:x.dir, size:x.dir ? null : x.size, m:Date.now()};
+      const tb = S.tabs.find(q => q.id === x.tabId); if (tb && tb.files) { tb.files.fresh.add(full); setTimeout(() => tb.files.fresh.delete(full), 1500); }
+    }
+  }
+  if (S.ptab === 'files') { if (fin) renderFiles(); else { const b = document.querySelector('#pv-files .xfers'); if (b && S.xfers.some(x => x.state === 'run')) b.outerHTML = xfersHTML(); } }
+}, 200);
+
+const pv = $('#pv-files');
+pv.addEventListener('click', e => {
+  const t = tab(), f = fstate(t);
+  const b = e.target.closest('[data-fact]'); if (b) { fileAct(t, b.dataset.s, b.dataset.fact); return; }
+  const c = e.target.closest('[data-fcrumb]'); if (c) { const s = c.dataset.s; nav(t, s, SIDES[s].fromSegs(SIDES[s].segs(f[s]).slice(0, +c.dataset.fcrumb + 1))); return; }
+  const r = e.target.closest('.fr');
+  if (r) { const s = r.dataset.fside, n = r.dataset.fname; if (!e.ctrlKey) { f.sel.l.clear(); f.sel.r.clear(); } if (e.ctrlKey && f.sel[s].has(n)) f.sel[s].delete(n); else f.sel[s].add(n); }
+  else if (e.target.closest('.flist')) { f.sel.l.clear(); f.sel.r.clear(); }
+  else return;
+  renderFiles();
+});
+pv.addEventListener('dblclick', e => { const r = e.target.closest('.fr'); if (r) openItem(tab(), r.dataset.fside, r.dataset.fname); });
+pv.addEventListener('dragstart', e => {
+  const r = e.target.closest('.fr'); if (!r) return;
+  const t = tab(), f = fstate(t), s = r.dataset.fside, n = r.dataset.fname;
+  const names = f.sel[s].has(n) ? [...f.sel[s]] : [n];
+  e.dataTransfer.setData('application/x-nodo', JSON.stringify({s, path:f[s], names}));
+  e.dataTransfer.setData('text/plain', names.map(x => qp(SIDES[s].join(f[s], x))).join(' '));
+  e.dataTransfer.effectAllowed = 'copy';
+});
+pv.addEventListener('dragover', e => { const l = e.target.closest('.flist'); if (!l) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; pv.querySelectorAll('.flist').forEach(x => x.classList.toggle('drop', x === l)); });
+pv.addEventListener('dragleave', e => { if (!e.relatedTarget || !pv.contains(e.relatedTarget)) pv.querySelectorAll('.flist').forEach(x => x.classList.remove('drop')); });
+pv.addEventListener('drop', e => { const l = e.target.closest('.flist'); pv.querySelectorAll('.flist').forEach(x => x.classList.remove('drop')); if (!l) return; e.preventDefault(); dropInto(tab(), l.dataset.side, e.dataTransfer); });
+pv.addEventListener('keydown', e => {
+  const l = e.target.closest('.flist'); if (!l) return;
+  const t = tab(), f = fstate(t), s = l.dataset.side, k = e.key.toLowerCase();
+  if (e.ctrlKey && k === 'c') { e.preventDefault(); copyFiles(t, s); }
+  if (e.ctrlKey && k === 'v') { // primero se intenta el portapapeles de Windows (archivos copiados en el Explorador)
+    S.pendingPaste = {t, s};
+    setTimeout(() => { const pp = S.pendingPaste; if (!pp) return; S.pendingPaste = null; if (S.fclip) transferNames(pp.t, S.fclip.s, S.fclip.path, S.fclip.names, pp.s, fstate(pp.t)[pp.s]); else toast('No hay archivos copiados.', null, null, 'info'); }, 80);
+  }
+  if (e.ctrlKey && k === 'a') { e.preventDefault(); SIDES[s].list(f[s]).forEach(n => f.sel[s].add(n)); renderFiles(); }
+  if (e.key === 'Delete') delAsk(t, s);
+  if (e.key === 'Enter') { const n = [...f.sel[s]][0]; if (n) openItem(t, s, n); }
+  if (e.key === 'Backspace') { e.preventDefault(); nav(t, s, SIDES[s].up(f[s])); }
+});
+pv.addEventListener('paste', e => {
+  const files = [...((e.clipboardData && e.clipboardData.files) || [])];
+  if (!files.length || !S.pendingPaste) return;
+  e.preventDefault(); const pp = S.pendingPaste; S.pendingPaste = null; dropInto(pp.t, pp.s, {files});
+});
+$('#fpick').addEventListener('change', e => { const p = S.pickTarget; if (p && e.target.files.length) dropInto(p.t, p.s, {files: e.target.files}); e.target.value = ''; });
+document.querySelectorAll('[data-ptab]').forEach(b => b.addEventListener('click', () => { S.ptab = b.dataset.ptab; renderFiles(); }));
+
+// Soltar sobre la sesión: por SSH se sube a la carpeta actual; en local se inserta la ruta.
+const sess = $('.session'); let dragDepth = 0;
+sess.addEventListener('dragenter', e => {
+  dragDepth++; const t = tab(), osFiles = [...e.dataTransfer.types].includes('Files');
+  sess.classList.add('drop');
+  $('#dropmsg').innerHTML = osFiles && t.kind === 'ssh' ? `↑ Suelta para subir a<br><span style="font-family:var(--mono)">${esc(t.host)}:${esc(t.cwd)}</span>` : '⌨ Suelta para insertar la ruta en la entrada';
+});
+sess.addEventListener('dragover', e => e.preventDefault());
+sess.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; sess.classList.remove('drop'); } });
+sess.addEventListener('drop', e => {
+  e.preventDefault(); dragDepth = 0; sess.classList.remove('drop');
+  const t = tab(), dt = e.dataTransfer, raw = dt.getData('application/x-nodo');
+  if (raw) { const d = JSON.parse(raw); pasteInto('main', d.names.map(n => qp(SIDES[d.s].join(d.path, n))).join(' ')); return; }
+  const files = [...dt.files];
+  if (!files.length) { const txt = dt.getData('text/plain'); if (txt) pasteInto('main', txt); return; }
+  if (t.kind === 'ssh') {
+    files.forEach(fl => startXfer(t, {kind:'up', name:fl.name, size:fl.size || 4096, dst:{side:'r', path:t.cwd}}));
+    t.blocks.push({type:'info', html:`<span class="acc">↑</span> <span class="dim">Subiendo ${files.length} archivo(s) a ${esc(t.host)}:${esc(t.cwd)} por SFTP (misma conexión, sin volver a autenticar)</span>`});
+    S.ptab = 'files'; renderBlocks(true); renderFiles();
+  } else { pasteInto('main', files.map(fl => qp(HOME + '\\Downloads\\' + fl.name)).join(' ')); toast('En la app real se inserta la ruta completa del archivo soltado.', null, null, 'info'); }
+});
+const dockEl = $('#dock');
+dockEl.addEventListener('dragover', e => e.preventDefault());
+dockEl.addEventListener('drop', e => {
+  e.preventDefault(); const t = tab(), dt = e.dataTransfer, raw = dt.getData('application/x-nodo');
+  if (raw) { const d = JSON.parse(raw); openDock(t, {cmd: ($('#dock-cmd').value + ' ' + d.names.map(n => qp(SIDES[d.s].join(d.path, n))).join(' ')).trim()}); return; }
+  const files = [...dt.files];
+  if (files.length && t.kind === 'ssh') { files.forEach(fl => startXfer(t, {kind:'up', name:fl.name, size:fl.size || 4096, dst:{side:'r', path:t.dock.cwd}})); t.dock.lines.push(`<span class="acc">↑</span> <span class="dim">Subiendo ${files.length} archivo(s) a ${esc(t.dock.cwd)}</span>\n`); renderDock(); }
+});
+
+/* ════════════ tarjeta al pasar el mouse (vista de íconos) ════════════ */
+let hcT = null;
+function showCard(el){
+  const t = S.tabs.find(x => x.id === +el.dataset.tab); if (!t) return;
+  const rows = t.agents.flatMap(a => [a, ...a.subs]), c = s => rows.filter(r => r.state === s).length;
+  const card = $('#hcard');
+  card.innerHTML = `<div class="h"><span class="tile" style="width:22px;height:22px;border-radius:7px;background:${ICON_BG[t.icon]}">${icon(t.icon)}</span>${esc(t.name)}<span class="k kbd">Alt+${el.dataset.idx}</span></div>
+    <div class="s">${esc(t.summary)}</div>
+    <div class="p">${t.kind === 'ssh' ? esc(t.host) + ':' : ''}${esc(short(t.cwd))}${t.branch ? ` · ⎇ ${esc(t.branch)}` : ''}</div>
+    ${rows.length ? `<div class="a"><span class="acc">● ${c('working')} trabajando</span><span class="warn">⚠ ${c('waiting')} esperando</span><span class="ok">✓ ${c('done')}</span></div>` : '<div class="a dim">sin agentes · shell ' + esc(t.shell) + '</div>'}`;
+  card.querySelector('.tile svg').style.cssText = 'width:13px;height:13px';
+  card.classList.add('open');
+  const r = el.getBoundingClientRect(), h = card.offsetHeight;
+  card.style.left = (r.right + 12) + 'px';
+  card.style.top = Math.max(8, Math.min(innerHeight - h - 8, r.top + r.height / 2 - h / 2)) + 'px';
+}
+const hideCard = () => { clearTimeout(hcT); $('#hcard').classList.remove('open'); };
+$('#tabs').addEventListener('mouseover', e => { const el = e.target.closest('.tab'); if (!el || S.side !== 'icons') return; clearTimeout(hcT); hcT = setTimeout(() => showCard(el), 110); });
+$('#tabs').addEventListener('mouseleave', hideCard);
+$('#tabs').addEventListener('click', hideCard);
+
+/* ════════════ inicio ════════════ */
+seed();
+let th0 = 'blue'; try { th0 = localStorage.getItem('kuntur-theme') || 'blue'; S.side = localStorage.getItem('kuntur-side') || 'icons'; } catch (e) {}
+if (S.side !== 'full') S.side = 'icons';
+document.body.dataset.right = 'on';
+$('#right-toggle').onclick = () => { S.right = !S.right; document.body.dataset.right = S.right ? 'on' : 'off'; renderMainHead(); setTimeout(renderUsage, 50); };
+$('#tb-title').onclick = () => openSheet('mcp');
+$('#usage').addEventListener('click', () => { S.usageOpen = !S.usageOpen; renderUsage(); });
+$('#new-tab').addEventListener('contextmenu', e => { e.preventDefault(); $('#shell-menu').classList.toggle('open'); });
+$('#new-tab').title = 'Nueva sesión (Alt+T) · clic derecho: elegir shell o SSH';
+addEventListener('keydown', e => { if (e.altKey && !e.ctrlKey && e.key.toLowerCase() === 'j') { e.preventDefault(); $('#right-toggle').click(); } });
+document.body.dataset.side = S.side;
+setTheme(THEMES[th0] ? th0 : 'blue');
+render(true);
+setInterval(tick, 1000);
+ta.focus();
+</script>
+</body>
+</html>

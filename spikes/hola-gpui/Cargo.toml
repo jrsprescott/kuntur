@@ -1,0 +1,17 @@
+[package]
+name = "hola-gpui"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# Prueba técnica (Fase 0): verifica que GPUI + gpui-kit compilan y abren
+# una ventana en este equipo (Windows 11 + MSVC + RTX 4060), y mide RAM base.
+
+[dependencies]
+gpui-kit = "0.11"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 4
+strip = true
