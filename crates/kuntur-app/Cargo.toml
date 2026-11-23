@@ -11,5 +11,6 @@ path = "src/main.rs"
 
 [dependencies]
 kuntur-term = { path = "../kuntur-term" }
+kuntur-config = { path = "../kuntur-config" }
 gpui-kit = { workspace = true }
 smol = { workspace = true }

@@ -3759,6 +3759,7 @@ name = "kuntur-app"
 version = "0.1.0"
 dependencies = [
  "gpui-kit",
+ "kuntur-config",
  "kuntur-term",
  "smol",
 ]

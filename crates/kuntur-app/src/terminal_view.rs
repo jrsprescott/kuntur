@@ -7,9 +7,9 @@ use kuntur_term::{
     Emulator, GridSize, Key, Mods, Palette, Pane, PaneOptions, Rgb8, Screen, SelectionKind, Side, TermMode, encode_key,
 };
 
-const FONT_FAMILY: &str = "Cascadia Mono";
-const FONT_SIZE: f32 = 14.0;
 const LINE_HEIGHT_FACTOR: f32 = 1.3;
+/// Contraste mínimo del texto contra su fondo (WCAG 3:1): ningún color de programa queda invisible.
+const MIN_CONTRAST: f32 = 3.0;
 
 #[derive(Clone, Copy)]
 struct Metrics {
@@ -17,13 +17,28 @@ struct Metrics {
     line_h: Pixels,
 }
 
+/// Avisos de la terminal a quien la contiene (el `Workspace`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TerminalEvent {
+    /// El programa cambió el título (OSC 0/2).
+    TitleChanged,
+    /// El programa terminó (por ejemplo, `exit`).
+    Exited,
+}
+
 pub struct TerminalView {
     pane: Arc<Pane>,
     palette: Palette,
+    /// Fondo del área (puede tener alfa para dejar ver el degradado de la ventana).
+    background: Hsla,
+    font_family: SharedString,
+    font_size: f32,
     focus: FocusHandle,
     bounds: Rc<Cell<Bounds<Pixels>>>,
     last_size: Rc<Cell<GridSize>>,
     selecting: bool,
+    title: Option<String>,
+    exited: bool,
     _pump: Task<()>,
 }
 
@@ -31,11 +46,21 @@ fn to_color(c: Rgb8) -> Hsla {
     rgb(((c.r as u32) << 16) | ((c.g as u32) << 8) | c.b as u32).into()
 }
 
+impl EventEmitter<TerminalEvent> for TerminalView {}
+
 impl TerminalView {
-    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(
+        window: &mut Window,
+        cx: &mut Context<Self>,
+        mut opts: PaneOptions,
+        palette: Palette,
+        font_family: SharedString,
+        font_size: f32,
+    ) -> Self {
         let (tx, rx) = smol::channel::bounded::<()>(1);
         let size = GridSize::new(100, 30);
-        let pane = Pane::spawn(PaneOptions::default_shell(size), move || {
+        opts.size = size;
+        let pane = Pane::spawn(opts, move || {
             let _ = tx.try_send(());
         })
         .expect("no se pudo abrir el shell");
@@ -43,7 +68,7 @@ impl TerminalView {
         // El hilo del PTY avisa por el canal; aquí se redibuja en el hilo de la UI.
         let pump = cx.spawn(async move |this, cx| {
             while rx.recv().await.is_ok() {
-                if this.update(cx, |_, cx| cx.notify()).is_err() {
+                if this.update(cx, |view, cx| view.on_output(cx)).is_err() {
                     break;
                 }
             }
@@ -52,35 +77,74 @@ impl TerminalView {
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
 
-        let pane = Arc::new(pane);
-        // Prueba de humo: KUNTUR_SMOKE_INPUT escribe comandos en el shell desde dentro de la app
-        // (sin simular teclado del sistema). "\n" separa comandos.
-        if let Ok(input) = std::env::var("KUNTUR_SMOKE_INPUT") {
-            let pane = pane.clone();
-            std::thread::spawn(move || {
-                std::thread::sleep(std::time::Duration::from_millis(2500));
-                for cmd in input.split("\\n") {
-                    let _ = pane.write(format!("{cmd}\r").as_bytes());
-                    std::thread::sleep(std::time::Duration::from_millis(600));
-                }
-            });
-        }
-
         Self {
-            pane,
-            palette: Palette::dark(),
+            pane: Arc::new(pane),
+            background: to_color(palette.bg),
+            palette,
+            font_family,
+            font_size,
             focus,
             bounds: Rc::new(Cell::new(Bounds::default())),
             last_size: Rc::new(Cell::new(size)),
             selecting: false,
+            title: None,
+            exited: false,
             _pump: pump,
         }
     }
 
-    fn metrics(window: &mut Window) -> Metrics {
-        let font_size = px(FONT_SIZE);
+    /// Hubo salida nueva del programa: redibujar y avisar si cambió el título o terminó.
+    fn on_output(&mut self, cx: &mut Context<Self>) {
+        cx.notify();
+        let title = self.pane.title();
+        if title != self.title {
+            self.title = title;
+            cx.emit(TerminalEvent::TitleChanged);
+        }
+        if !self.exited && self.pane.has_exited() {
+            self.exited = true;
+            cx.emit(TerminalEvent::Exited);
+        }
+    }
+
+    /// Prueba de humo: escribe comandos en el shell desde dentro de la app (sin simular teclado
+    /// del sistema). "\n" (literal) separa comandos.
+    pub fn send_smoke_input(&self, input: String) {
+        let pane = self.pane.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(2500));
+            for cmd in input.split("\\n") {
+                let _ = pane.write(format!("{cmd}\r").as_bytes());
+                std::thread::sleep(std::time::Duration::from_millis(600));
+            }
+        });
+    }
+
+    pub fn set_palette(&mut self, palette: Palette, background: Hsla, cx: &mut Context<Self>) {
+        self.palette = palette;
+        self.background = background;
+        cx.notify();
+    }
+
+    pub fn set_font(&mut self, family: SharedString, size: f32, cx: &mut Context<Self>) {
+        self.font_family = family;
+        self.font_size = size;
+        cx.notify();
+    }
+
+    /// Título que puso el programa (OSC 0/2), si puso alguno.
+    pub fn title(&self) -> Option<&str> {
+        self.title.as_deref()
+    }
+
+    pub fn focus(&self, window: &mut Window, cx: &mut App) {
+        window.focus(&self.focus, cx);
+    }
+
+    fn metrics(&self, window: &mut Window) -> Metrics {
+        let font_size = px(self.font_size);
         let text = window.text_system();
-        let font_id = text.resolve_font(&font(FONT_FAMILY));
+        let font_id = text.resolve_font(&font(self.font_family.clone()));
         let cell_w = text
             .advance(font_id, font_size, 'm')
             .map(|s| s.width)
@@ -90,7 +154,6 @@ impl TerminalView {
             line_h: (font_size * LINE_HEIGHT_FACTOR).round(),
         }
     }
-
     fn cell_at(&self, pos: Point<Pixels>, m: Metrics) -> (usize, usize, Side) {
         let b = self.bounds.get();
         let x = f32::from(pos.x - b.origin.x).max(0.0);
@@ -208,7 +271,7 @@ impl TerminalView {
 
     fn on_mouse_down(&mut self, ev: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         window.focus(&self.focus, cx);
-        let m = Self::metrics(window);
+        let m = self.metrics(window);
         let (col, row, side) = self.cell_at(ev.position, m);
         let kind = match (ev.click_count, ev.modifiers.alt) {
             (_, true) => SelectionKind::Block,
@@ -225,7 +288,7 @@ impl TerminalView {
         if !self.selecting || ev.pressed_button != Some(MouseButton::Left) {
             return;
         }
-        let m = Self::metrics(window);
+        let m = self.metrics(window);
         let (col, row, side) = self.cell_at(ev.position, m);
         self.pane.with_emulator(|e| e.update_selection(col, row, side));
         cx.notify();
@@ -247,7 +310,7 @@ impl TerminalView {
     }
 
     fn on_wheel(&mut self, ev: &ScrollEvent, window: &mut Window, cx: &mut Context<Self>) {
-        let m = Self::metrics(window);
+        let m = self.metrics(window);
         let dy = f32::from(ev.delta.pixel_delta(m.line_h).y);
         let lines = (dy / f32::from(m.line_h)).round() as i32;
         if lines != 0 {
@@ -269,15 +332,21 @@ impl Render for TerminalView {
         if let Some(text) = self.pane.take_clipboard_request() {
             cx.write_to_clipboard(ClipboardItem::new_string(text));
         }
-        let metrics = Self::metrics(window);
+        let metrics = self.metrics(window);
         let screen = self.pane.with_emulator(|e| Screen::capture(e, &self.palette));
-        let bg = to_color(self.palette.bg);
+        let bg = self.background;
         let cursor_color = to_color(self.palette.cursor);
+        let (family, font_size) = (self.font_family.clone(), px(self.font_size));
         let (pane, bounds_cell, size_cell) = (self.pane.clone(), self.bounds.clone(), self.last_size.clone());
 
         div()
             .size_full()
             .bg(bg)
+            // Aire alrededor del texto; la grilla se calcula con el tamaño real del lienzo.
+            .pl(px(12.))
+            .pr(px(6.))
+            .pt(px(8.))
+            .pb(px(4.))
             .track_focus(&self.focus)
             .on_key_down(cx.listener(Self::on_key))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
@@ -300,15 +369,36 @@ impl Render for TerminalView {
                             let _ = pane.resize(size);
                         }
                     },
-                    move |bounds, _, window, cx| paint_screen(&screen, bounds, metrics, cursor_color, window, cx),
+                    move |bounds, _, window, cx| {
+                        let style = TextStyleCfg {
+                            family,
+                            size: font_size,
+                            cursor: cursor_color,
+                        };
+                        paint_screen(&screen, bounds, metrics, &style, window, cx)
+                    },
                 )
                 .size_full(),
             )
     }
 }
 
-fn paint_screen(screen: &Screen, bounds: Bounds<Pixels>, m: Metrics, cursor: Hsla, window: &mut Window, cx: &mut App) {
-    let font_size = px(FONT_SIZE);
+struct TextStyleCfg {
+    family: SharedString,
+    size: Pixels,
+    cursor: Hsla,
+}
+
+fn paint_screen(
+    screen: &Screen,
+    bounds: Bounds<Pixels>,
+    m: Metrics,
+    style: &TextStyleCfg,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    let font_size = style.size;
+    let cursor = style.cursor;
     for row in 0..screen.rows {
         let y = bounds.origin.y + m.line_h * row as f32;
         // 1) Fondos: un rectángulo por cada tramo del mismo color.
@@ -336,14 +426,14 @@ fn paint_screen(screen: &Screen, bounds: Bounds<Pixels>, m: Metrics, cursor: Hsl
             let before = text.len();
             text.push(ch);
             let len = text.len() - before;
-            let mut f = font(FONT_FAMILY);
+            let mut f = font(style.family.clone());
             if cell.bold {
                 f.weight = FontWeight::BOLD;
             }
             if cell.italic {
                 f.style = FontStyle::Italic;
             }
-            let color = to_color(cell.fg);
+            let color = to_color(cell.fg.with_min_contrast(cell.bg, MIN_CONTRAST));
             let underline = cell.underline.then(|| UnderlineStyle {
                 thickness: px(1.0),
                 color: Some(color),

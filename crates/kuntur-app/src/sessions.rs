@@ -1,6 +1,3 @@
-// Temporal: la UI (Task 6) todavía no usa la lista; quitar esta línea en Task 6.
-#![allow(dead_code)]
-
 /// Una sesión de la barra lateral. `T` es lo que la UI guarda (la vista de terminal).
 pub struct Entry<T> {
     pub id: u64,
@@ -81,6 +78,7 @@ impl<T> SessionList<T> {
         }
     }
 
+    #[cfg_attr(not(test), expect(dead_code, reason = "lo usa la paleta de comandos (Task 8)"))]
     pub fn rename(&mut self, id: u64, name: impl Into<String>) {
         if let Some(e) = self.items.iter_mut().find(|e| e.id == id) {
             e.name = name.into();
@@ -99,6 +97,7 @@ impl<T> SessionList<T> {
         self.items.iter()
     }
 
+    #[cfg_attr(not(test), expect(dead_code, reason = "lo usa la paleta de comandos (Task 8)"))]
     pub fn len(&self) -> usize {
         self.items.len()
     }
@@ -114,6 +113,28 @@ impl<T> Default for SessionList<T> {
     }
 }
 
+/// Nombre para una sesión nueva: "PowerShell", "PowerShell 2", … (el primero libre).
+pub fn next_default_name(base: &str, existing: &[&str]) -> String {
+    if !existing.contains(&base) {
+        return base.to_string();
+    }
+    (2..)
+        .map(|n| format!("{base} {n}"))
+        .find(|name| !existing.contains(&name.as_str()))
+        .unwrap_or_else(|| base.to_string())
+}
+
+/// Título del programa para mostrar: si es la ruta de un ejecutable (lo que pone PowerShell al
+/// abrir), solo su nombre sin `.exe`; si no, el texto tal cual.
+pub fn short_title(raw: &str) -> String {
+    let t = raw.trim();
+    let last = t.rsplit(['\\', '/']).next().unwrap_or(t);
+    if last.len() > 4 && last[last.len() - 4..].eq_ignore_ascii_case(".exe") && last.len() < t.len() {
+        last[..last.len() - 4].to_string()
+    } else {
+        t.to_string()
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -157,6 +178,29 @@ mod tests {
         assert_eq!(s.active_id(), Some(c));
         assert!(s.activate_index(1));
         assert!(!s.activate_index(9));
+    }
+
+    #[test]
+    fn nombres_por_defecto() {
+        assert_eq!(next_default_name("PowerShell", &[]), "PowerShell");
+        assert_eq!(next_default_name("PowerShell", &["PowerShell"]), "PowerShell 2");
+        assert_eq!(
+            next_default_name("PowerShell", &["PowerShell", "PowerShell 3"]),
+            "PowerShell 2"
+        );
+        assert_eq!(
+            next_default_name("PowerShell", &["PowerShell", "PowerShell 2"]),
+            "PowerShell 3"
+        );
+    }
+
+    #[test]
+    fn titulo_corto() {
+        assert_eq!(short_title(r"C:\Program Files\PowerShell\7\pwsh.exe"), "pwsh");
+        assert_eq!(short_title("C:/tools/nvim.EXE"), "nvim");
+        assert_eq!(short_title("  opencode  "), "opencode");
+        assert_eq!(short_title("pwsh.exe"), "pwsh.exe");
+        assert_eq!(short_title(r"Admin: C:\Windows\cmd.exe"), "cmd");
     }
 
     #[test]

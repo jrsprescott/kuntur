@@ -1,15 +1,23 @@
-﻿<#
+<#
 .SYNOPSIS
   Prueba de humo de Kuntur: compila, abre la app, escribe comandos DESDE DENTRO (variable
   KUNTUR_SMOKE_INPUT, nunca teclado simulado del sistema), captura solo su ventana y mide RAM.
+  Nunca usa la configuración real: KUNTUR_CONFIG apunta siempre a target\smoke-config.toml
+  (si no existe, la app usa los valores por defecto).
 .EXAMPLE
   .\scripts\smoke.ps1 -Commands 'Write-Host rojo -ForegroundColor Red','dir'
+.EXAMPLE
+  .\scripts\smoke.ps1 -Sessions 3 -Theme blue -Out target\smoke-blue.png
 #>
 param(
     [string[]]$Commands = @('Write-Host rojo -ForegroundColor Red; Write-Host verde -ForegroundColor Green', 'Get-ChildItem | Select-Object -First 5'),
     [string]$Out = (Join-Path $PSScriptRoot '..\target\smoke.png'),
-    [int]$MaxRamMB = 80,
-    [int]$WaitSec = 7
+    [int]$MaxRamMB = 90,
+    [int]$WaitSec = 7,
+    # Sesiones que abre la app al arrancar (no se guardan). 0 = las de la configuración de prueba.
+    [ValidateRange(0, 9)][int]$Sessions = 0,
+    # Tema inicial, aplicado en vivo sobre las sesiones ya abiertas.
+    [ValidateSet('', 'blue', 'dark', 'white')][string]$Theme = ''
 )
 $ErrorActionPreference = 'Stop'
 $root = Resolve-Path (Join-Path $PSScriptRoot '..')
@@ -37,9 +45,15 @@ Get-ChildItem Env: | Where-Object { $_.Name -eq 'NO_COLOR' -or $_.Name -like 'CL
     $saved[$_.Name] = $_.Value
     Remove-Item "Env:$($_.Name)"
 }
-$env:KUNTUR_SMOKE_INPUT = ($Commands -join '\n')
+$smokeEnv = @{
+    KUNTUR_CONFIG      = (Join-Path $root 'target\smoke-config.toml')
+    KUNTUR_SMOKE_INPUT = ($Commands -join '\n')
+}
+if ($Sessions -gt 0) { $smokeEnv.KUNTUR_SMOKE_SESSIONS = "$Sessions" }
+if ($Theme) { $smokeEnv.KUNTUR_SMOKE_THEME = $Theme }
+foreach ($k in $smokeEnv.Keys) { Set-Item "Env:$k" $smokeEnv[$k] }
 $p = Start-Process $exe -PassThru
-Remove-Item Env:KUNTUR_SMOKE_INPUT
+foreach ($k in $smokeEnv.Keys) { Remove-Item "Env:$k" }
 foreach ($k in $saved.Keys) { Set-Item "Env:$k" $saved[$k] }
 
 $deadline = (Get-Date).AddSeconds(20)
