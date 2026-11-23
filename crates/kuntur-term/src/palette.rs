@@ -16,6 +16,55 @@ impl Rgb8 {
         }
     }
 
+    /// Luminancia relativa (WCAG 2), de 0 (negro) a 1 (blanco).
+    pub fn luminance(self) -> f32 {
+        let lin = |c: u8| {
+            let c = c as f32 / 255.0;
+            if c <= 0.039_28 {
+                c / 12.92
+            } else {
+                ((c + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        0.2126 * lin(self.r) + 0.7152 * lin(self.g) + 0.0722 * lin(self.b)
+    }
+
+    /// Relación de contraste WCAG entre dos colores (1 a 21).
+    pub fn contrast(self, other: Rgb8) -> f32 {
+        let (a, b) = (self.luminance(), other.luminance());
+        (a.max(b) + 0.05) / (a.min(b) + 0.05)
+    }
+
+    /// Si este color de texto no se lee sobre `bg`, lo acerca a negro o a blanco (lo que más
+    /// contraste dé con el fondo) hasta llegar a `min`. Así un tema claro sigue leyendo bien el
+    /// "blanco" ANSI que usan PSReadLine y otros programas.
+    pub fn with_min_contrast(self, bg: Rgb8, min: f32) -> Rgb8 {
+        if self.contrast(bg) >= min {
+            return self;
+        }
+        let white = Rgb8::hex(0xffffff);
+        let black = Rgb8::hex(0x000000);
+        let target = if white.contrast(bg) >= black.contrast(bg) {
+            white
+        } else {
+            black
+        };
+        let mix = |a: u8, b: u8, t: f32| (a as f32 + (b as f32 - a as f32) * t).round() as u8;
+        let mut out = self;
+        for step in 1..=10 {
+            let t = step as f32 / 10.0;
+            out = Rgb8 {
+                r: mix(self.r, target.r, t),
+                g: mix(self.g, target.g, t),
+                b: mix(self.b, target.b, t),
+            };
+            if out.contrast(bg) >= min {
+                break;
+            }
+        }
+        out
+    }
+
     fn dim(self) -> Self {
         let f = |c: u8| (c as u16 * 2 / 3) as u8;
         Self {
@@ -144,6 +193,29 @@ mod tests {
         assert_eq!(
             p.resolve(Color::Spec(Rgb { r: 1, g: 2, b: 3 })),
             Rgb8 { r: 1, g: 2, b: 3 }
+        );
+    }
+
+    #[test]
+    fn contraste_minimo() {
+        let blanco = Rgb8::hex(0xffffff);
+        let negro = Rgb8::hex(0x000000);
+        assert!((blanco.contrast(negro) - 21.0).abs() < 0.01);
+        assert!((blanco.contrast(blanco) - 1.0).abs() < 0.01);
+        // Gris claro sobre fondo casi blanco (tema White + PSReadLine): se oscurece hasta leerse.
+        let fondo = Rgb8::hex(0xfbfcfe);
+        let ajustado = Rgb8::hex(0xe5e7eb).with_min_contrast(fondo, 3.0);
+        assert!(ajustado.contrast(fondo) >= 3.0);
+        assert!(ajustado.r < 0xe5);
+        // Azul apagado sobre azul oscuro (tema Blue): se aclara.
+        let azul = Rgb8::hex(0x122771);
+        let ajustado = Rgb8::hex(0x3b5bab).with_min_contrast(azul, 3.0);
+        assert!(ajustado.contrast(azul) >= 3.0);
+        assert!(ajustado.r > 0x3b);
+        // Si ya se lee, no se toca.
+        assert_eq!(
+            Rgb8::hex(0xd5dcea).with_min_contrast(Rgb8::hex(0x0b1019), 3.0),
+            Rgb8::hex(0xd5dcea)
         );
     }
 
