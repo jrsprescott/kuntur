@@ -2,7 +2,9 @@
 // En release no abre una consola negra extra.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod agents_panel;
 mod command_palette;
+mod monitor;
 mod sessions;
 mod terminal_view;
 mod theme_bridge;
@@ -17,7 +19,7 @@ use kuntur_config::Settings;
 use workspace::Workspace;
 
 // Íconos que no vienen en el paquete por defecto de gpui-kit.
-gpui_kit::assets::icon_assets!(ExtraIcons, [Command]);
+gpui_kit::assets::icon_assets!(ExtraIcons, [Command, ChartColumn]);
 
 /// Íconos por defecto de gpui-kit + los que agrega Kuntur.
 struct KunturAssets;

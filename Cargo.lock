@@ -3784,9 +3784,14 @@ name = "kuntur-app"
 version = "0.1.0"
 dependencies = [
  "gpui-kit",
+ "jiff",
+ "kuntur-agents",
  "kuntur-config",
+ "kuntur-files",
  "kuntur-term",
+ "kuntur-usage",
  "smol",
+ "sysinfo 0.40.4",
 ]
 
 [[package]]
@@ -3804,6 +3809,9 @@ dependencies = [
 [[package]]
 name = "kuntur-files"
 version = "0.1.0"
+dependencies = [
+ "jiff",
+]
 
 [[package]]
 name = "kuntur-term"

@@ -16,6 +16,8 @@ pub enum PaletteAction {
     Theme(ThemeId),
     RailFull,
     RailIcons,
+    PanelAgents,
+    PanelFiles,
     FontBigger,
     FontSmaller,
     FontReset,
@@ -37,7 +39,7 @@ const fn item(action: PaletteAction, label: &'static str, shortcut: Option<&'sta
 }
 
 /// Todas las acciones, en el orden en que se muestran.
-pub const ITEMS: [PaletteItem; 13] = [
+pub const ITEMS: [PaletteItem; 15] = [
     item(PaletteAction::NewSession, "Nueva sesión", Some("Ctrl+Shift+T")),
     item(PaletteAction::RenameSession, "Renombrar sesión", None),
     item(PaletteAction::CloseSession, "Cerrar sesión", Some("Ctrl+Shift+W")),
@@ -46,8 +48,10 @@ pub const ITEMS: [PaletteItem; 13] = [
     item(PaletteAction::Theme(ThemeId::Blue), "Tema: Blue", None),
     item(PaletteAction::Theme(ThemeId::Dark), "Tema: Dark", None),
     item(PaletteAction::Theme(ThemeId::White), "Tema: White", None),
-    item(PaletteAction::RailFull, "Riel: completo", Some("Ctrl+Shift+B")),
-    item(PaletteAction::RailIcons, "Riel: solo íconos", Some("Ctrl+Shift+B")),
+    item(PaletteAction::PanelAgents, "Panel: agentes", None),
+    item(PaletteAction::PanelFiles, "Panel: archivos", Some("Ctrl+Shift+E")),
+    item(PaletteAction::RailFull, "Panel: completo", Some("Ctrl+Shift+B")),
+    item(PaletteAction::RailIcons, "Panel: compacto", Some("Ctrl+Shift+B")),
     item(PaletteAction::FontBigger, "Fuente: más grande", Some("Ctrl+=")),
     item(PaletteAction::FontSmaller, "Fuente: más chica", Some("Ctrl+-")),
     item(PaletteAction::FontReset, "Fuente: restablecer", Some("Ctrl+0")),

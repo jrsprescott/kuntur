@@ -70,6 +70,10 @@ pub struct UiColors {
     pub text: Hsla,
     pub muted: Hsla,
     pub accent: Hsla,
+    /// Estados: listo / esperando / error.
+    pub ok: Hsla,
+    pub warn: Hsla,
+    pub error: Hsla,
     /// Fondo al pasar el mouse (texto al 7 %): funciona igual en temas claros y oscuros.
     pub hover: Hsla,
     /// Fondo del área de terminal (con alfa: deja ver el degradado de la ventana).
@@ -98,6 +102,9 @@ impl UiColors {
             text: to_hsla(ui.text),
             muted: to_hsla(ui.muted),
             accent: to_hsla(ui.accent),
+            ok: to_hsla(ui.ok),
+            warn: to_hsla(ui.warn),
+            error: to_hsla(ui.error),
             hover: to_hsla(with_alpha(ui.text, 0.07)),
             terminal: to_hsla(ui.terminal_bg),
         }

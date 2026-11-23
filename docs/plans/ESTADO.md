@@ -18,6 +18,11 @@
 | Task 9: vista **Uso de agentes** (7/30/90/todo, tokens por día, mapa de horas, modelos, agentes, tareas top) | ⏸ **en pausa**, siguiente paso |
 | Task 10 (resto): humo con datos sintéticos de uso, `f3-resultados.md`, CI | ⏸ en pausa |
 
+> ⚠️ **El último commit de `fase/f3-v5` es trabajo en progreso que NO compila** (se guardó así porque se apagó la PC a media tarea).
+> Faltaba: corregir 2 errores `no method named clone found for struct Div` en `kuntur-app`, terminar el constructor y los ganchos de humo, revisar capturas (pestañas en los 3 temas, panel vacío/compacto, "Archivos", agente en la lista), agregar pruebas de la lógica nueva y limpiar clippy/fmt.
+> Archivos en progreso: `crates/kuntur-app/src/{workspace.rs, workspace/, agents_panel.rs, monitor.rs, terminal_view.rs, theme_bridge.rs, command_palette.rs, main.rs}`, `crates/kuntur-files/src/lib.rs`.
+> Para ver la última versión que sí compila: `git checkout 61f5142` (o la rama `main`).
+
 Decisión pendiente ya tomada: la tarjeta "Tokens de entrada" **incluye la caché** (lectura + escritura) y muestra debajo "NN % desde caché".
 
 ## Preparar la PC (una sola vez)

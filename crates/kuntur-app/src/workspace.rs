@@ -1,29 +1,45 @@
-//! Vista raíz de Kuntur: barra de título (34 px), riel de sesiones (completo ↔ íconos, nunca
-//! oculto) y la terminal activa. Diseño v4: una sola barra arriba, jerarquía por peso y color de
-//! texto, íconos de un solo color y lo secundario al pasar el mouse.
+//! Vista raíz de Kuntur (diseño v5): barra de título de 34 px con las sesiones como pestañas,
+//! panel izquierdo de agentes / archivos (completo ↔ compacto, nunca oculto), la terminal activa y
+//! una línea inferior de 22 px con la carpeta actual y la RAM. Del v4 se mantiene: una sola barra
+//! arriba, jerarquía por peso y color de texto, íconos de un solo color, color solo para estado y lo
+//! secundario al pasar el mouse.
+
+mod files_panel;
+mod side_panel;
+mod title_bar;
 
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use gpui_kit::assets::IconName;
-use gpui_kit::component::{Icon, TITLE_BAR_HEIGHT, TitleBar, h_flex, hover_card::HoverCard, tooltip::Tooltip, v_flex};
+use gpui_kit::component::{Icon, TITLE_BAR_HEIGHT, h_flex, tooltip::Tooltip, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
+use kuntur_agents::{AgentKind, RunningAgent, state_for};
 use kuntur_config::{SessionConfig, Settings, SidebarMode, Theme, ThemeId, builtin};
 use kuntur_term::{GridSize, PaneOptions};
+use kuntur_usage::codex::Limits;
 
+use crate::agents_panel::{AgentFilter, AgentRow};
 use crate::command_palette::{PaletteAction, PaletteItem, PaletteMode, PaletteState};
+use crate::monitor::{Sample, Sampler, SlowSample, home_dir, slow_sample};
 use crate::sessions::{SessionList, next_default_name, short_title};
 use crate::terminal_view::{TerminalEvent, TerminalView};
 use crate::theme_bridge::{FALLBACK_MONO, FALLBACK_UI, UiColors, apply_to_kit, palette_from, pick_font};
+use files_panel::FilesState;
 
-const RAIL_ICONS: f32 = 60.0;
-const RAIL_FULL: f32 = 232.0;
-/// Margen izquierdo de la barra: centra el botón del riel sobre la columna de íconos.
-const TITLE_PAD_LEFT: f32 = 16.0;
+/// Panel izquierdo compacto (solo íconos) y completo.
+const PANEL_COMPACT: f32 = 56.0;
+const PANEL_FULL: f32 = 240.0;
 const ICON_BUTTON: f32 = 28.0;
-const RIGHT_GROUP: f32 = ICON_BUTTON + 8.0;
+/// Margen izquierdo de la barra: centra el botón del panel sobre la columna compacta.
+const TITLE_PAD_LEFT: f32 = (PANEL_COMPACT - ICON_BUTTON) / 2.0;
+const STATUS_LINE: f32 = 22.0;
 const UI_TEXT: f32 = 12.5;
+/// Cada cuánto se leen procesos y memoria; las lecturas lentas (instalados, límites), cada
+/// `SLOW_EVERY` vueltas.
+const TICK: Duration = Duration::from_secs(2);
+const SLOW_EVERY: u32 = 15;
 
 const PALETTE_WIDTH: f32 = 520.0;
 /// Paso de Ctrl+= / Ctrl+- (puntos).
@@ -50,6 +66,34 @@ pub struct Workspace {
     palette: Option<PaletteState>,
     /// Foco del panel de la paleta: mientras está abierta, el teclado no llega a la terminal.
     focus: FocusHandle,
+    /// Qué muestra el panel izquierdo.
+    panel: PanelView,
+    agent_filter: AgentFilter,
+    agent_query: String,
+    /// Foco del buscador de agentes.
+    search_focus: FocusHandle,
+    /// Última lectura: (sesión, agente) en el orden de las sesiones.
+    running: Vec<(u64, RunningAgent)>,
+    installed: Vec<AgentKind>,
+    codex_limits: Option<Limits>,
+    /// Memoria de trabajo de Kuntur (bytes).
+    ram: Option<u64>,
+    files: FilesState,
+    home: Option<PathBuf>,
+    _monitor: Task<()>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PanelView {
+    Agents,
+    Files,
+}
+
+/// Segundos Unix de ahora.
+fn now_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
 }
 
 impl Workspace {
@@ -68,6 +112,17 @@ impl Workspace {
             settings,
             palette: None,
             focus: cx.focus_handle(),
+            panel: PanelView::Agents,
+            agent_filter: AgentFilter::All,
+            agent_query: String::new(),
+            search_focus: cx.focus_handle(),
+            running: Vec::new(),
+            installed: Vec::new(),
+            codex_limits: None,
+            ram: None,
+            files: FilesState::default(),
+            home: home_dir(),
+            _monitor: Self::spawn_monitor(cx),
         };
         apply_to_kit(&this.theme, cx);
 
@@ -119,7 +174,92 @@ impl Workspace {
                 p.insert(&q);
             }
         }
+
+        // Prueba de humo: panel completo, compacto o en "Archivos" (sin guardar).
+        if let Ok(panel) = std::env::var("KUNTUR_SMOKE_PANEL") {
+            this.config_path = None;
+            match panel.as_str() {
+                "compact" => this.settings.sidebar = SidebarMode::Icons,
+                "files" => {
+                    this.settings.sidebar = SidebarMode::Full;
+                    this.panel = PanelView::Files;
+                }
+                _ => this.settings.sidebar = SidebarMode::Full,
+            }
+        }
         this
+    }
+
+    // ── Lecturas en segundo plano ───────────────────────────────────────────
+
+    /// Cada 2 s, fuera del hilo de la UI: agentes de cada sesión y RAM; cada 30 s, agentes
+    /// instalados y límites de Codex. La UI solo recibe el resultado.
+    fn spawn_monitor(cx: &mut Context<Self>) -> Task<()> {
+        cx.spawn(async move |this, cx| {
+            let mut sampler = Sampler::new();
+            let mut tick: u32 = 0;
+            loop {
+                let Ok(shells) = this.update(cx, |w, cx| w.shell_pids(cx)) else {
+                    break;
+                };
+                let slow = tick.is_multiple_of(SLOW_EVERY);
+                let (back, sample, slow) = cx
+                    .background_executor()
+                    .spawn(async move {
+                        let sample = sampler.sample(&shells);
+                        (sampler, sample, slow.then(slow_sample))
+                    })
+                    .await;
+                sampler = back;
+                if this.update(cx, |w, cx| w.apply_sample(sample, slow, cx)).is_err() {
+                    break;
+                }
+                cx.background_executor().timer(TICK).await;
+                tick = tick.wrapping_add(1);
+            }
+        })
+    }
+
+    /// (sesión, PID del shell) de las sesiones abiertas.
+    fn shell_pids(&self, cx: &App) -> Vec<(u64, u32)> {
+        self.sessions
+            .iter()
+            .filter_map(|e| e.value.view.read(cx).pid().map(|pid| (e.id, pid)))
+            .collect()
+    }
+
+    fn apply_sample(&mut self, sample: Sample, slow: Option<SlowSample>, cx: &mut Context<Self>) {
+        self.running = sample.agents;
+        self.ram = sample.ram;
+        if let Some(slow) = slow {
+            self.installed = slow.installed;
+            self.codex_limits = slow.codex_limits;
+        }
+        self.sync_files(false, cx);
+        cx.notify();
+    }
+
+    /// Agentes corriendo, con el nombre de su sesión y el estado por actividad de la sesión.
+    fn agent_rows(&self, cx: &App) -> Vec<AgentRow> {
+        self.running
+            .iter()
+            .filter_map(|(sid, agent)| {
+                let entry = self.sessions.iter().find(|e| e.id == *sid)?;
+                Some(AgentRow {
+                    session_id: *sid,
+                    session_name: entry.name.clone(),
+                    kind: agent.kind,
+                    pid: agent.pid,
+                    state: state_for(entry.value.view.read(cx).last_output_age()),
+                    started_at: agent.started_at,
+                })
+            })
+            .collect()
+    }
+
+    /// Carpeta actual de la sesión activa (OSC 7 / OSC 9;9).
+    fn active_cwd(&self, cx: &App) -> Option<PathBuf> {
+        self.sessions.active().and_then(|e| e.value.view.read(cx).cwd())
     }
 
     // ── Sesiones ────────────────────────────────────────────────────────────
@@ -205,10 +345,102 @@ impl Workspace {
         }
     }
 
-    fn focus_active(&self, window: &mut Window, cx: &mut App) {
+    /// Lleva el teclado a la terminal activa (y el panel Archivos a su carpeta).
+    fn focus_active(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(e) = self.sessions.active() {
             e.value.view.update(cx, |v, cx| v.focus(window, cx));
         }
+        self.sync_files(false, cx);
+    }
+
+    /// Doble clic en una pestaña: el campo de la paleta pasa a pedir el nombre nuevo.
+    fn start_rename(&mut self, id: u64, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(name) = self.sessions.iter().find(|e| e.id == id).map(|e| e.name.clone()) else {
+            return;
+        };
+        self.open_palette(window, cx);
+        if let Some(p) = self.palette.as_mut() {
+            p.start_rename(id, &name);
+        }
+        cx.notify();
+    }
+
+    // ── Panel izquierdo ─────────────────────────────────────────────────────
+
+    fn set_panel(&mut self, view: PanelView, cx: &mut Context<Self>) {
+        self.panel = view;
+        if view == PanelView::Files {
+            self.sync_files(true, cx);
+        }
+        cx.notify();
+    }
+
+    /// "Archivos" alterna el contenido del panel; en el modo compacto, además lo abre completo.
+    fn toggle_files(&mut self, cx: &mut Context<Self>) {
+        if self.settings.sidebar == SidebarMode::Icons {
+            self.set_sidebar(SidebarMode::Full, cx);
+            self.set_panel(PanelView::Files, cx);
+        } else if self.panel == PanelView::Files {
+            self.set_panel(PanelView::Agents, cx);
+        } else {
+            self.set_panel(PanelView::Files, cx);
+        }
+    }
+
+    /// Lleva el teclado al buscador de agentes (abre el panel completo si hace falta).
+    fn focus_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.settings.sidebar == SidebarMode::Icons {
+            self.set_sidebar(SidebarMode::Full, cx);
+        }
+        self.set_panel(PanelView::Agents, cx);
+        window.focus(&self.search_focus, cx);
+        cx.notify();
+    }
+
+    /// Teclado con el buscador enfocado. Devuelve `false` para lo que no le toca (atajos Ctrl+Shift).
+    fn on_search_key(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        let ks = &ev.keystroke;
+        let m = ks.modifiers;
+        match ks.key.to_ascii_lowercase().as_str() {
+            "escape" => {
+                if self.agent_query.is_empty() {
+                    self.focus_active(window, cx);
+                } else {
+                    self.agent_query.clear();
+                }
+            }
+            "enter" => {
+                let rows = self.agent_rows(cx);
+                let first = crate::agents_panel::filter_rows(&rows, self.agent_filter, &self.agent_query)
+                    .first()
+                    .map(|r| r.session_id);
+                if let Some(id) = first {
+                    self.activate(id, window, cx);
+                }
+            }
+            "backspace" if m.control => self.agent_query.clear(),
+            "backspace" => {
+                self.agent_query.pop();
+            }
+            "v" if m.control && !m.alt && !m.shift => {
+                if let Some(text) = cx.read_from_clipboard().and_then(|i| i.text()) {
+                    let line = text.lines().next().unwrap_or("");
+                    self.agent_query.extend(line.chars().filter(|c| !c.is_control()));
+                }
+            }
+            _ if m.control && !m.alt => return false,
+            _ => {
+                if let Some(text) = ks.key_char.as_deref() {
+                    if self.agent_query.chars().count() < 60 {
+                        self.agent_query.extend(text.chars().filter(|c| !c.is_control()));
+                    }
+                } else {
+                    return false;
+                }
+            }
+        }
+        cx.notify();
+        true
     }
 
     fn toggle_sidebar(&mut self, cx: &mut Context<Self>) {
@@ -327,6 +559,13 @@ impl Workspace {
             PaletteAction::Theme(id) => self.set_theme(id, window, cx),
             PaletteAction::RailFull => self.set_sidebar(SidebarMode::Full, cx),
             PaletteAction::RailIcons => self.set_sidebar(SidebarMode::Icons, cx),
+            PaletteAction::PanelAgents => self.set_panel(PanelView::Agents, cx),
+            PaletteAction::PanelFiles => {
+                if self.settings.sidebar == SidebarMode::Icons {
+                    self.set_sidebar(SidebarMode::Full, cx);
+                }
+                self.set_panel(PanelView::Files, cx);
+            }
             PaletteAction::FontBigger => self.set_font_size(self.settings.font_size + FONT_STEP, cx),
             PaletteAction::FontSmaller => self.set_font_size(self.settings.font_size - FONT_STEP, cx),
             PaletteAction::FontReset => self.set_font_size(Settings::default().font_size, cx),
@@ -334,12 +573,14 @@ impl Workspace {
         }
     }
 
-    /// ¿La acción describe el estado actual? (tema y riel en uso: se marcan con ✓).
+    /// ¿La acción describe el estado actual? (tema y panel en uso: se marcan con ✓).
     fn is_current(&self, action: PaletteAction) -> bool {
         match action {
             PaletteAction::Theme(id) => id == self.theme_id,
             PaletteAction::RailFull => self.settings.sidebar == SidebarMode::Full,
             PaletteAction::RailIcons => self.settings.sidebar == SidebarMode::Icons,
+            PaletteAction::PanelAgents => self.panel == PanelView::Agents,
+            PaletteAction::PanelFiles => self.panel == PanelView::Files,
             _ => false,
         }
     }
@@ -408,6 +649,10 @@ impl Workspace {
             cx.stop_propagation();
             return;
         }
+        if self.search_focus.is_focused(window) && self.on_search_key(ev, window, cx) {
+            cx.stop_propagation();
+            return;
+        }
         let m = ev.keystroke.modifiers;
         if !m.control || m.alt || m.platform {
             return;
@@ -423,6 +668,7 @@ impl Workspace {
             (false, "tab") => self.cycle(true, window, cx),
             (true, "tab") => self.cycle(false, window, cx),
             (true, "b") => self.toggle_sidebar(cx),
+            (true, "e") => self.toggle_files(cx),
             (true, "p") => self.toggle_palette(window, cx),
             (_, "=" | "+") => self.set_font_size(self.settings.font_size + FONT_STEP, cx),
             (false, "-") => self.set_font_size(self.settings.font_size - FONT_STEP, cx),
@@ -445,275 +691,6 @@ impl Workspace {
         view.read(cx).title().map(short_title).filter(|t| !t.is_empty())
     }
 
-    fn render_title_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let c = &self.colors;
-        let (name, title) = match self.sessions.active() {
-            Some(e) => (e.name.clone(), self.session_title(&e.value.view, cx)),
-            None => (String::new(), None),
-        };
-        // El grupo izquierdo compensa los botones de Windows para que el título quede centrado
-        // respecto de la ventana.
-        // `TitleBar` dibuja 3 botones de Windows de `TITLE_BAR_HEIGHT` de ancho cada uno.
-        let window_controls = 3.0 * f32::from(TITLE_BAR_HEIGHT);
-        let left_w = window_controls + RIGHT_GROUP - TITLE_PAD_LEFT;
-        let rail_tip = match self.settings.sidebar {
-            SidebarMode::Icons => "Mostrar sesiones completas (Ctrl+Shift+B)",
-            SidebarMode::Full => "Mostrar solo íconos (Ctrl+Shift+B)",
-        };
-
-        TitleBar::new()
-            .bg(c.titlebar)
-            .border_color(c.border)
-            .pl(px(TITLE_PAD_LEFT))
-            .child(
-                h_flex()
-                    .w_full()
-                    .h_full()
-                    .items_center()
-                    .child(
-                        h_flex().w(px(left_w)).flex_shrink_0().child(
-                            icon_button("toggle-rail", IconName::PanelLeft, c, rail_tip)
-                                .on_click(cx.listener(|this, _, _, cx| this.toggle_sidebar(cx))),
-                        ),
-                    )
-                    .child(
-                        h_flex()
-                            .flex_1()
-                            .min_w_0()
-                            .justify_center()
-                            .gap(px(8.))
-                            .text_size(px(UI_TEXT))
-                            .whitespace_nowrap()
-                            .overflow_hidden()
-                            .child(
-                                div()
-                                    .flex_shrink_0()
-                                    .text_color(c.text)
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .child(name),
-                            )
-                            .when_some(title, |this, t| {
-                                this.child(div().flex_shrink_0().text_color(c.muted).child("·")).child(
-                                    div()
-                                        .min_w_0()
-                                        .overflow_hidden()
-                                        .text_ellipsis()
-                                        .text_color(c.muted)
-                                        .child(t),
-                                )
-                            }),
-                    )
-                    .child(
-                        h_flex()
-                            .w(px(RIGHT_GROUP))
-                            .flex_shrink_0()
-                            .justify_end()
-                            .pr(px(4.))
-                            .child(
-                                icon_button("command", IconName::Command, c, "Acciones (Ctrl+Shift+P)")
-                                    .on_click(cx.listener(|this, _, window, cx| this.toggle_palette(window, cx))),
-                            ),
-                    ),
-            )
-    }
-
-    fn render_rail(&self, cx: &mut Context<Self>) -> AnyElement {
-        match self.settings.sidebar {
-            SidebarMode::Icons => self.render_rail_icons(cx).into_any_element(),
-            SidebarMode::Full => self.render_rail_full(cx).into_any_element(),
-        }
-    }
-
-    /// Riel de 60 px: un ícono por sesión, activa con fondo sutil y barra de acento; `+` al pie.
-    fn render_rail_icons(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let c = self.colors.clone();
-        let active = self.sessions.active_id();
-        let tiles: Vec<AnyElement> = self
-            .sessions
-            .iter()
-            .enumerate()
-            .map(|(i, e)| {
-                let id = e.id;
-                let is_active = Some(id) == active;
-                let name = e.name.clone();
-                let title = self.session_title(&e.value.view, cx);
-                let shortcut = (i < 9).then(|| format!("Ctrl+{}", i + 1));
-                let tile = div()
-                    .id(("tile", id))
-                    .relative()
-                    .w(px(RAIL_ICONS))
-                    .h(px(40.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .cursor_pointer()
-                    .on_click(cx.listener(move |this, _, window, cx| this.activate(id, window, cx)))
-                    .when(is_active, |this| this.child(accent_bar(c.accent, 20.)))
-                    .child(
-                        div()
-                            .size(px(36.))
-                            .rounded(px(10.))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .map(|this| {
-                                if is_active {
-                                    this.bg(c.surface_2).text_color(c.text)
-                                } else {
-                                    this.text_color(c.muted).hover(|s| s.bg(c.hover).text_color(c.text))
-                                }
-                            })
-                            .child(Icon::new(IconName::SquareTerminal).size(px(18.))),
-                    );
-                let card = c.clone();
-                HoverCard::new(("session-card", id))
-                    .anchor(Anchor::LeftCenter)
-                    .open_delay(Duration::from_millis(350))
-                    .close_delay(Duration::from_millis(120))
-                    .trigger(tile)
-                    .content(move |_, _, _| session_card(&card, &name, title.as_deref(), shortcut.as_deref()))
-                    .into_any_element()
-            })
-            .collect();
-
-        v_flex()
-            .w(px(RAIL_ICONS))
-            .h_full()
-            .flex_shrink_0()
-            .bg(c.surface)
-            .border_r_1()
-            .border_color(c.border)
-            .pt(px(8.))
-            .pb(px(10.))
-            .child(v_flex().flex_1().min_h_0().gap(px(4.)).children(tiles))
-            .child(
-                h_flex().w_full().justify_center().child(
-                    icon_button("new-session", IconName::Plus, &c, "Nueva sesión (Ctrl+Shift+T)")
-                        .size(px(36.))
-                        .rounded(px(10.))
-                        .on_click(cx.listener(|this, _, window, cx| this.new_session(window, cx))),
-                ),
-            )
-    }
-
-    /// Riel de 232 px: ícono + nombre + título del programa en tenue; `×` al pasar el mouse.
-    fn render_rail_full(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let c = self.colors.clone();
-        let active = self.sessions.active_id();
-        let rows: Vec<AnyElement> = self
-            .sessions
-            .iter()
-            .enumerate()
-            .map(|(i, e)| {
-                let id = e.id;
-                let is_active = Some(id) == active;
-                let group: SharedString = format!("session-row-{id}").into();
-                let subtitle = self.session_title(&e.value.view, cx).unwrap_or_else(|| {
-                    if i < 9 {
-                        format!("Ctrl+{}", i + 1)
-                    } else {
-                        String::new()
-                    }
-                });
-                div()
-                    .id(("row", id))
-                    .group(group.clone())
-                    .relative()
-                    .h(px(44.))
-                    .px(px(10.))
-                    .flex()
-                    .items_center()
-                    .gap(px(10.))
-                    .rounded(px(8.))
-                    .cursor_pointer()
-                    .map(|this| {
-                        if is_active {
-                            this.bg(c.surface_2)
-                        } else {
-                            this.hover(|s| s.bg(c.hover))
-                        }
-                    })
-                    .on_click(cx.listener(move |this, _, window, cx| this.activate(id, window, cx)))
-                    .when(is_active, |this| this.child(accent_bar(c.accent, 22.)))
-                    .child(
-                        Icon::new(IconName::SquareTerminal)
-                            .size(px(16.))
-                            .text_color(if is_active { c.text } else { c.muted }),
-                    )
-                    .child(
-                        v_flex()
-                            .flex_1()
-                            .min_w_0()
-                            .child(
-                                div()
-                                    .text_size(px(13.))
-                                    .font_weight(if is_active {
-                                        FontWeight::SEMIBOLD
-                                    } else {
-                                        FontWeight::MEDIUM
-                                    })
-                                    .text_color(if is_active { c.text } else { c.muted })
-                                    .whitespace_nowrap()
-                                    .overflow_hidden()
-                                    .text_ellipsis()
-                                    .child(e.name.clone()),
-                            )
-                            .child(
-                                div()
-                                    .text_size(px(11.))
-                                    .font_family(self.mono_font.clone())
-                                    .text_color(c.muted)
-                                    .opacity(0.85)
-                                    .whitespace_nowrap()
-                                    .overflow_hidden()
-                                    .text_ellipsis()
-                                    .child(subtitle),
-                            ),
-                    )
-                    .child(
-                        icon_button(("close", id), IconName::Close, &c, "Cerrar sesión (Ctrl+Shift+W)")
-                            .size(px(22.))
-                            .rounded(px(6.))
-                            .when(!is_active, |this| {
-                                this.opacity(0.).group_hover(group, |s| s.opacity(1.))
-                            })
-                            .on_click(cx.listener(move |this, _, window, cx| {
-                                cx.stop_propagation();
-                                this.close_session(id, window, cx);
-                            })),
-                    )
-                    .into_any_element()
-            })
-            .collect();
-
-        v_flex()
-            .w(px(RAIL_FULL))
-            .h_full()
-            .flex_shrink_0()
-            .bg(c.surface)
-            .border_r_1()
-            .border_color(c.border)
-            .child(
-                h_flex()
-                    .h(px(40.))
-                    .pl(px(16.))
-                    .pr(px(10.))
-                    .items_center()
-                    .justify_between()
-                    .child(
-                        div()
-                            .text_size(px(12.))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(c.muted)
-                            .child("Sesiones"),
-                    )
-                    .child(
-                        icon_button("new-session", IconName::Plus, &c, "Nueva sesión (Ctrl+Shift+T)")
-                            .on_click(cx.listener(|this, _, window, cx| this.new_session(window, cx))),
-                    ),
-            )
-            .child(v_flex().flex_1().min_h_0().px(px(8.)).gap(px(2.)).children(rows))
-    }
 }
 
 /// Botón de un solo ícono: gris en reposo, color de texto y fondo sutil al pasar el mouse.
@@ -736,7 +713,7 @@ fn icon_button(id: impl Into<ElementId>, icon: IconName, c: &UiColors, tip: &'st
         .child(Icon::new(icon).size(px(16.)))
 }
 
-/// Barra de acento de 3 px pegada al borde izquierdo (sesión activa).
+/// Barra de acento de 3 px pegada al borde izquierdo (elemento activo).
 fn accent_bar(color: Hsla, height: f32) -> Div {
     div()
         .absolute()
@@ -747,41 +724,6 @@ fn accent_bar(color: Hsla, height: f32) -> Div {
         .h(px(height))
         .rounded_r(px(3.))
         .bg(color)
-}
-
-/// Tarjeta al pasar el mouse sobre una sesión en el riel de íconos.
-fn session_card(c: &UiColors, name: &str, title: Option<&str>, shortcut: Option<&str>) -> Div {
-    v_flex()
-        .ml(px(6.))
-        .min_w(px(180.))
-        .max_w(px(320.))
-        .gap(px(4.))
-        .text_size(px(UI_TEXT))
-        .child(
-            h_flex()
-                .gap(px(12.))
-                .justify_between()
-                .child(
-                    div()
-                        .text_color(c.text)
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .child(name.to_string()),
-                )
-                .when_some(shortcut, |this, s| {
-                    this.child(div().text_size(px(11.)).text_color(c.muted).child(s.to_string()))
-                }),
-        )
-        .when_some(title, |this, t| {
-            this.child(
-                div()
-                    .text_size(px(11.5))
-                    .text_color(c.muted)
-                    .whitespace_nowrap()
-                    .overflow_hidden()
-                    .text_ellipsis()
-                    .child(t.to_string()),
-            )
-        })
 }
 
 impl Workspace {
@@ -970,8 +912,59 @@ impl Workspace {
     }
 }
 
+impl Workspace {
+    /// Línea inferior de 22 px: carpeta actual a la izquierda y la RAM de Kuntur a la derecha.
+    fn render_status_line(&self, cx: &App) -> impl IntoElement {
+        let c = &self.colors;
+        let cwd = self
+            .active_cwd(cx)
+            .map(|p| kuntur_files::display_path(&p, self.home.as_deref()));
+        let ram = self
+            .ram
+            .map(|b| format!("Kuntur · {} MB", (b as f64 / (1024.0 * 1024.0)).round() as u64));
+        h_flex()
+            .h(px(STATUS_LINE))
+            .flex_shrink_0()
+            .px(px(12.))
+            .gap(px(12.))
+            .items_center()
+            .border_t_1()
+            .border_color(c.border)
+            .text_size(px(11.))
+            .text_color(c.muted)
+            .child(
+                h_flex()
+                    .flex_1()
+                    .min_w_0()
+                    .gap(px(6.))
+                    .items_center()
+                    .when_some(cwd, |this, cwd| {
+                        this.child(Icon::new(IconName::Folder).size(px(12.)).flex_shrink_0())
+                            .child(
+                                div()
+                                    .min_w_0()
+                                    .whitespace_nowrap()
+                                    .overflow_hidden()
+                                    .text_ellipsis()
+                                    .child(cwd),
+                            )
+                    }),
+            )
+            .when_some(ram, |this, ram| {
+                this.child(
+                    div()
+                        .id("ram")
+                        .flex_shrink_0()
+                        .whitespace_nowrap()
+                        .tooltip(|window, cx| Tooltip::new("Memoria de trabajo de Kuntur").build(window, cx))
+                        .child(ram),
+                )
+            })
+    }
+}
+
 impl Render for Workspace {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = self.colors.clone();
         let active = self.sessions.active().map(|e| e.value.view.clone());
         let palette = self.palette.as_ref().map(|p| self.render_palette(p, cx));
@@ -989,8 +982,15 @@ impl Render for Workspace {
                     .w_full()
                     .flex_1()
                     .min_h_0()
-                    .child(self.render_rail(cx))
-                    .child(div().flex_1().min_w_0().h_full().children(active)),
+                    .child(self.render_side_panel(window, cx))
+                    .child(
+                        v_flex()
+                            .flex_1()
+                            .min_w_0()
+                            .h_full()
+                            .child(div().flex_1().min_h_0().children(active))
+                            .child(self.render_status_line(cx)),
+                    ),
             )
             .children(palette)
     }

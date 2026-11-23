@@ -149,6 +149,21 @@ impl TerminalView {
         self.title.as_deref()
     }
 
+    /// PID del shell de la sesión.
+    pub fn pid(&self) -> Option<u32> {
+        self.pane.pid()
+    }
+
+    /// Carpeta actual informada por el shell (OSC 7 / OSC 9;9).
+    pub fn cwd(&self) -> Option<std::path::PathBuf> {
+        self.pane.cwd()
+    }
+
+    /// Tiempo desde la última salida del programa.
+    pub fn last_output_age(&self) -> std::time::Duration {
+        self.pane.last_output_age()
+    }
+
     pub fn focus(&self, window: &mut Window, cx: &mut App) {
         window.focus(&self.focus, cx);
     }
