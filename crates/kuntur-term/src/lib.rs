@@ -5,12 +5,14 @@ pub mod emulator;
 pub mod keys;
 pub mod palette;
 pub mod paste;
+pub mod screen;
 pub mod size;
 
 pub use emulator::{Emulator, EventSink, SelectionKind};
 pub use keys::{Key, Mods, encode_key};
 pub use palette::{Palette, Rgb8};
 pub use paste::paste_bytes;
+pub use screen::{CellView, Screen};
 pub use size::GridSize;
 
 // Tipos de alacritty que la UI necesita, sin depender de ese crate directamente.
