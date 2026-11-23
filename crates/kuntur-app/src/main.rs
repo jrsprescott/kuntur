@@ -2,6 +2,7 @@
 // En release no abre una consola negra extra.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod command_palette;
 mod sessions;
 mod terminal_view;
 mod theme_bridge;

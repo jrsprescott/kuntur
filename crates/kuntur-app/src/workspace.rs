@@ -9,9 +9,10 @@ use gpui_kit::assets::IconName;
 use gpui_kit::component::{Icon, TITLE_BAR_HEIGHT, TitleBar, h_flex, hover_card::HoverCard, tooltip::Tooltip, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
-use kuntur_config::{Settings, SidebarMode, Theme, ThemeId, builtin};
+use kuntur_config::{SessionConfig, Settings, SidebarMode, Theme, ThemeId, builtin};
 use kuntur_term::{GridSize, PaneOptions};
 
+use crate::command_palette::{PaletteAction, PaletteItem, PaletteMode, PaletteState};
 use crate::sessions::{SessionList, next_default_name, short_title};
 use crate::terminal_view::{TerminalEvent, TerminalView};
 use crate::theme_bridge::{FALLBACK_MONO, FALLBACK_UI, UiColors, apply_to_kit, palette_from, pick_font};
@@ -24,8 +25,14 @@ const ICON_BUTTON: f32 = 28.0;
 const RIGHT_GROUP: f32 = ICON_BUTTON + 8.0;
 const UI_TEXT: f32 = 12.5;
 
+const PALETTE_WIDTH: f32 = 520.0;
+/// Paso de Ctrl+= / Ctrl+- (puntos).
+const FONT_STEP: f32 = 1.0;
+
 struct Session {
     view: Entity<TerminalView>,
+    /// Programa del shell (`None` = el predeterminado); se guarda con la sesión.
+    shell: Option<String>,
     _events: Subscription,
 }
 
@@ -39,6 +46,10 @@ pub struct Workspace {
     colors: UiColors,
     mono_font: SharedString,
     ui_font: SharedString,
+    /// Paleta de comandos abierta (Ctrl+Shift+P).
+    palette: Option<PaletteState>,
+    /// Foco del panel de la paleta: mientras está abierta, el teclado no llega a la terminal.
+    focus: FocusHandle,
 }
 
 impl Workspace {
@@ -55,6 +66,8 @@ impl Workspace {
             ui_font: pick_font(&installed, &theme.fonts.ui, FALLBACK_UI),
             theme,
             settings,
+            palette: None,
+            focus: cx.focus_handle(),
         };
         apply_to_kit(&this.theme, cx);
 
@@ -95,6 +108,17 @@ impl Workspace {
             this.config_path = None;
             this.set_theme(id, window, cx);
         }
+
+        // Prueba de humo: paleta abierta (con texto, o ya en "renombrar") para poder capturarla.
+        if let Ok(mode) = std::env::var("KUNTUR_SMOKE_PALETTE") {
+            this.open_palette(window, cx);
+            if mode == "rename" {
+                this.run_action(PaletteAction::RenameSession, window, cx);
+            }
+            if let (Ok(q), Some(p)) = (std::env::var("KUNTUR_SMOKE_PALETTE_QUERY"), this.palette.as_mut()) {
+                p.insert(&q);
+            }
+        }
         this
     }
 
@@ -108,7 +132,7 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) {
         let size = GridSize::new(100, 30);
-        let opts = match shell {
+        let opts = match shell.clone() {
             Some(program) => PaneOptions {
                 program,
                 args: Vec::new(),
@@ -137,13 +161,27 @@ impl Workspace {
                 }
             }
         });
-        self.sessions.push(name, Session { view, _events: events });
+        self.sessions.push(
+            name,
+            Session {
+                view,
+                shell,
+                _events: events,
+            },
+        );
         cx.notify();
     }
 
     fn new_session(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.add_session(None, None, window, cx);
+        self.persist();
         self.focus_active(window, cx);
+    }
+
+    fn rename_session(&mut self, id: u64, name: String, cx: &mut Context<Self>) {
+        self.sessions.rename(id, name);
+        self.persist();
+        cx.notify();
     }
 
     /// Cierra la sesión (su PTY termina al soltar la vista). Cerrar la última cierra la ventana.
@@ -151,6 +189,7 @@ impl Workspace {
         if self.sessions.close(id).is_none() {
             return;
         }
+        self.persist();
         if self.sessions.is_empty() {
             window.remove_window();
             return;
@@ -173,10 +212,33 @@ impl Workspace {
     }
 
     fn toggle_sidebar(&mut self, cx: &mut Context<Self>) {
-        self.settings.sidebar = match self.settings.sidebar {
+        let mode = match self.settings.sidebar {
             SidebarMode::Icons => SidebarMode::Full,
             SidebarMode::Full => SidebarMode::Icons,
         };
+        self.set_sidebar(mode, cx);
+    }
+
+    fn set_sidebar(&mut self, mode: SidebarMode, cx: &mut Context<Self>) {
+        self.settings.sidebar = mode;
+        self.persist();
+        cx.notify();
+    }
+
+    // ── Fuente ──────────────────────────────────────────────────────────────
+
+    /// Cambia el tamaño de letra de todas las terminales (9–28 pt) y lo guarda.
+    fn set_font_size(&mut self, size: f32, cx: &mut Context<Self>) {
+        let size = Settings::clamp_font(size);
+        if (size - self.settings.font_size).abs() < f32::EPSILON {
+            return;
+        }
+        self.settings.font_size = size;
+        for e in self.sessions.iter() {
+            e.value
+                .view
+                .update(cx, |v, cx| v.set_font(self.mono_font.clone(), size, cx));
+        }
         self.persist();
         cx.notify();
     }
@@ -205,24 +267,147 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Botón `Command`: hasta que exista la paleta de comandos (Task 8) alterna el tema.
-    fn on_command(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let all = ThemeId::ALL;
-        let i = all.iter().position(|&t| t == self.theme_id).unwrap_or(0);
-        self.set_theme(all[(i + 1) % all.len()], window, cx);
-        self.focus_active(window, cx);
-    }
-
-    fn persist(&self) {
+    /// Guarda la configuración (tema, riel, fuente y sesiones con nombre + shell). En las pruebas
+    /// de humo `config_path` es `None` y no se toca nada.
+    fn persist(&mut self) {
+        self.settings.sessions = self
+            .sessions
+            .iter()
+            .map(|e| SessionConfig {
+                name: e.name.clone(),
+                shell: e.value.shell.clone(),
+            })
+            .collect();
         if let Some(path) = &self.config_path {
             let _ = self.settings.save(path);
         }
+    }
+
+    // ── Paleta de comandos ──────────────────────────────────────────────────
+
+    fn open_palette(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.palette = Some(PaletteState::new());
+        window.focus(&self.focus, cx);
+        cx.notify();
+    }
+
+    fn close_palette(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.palette = None;
+        self.focus_active(window, cx);
+        cx.notify();
+    }
+
+    fn toggle_palette(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.palette.is_some() {
+            self.close_palette(window, cx);
+        } else {
+            self.open_palette(window, cx);
+        }
+    }
+
+    /// Ejecuta la acción elegida. "Renombrar" no cierra: el mismo campo pasa a pedir el nombre.
+    fn run_action(&mut self, action: PaletteAction, window: &mut Window, cx: &mut Context<Self>) {
+        if action == PaletteAction::RenameSession {
+            if let (Some(e), Some(p)) = (self.sessions.active(), self.palette.as_mut()) {
+                p.start_rename(e.id, &e.name);
+            }
+            cx.notify();
+            return;
+        }
+        self.close_palette(window, cx);
+        match action {
+            PaletteAction::NewSession => self.new_session(window, cx),
+            PaletteAction::CloseSession => {
+                if let Some(id) = self.sessions.active_id() {
+                    self.close_session(id, window, cx);
+                }
+            }
+            PaletteAction::NextSession => self.cycle(true, window, cx),
+            PaletteAction::PrevSession => self.cycle(false, window, cx),
+            PaletteAction::Theme(id) => self.set_theme(id, window, cx),
+            PaletteAction::RailFull => self.set_sidebar(SidebarMode::Full, cx),
+            PaletteAction::RailIcons => self.set_sidebar(SidebarMode::Icons, cx),
+            PaletteAction::FontBigger => self.set_font_size(self.settings.font_size + FONT_STEP, cx),
+            PaletteAction::FontSmaller => self.set_font_size(self.settings.font_size - FONT_STEP, cx),
+            PaletteAction::FontReset => self.set_font_size(Settings::default().font_size, cx),
+            PaletteAction::RenameSession => {}
+        }
+    }
+
+    /// ¿La acción describe el estado actual? (tema y riel en uso: se marcan con ✓).
+    fn is_current(&self, action: PaletteAction) -> bool {
+        match action {
+            PaletteAction::Theme(id) => id == self.theme_id,
+            PaletteAction::RailFull => self.settings.sidebar == SidebarMode::Full,
+            PaletteAction::RailIcons => self.settings.sidebar == SidebarMode::Icons,
+            _ => false,
+        }
+    }
+
+    /// Teclado con la paleta abierta: todo se queda en el campo (nada llega a la terminal).
+    fn on_palette_key(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(p) = self.palette.as_mut() else {
+            return;
+        };
+        let ks = &ev.keystroke;
+        let m = ks.modifiers;
+        match ks.key.to_ascii_lowercase().as_str() {
+            "escape" => self.close_palette(window, cx),
+            "enter" => match p.mode.clone() {
+                PaletteMode::Search => {
+                    if let Some(action) = p.selected_action() {
+                        self.run_action(action, window, cx);
+                    }
+                }
+                PaletteMode::Rename { id, .. } => {
+                    if let Some(name) = p.rename_value() {
+                        self.close_palette(window, cx);
+                        self.rename_session(id, name, cx);
+                    }
+                }
+            },
+            "up" => p.select_prev(),
+            "down" => p.select_next(),
+            "tab" if m.shift => p.select_prev(),
+            "tab" => p.select_next(),
+            "backspace" if m.control => p.clear(),
+            "backspace" => p.backspace(),
+            "p" if m.control && m.shift => self.close_palette(window, cx),
+            "v" if m.control && !m.alt => {
+                if let Some(text) = cx.read_from_clipboard().and_then(|i| i.text()) {
+                    p.insert(&text);
+                }
+            }
+            // AltGr llega como Ctrl+Alt: también escribe (por ejemplo "@").
+            _ if !m.control || m.alt => {
+                if let Some(text) = ks.key_char.as_deref() {
+                    p.insert(text);
+                }
+            }
+            _ => {}
+        }
+        cx.notify();
+    }
+
+    fn cycle(&mut self, forward: bool, window: &mut Window, cx: &mut Context<Self>) {
+        if forward {
+            self.sessions.next();
+        } else {
+            self.sessions.prev();
+        }
+        self.focus_active(window, cx);
+        cx.notify();
     }
 
     // ── Teclado ─────────────────────────────────────────────────────────────
 
     /// Atajos de Kuntur. Se capturan antes que la terminal: con Ctrl+Shift no chocan con el shell.
     fn on_key(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        if self.palette.is_some() {
+            self.on_palette_key(ev, window, cx);
+            cx.stop_propagation();
+            return;
+        }
         let m = ev.keystroke.modifiers;
         if !m.control || m.alt || m.platform {
             return;
@@ -235,17 +420,13 @@ impl Workspace {
                     self.close_session(id, window, cx);
                 }
             }
-            (false, "tab") => {
-                self.sessions.next();
-                self.focus_active(window, cx);
-                cx.notify();
-            }
-            (true, "tab") => {
-                self.sessions.prev();
-                self.focus_active(window, cx);
-                cx.notify();
-            }
+            (false, "tab") => self.cycle(true, window, cx),
+            (true, "tab") => self.cycle(false, window, cx),
             (true, "b") => self.toggle_sidebar(cx),
+            (true, "p") => self.toggle_palette(window, cx),
+            (_, "=" | "+") => self.set_font_size(self.settings.font_size + FONT_STEP, cx),
+            (false, "-") => self.set_font_size(self.settings.font_size - FONT_STEP, cx),
+            (false, "0") => self.set_font_size(Settings::default().font_size, cx),
             (false, d) if d.len() == 1 && ('1'..='9').contains(&d.chars().next().unwrap_or('0')) => {
                 let n = d.parse::<usize>().unwrap_or(1);
                 if self.sessions.activate_index(n - 1) {
@@ -330,7 +511,7 @@ impl Workspace {
                             .pr(px(4.))
                             .child(
                                 icon_button("command", IconName::Command, c, "Acciones (Ctrl+Shift+P)")
-                                    .on_click(cx.listener(|this, _, window, cx| this.on_command(window, cx))),
+                                    .on_click(cx.listener(|this, _, window, cx| this.toggle_palette(window, cx))),
                             ),
                     ),
             )
@@ -603,11 +784,199 @@ fn session_card(c: &UiColors, name: &str, title: Option<&str>, shortcut: Option<
         })
 }
 
+impl Workspace {
+    /// Paleta flotante centrada arriba: campo de filtro y lista de acciones. Un clic fuera la cierra.
+    fn render_palette(&self, p: &PaletteState, cx: &mut Context<Self>) -> AnyElement {
+        let c = self.colors.clone();
+        let renaming = match &p.mode {
+            PaletteMode::Rename { current, .. } => Some(current.clone()),
+            PaletteMode::Search => None,
+        };
+        let placeholder = if renaming.is_some() {
+            "Nombre de la sesión"
+        } else {
+            "Buscar una acción"
+        };
+        let caret = div().w(px(1.5)).h(px(17.)).flex_shrink_0().bg(c.accent);
+
+        // Campo: ícono, texto (o guía tenue) y cursor.
+        let field = h_flex()
+            .h(px(46.))
+            .px(px(16.))
+            .gap(px(10.))
+            .items_center()
+            .border_b_1()
+            .border_color(c.border)
+            .child(
+                Icon::new(if renaming.is_some() {
+                    IconName::SquareTerminal
+                } else {
+                    IconName::Search
+                })
+                .size(px(16.))
+                .text_color(c.muted),
+            )
+            .child(
+                h_flex()
+                    .flex_1()
+                    .min_w_0()
+                    .items_center()
+                    .text_size(px(14.))
+                    .whitespace_nowrap()
+                    .overflow_hidden()
+                    .map(|this| {
+                        if p.query.is_empty() {
+                            this.child(caret)
+                                .child(div().ml(px(1.)).text_color(c.muted).child(placeholder))
+                        } else if p.replace_on_type {
+                            // Nombre propuesto, "seleccionado": lo que se escriba lo reemplaza.
+                            this.child(
+                                div()
+                                    .px(px(2.))
+                                    .rounded(px(3.))
+                                    .bg(c.accent.opacity(0.28))
+                                    .text_color(c.text)
+                                    .child(p.query.clone()),
+                            )
+                            .child(caret)
+                        } else {
+                            this.child(div().text_color(c.text).child(p.query.clone())).child(caret)
+                        }
+                    }),
+            );
+
+        let body: AnyElement = match renaming {
+            Some(current) => h_flex()
+                .h(px(40.))
+                .px(px(16.))
+                .items_center()
+                .justify_between()
+                .text_size(px(12.))
+                .text_color(c.muted)
+                .child(format!("Renombrar «{current}»"))
+                .child(div().text_size(px(11.5)).child("Enter guarda · Esc cancela"))
+                .into_any_element(),
+            None => {
+                let items = p.filtered();
+                if items.is_empty() {
+                    div()
+                        .py(px(18.))
+                        .text_center()
+                        .text_size(px(12.5))
+                        .text_color(c.muted)
+                        .child("Sin resultados")
+                        .into_any_element()
+                } else {
+                    let rows: Vec<AnyElement> = items
+                        .iter()
+                        .enumerate()
+                        .map(|(i, item)| self.palette_row(i, item, i == p.selected, cx))
+                        .collect();
+                    v_flex()
+                        .id("palette-list")
+                        .max_h(px(430.))
+                        .overflow_y_scroll()
+                        .p(px(6.))
+                        .gap(px(1.))
+                        .children(rows)
+                        .into_any_element()
+                }
+            }
+        };
+
+        // El foco vive en el panel (no en la raíz): un clic en la barra o el riel no le quita el
+        // teclado a la terminal.
+        let panel = v_flex()
+            .id("palette")
+            .track_focus(&self.focus)
+            .w(px(PALETTE_WIDTH))
+            .max_w(relative(0.92))
+            .bg(c.popover)
+            .border_1()
+            .border_color(c.border)
+            .rounded(px(10.))
+            .shadow_lg()
+            .overflow_hidden()
+            .occlude()
+            .font_family(self.ui_font.clone())
+            .child(field)
+            .child(body);
+
+        deferred(
+            div()
+                .id("palette-backdrop")
+                .absolute()
+                .top(TITLE_BAR_HEIGHT)
+                .left_0()
+                .right_0()
+                .bottom_0()
+                .flex()
+                .items_start()
+                .justify_center()
+                .pt(px(10.))
+                .occlude()
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(|this, _, window, cx| this.close_palette(window, cx)),
+                )
+                .child(panel),
+        )
+        .with_priority(1)
+        .into_any_element()
+    }
+
+    /// Fila de la paleta: "Grupo:" en tenue + acción; a la derecha ✓ (si es lo actual) y el atajo.
+    fn palette_row(&self, index: usize, item: &PaletteItem, selected: bool, cx: &mut Context<Self>) -> AnyElement {
+        let c = &self.colors;
+        let action = item.action;
+        let (group, label) = match item.label.split_once(": ") {
+            Some((g, l)) => (Some(format!("{g}:")), l),
+            None => (None, item.label),
+        };
+        let hover = c.hover;
+        h_flex()
+            .id(("palette-item", index))
+            .h(px(32.))
+            .px(px(10.))
+            .gap(px(5.))
+            .items_center()
+            .rounded(px(6.))
+            .cursor_pointer()
+            .text_size(px(13.))
+            .map(|this| {
+                if selected {
+                    this.bg(c.accent.opacity(0.16))
+                } else {
+                    this.hover(move |s| s.bg(hover))
+                }
+            })
+            .on_click(cx.listener(move |this, _, window, cx| this.run_action(action, window, cx)))
+            .when_some(group, |this, g| this.child(div().text_color(c.muted).child(g)))
+            .child(div().flex_1().min_w_0().text_color(c.text).child(label))
+            .when(self.is_current(action), |this| {
+                this.child(Icon::new(IconName::Check).size(px(14.)).text_color(c.accent))
+            })
+            .when_some(item.shortcut, |this, s| {
+                this.child(
+                    div()
+                        .ml(px(8.))
+                        .text_size(px(11.5))
+                        .font_family(self.mono_font.clone())
+                        .text_color(c.muted)
+                        .child(s),
+                )
+            })
+            .into_any_element()
+    }
+}
+
 impl Render for Workspace {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = self.colors.clone();
         let active = self.sessions.active().map(|e| e.value.view.clone());
+        let palette = self.palette.as_ref().map(|p| self.render_palette(p, cx));
         v_flex()
+            .relative()
             .size_full()
             .bg(c.window)
             .text_color(c.text)
@@ -623,5 +992,6 @@ impl Render for Workspace {
                     .child(self.render_rail(cx))
                     .child(div().flex_1().min_w_0().h_full().children(active)),
             )
+            .children(palette)
     }
 }

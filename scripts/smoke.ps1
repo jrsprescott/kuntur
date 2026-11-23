@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Prueba de humo de Kuntur: compila, abre la app, escribe comandos DESDE DENTRO (variable
   KUNTUR_SMOKE_INPUT, nunca teclado simulado del sistema), captura solo su ventana y mide RAM.
@@ -8,6 +8,8 @@
   .\scripts\smoke.ps1 -Commands 'Write-Host rojo -ForegroundColor Red','dir'
 .EXAMPLE
   .\scripts\smoke.ps1 -Sessions 3 -Theme blue -Out target\smoke-blue.png
+.EXAMPLE
+  .\scripts\smoke.ps1 -Sessions 2 -Theme white -Palette -PaletteQuery 'tema' -Out target\smoke-palette.png
 #>
 param(
     [string[]]$Commands = @('Write-Host rojo -ForegroundColor Red; Write-Host verde -ForegroundColor Green', 'Get-ChildItem | Select-Object -First 5'),
@@ -17,7 +19,12 @@ param(
     # Sesiones que abre la app al arrancar (no se guardan). 0 = las de la configuración de prueba.
     [ValidateRange(0, 9)][int]$Sessions = 0,
     # Tema inicial, aplicado en vivo sobre las sesiones ya abiertas.
-    [ValidateSet('', 'blue', 'dark', 'white')][string]$Theme = ''
+    [ValidateSet('', 'blue', 'dark', 'white')][string]$Theme = '',
+    # Abre la paleta de comandos al iniciar (solo para capturarla), con texto opcional en el filtro.
+    # -PaletteRename la abre ya en "Renombrar sesión" (el texto se agrega al nombre actual).
+    [switch]$Palette,
+    [string]$PaletteQuery = '',
+    [switch]$PaletteRename
 )
 $ErrorActionPreference = 'Stop'
 $root = Resolve-Path (Join-Path $PSScriptRoot '..')
@@ -51,6 +58,8 @@ $smokeEnv = @{
 }
 if ($Sessions -gt 0) { $smokeEnv.KUNTUR_SMOKE_SESSIONS = "$Sessions" }
 if ($Theme) { $smokeEnv.KUNTUR_SMOKE_THEME = $Theme }
+if ($Palette -or $PaletteQuery -or $PaletteRename) { $smokeEnv.KUNTUR_SMOKE_PALETTE = $(if ($PaletteRename) { 'rename' } else { '1' }) }
+if ($PaletteQuery) { $smokeEnv.KUNTUR_SMOKE_PALETTE_QUERY = $PaletteQuery }
 foreach ($k in $smokeEnv.Keys) { Set-Item "Env:$k" $smokeEnv[$k] }
 $p = Start-Process $exe -PassThru
 foreach ($k in $smokeEnv.Keys) { Remove-Item "Env:$k" }

@@ -78,7 +78,6 @@ impl<T> SessionList<T> {
         }
     }
 
-    #[cfg_attr(not(test), expect(dead_code, reason = "lo usa la paleta de comandos (Task 8)"))]
     pub fn rename(&mut self, id: u64, name: impl Into<String>) {
         if let Some(e) = self.items.iter_mut().find(|e| e.id == id) {
             e.name = name.into();
@@ -97,7 +96,10 @@ impl<T> SessionList<T> {
         self.items.iter()
     }
 
-    #[cfg_attr(not(test), expect(dead_code, reason = "lo usa la paleta de comandos (Task 8)"))]
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "API de la lista; hoy solo la usan las pruebas")
+    )]
     pub fn len(&self) -> usize {
         self.items.len()
     }
