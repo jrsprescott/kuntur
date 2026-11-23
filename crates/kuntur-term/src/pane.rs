@@ -61,6 +61,13 @@ impl Pane {
         let pair = native_pty_system().openpty(opts.size.into())?;
 
         let mut cmd = CommandBuilder::new(&opts.program);
+        // portable-pty arma el entorno releyendo el registro y SUMA el PATH del sistema y del usuario.
+        // Con PATH grandes supera los 32.767 caracteres y Windows no deja lanzar procesos desde el
+        // shell ("no hay suficientes recursos de memoria"). Usamos exactamente el entorno de Kuntur.
+        cmd.env_clear();
+        for (key, value) in std::env::vars_os() {
+            cmd.env(key, value);
+        }
         cmd.args(&opts.args);
         if let Some(dir) = &opts.cwd {
             cmd.cwd(dir);
@@ -177,6 +184,7 @@ impl Drop for Pane {
 #[cfg(all(test, windows))]
 mod tests {
     use super::*;
+    use std::os::windows::ffi::OsStrExt;
     use std::time::{Duration, Instant};
 
     fn wait_for(pane: &Pane, needle: &str) -> bool {
@@ -213,5 +221,33 @@ mod tests {
         let pane = Pane::spawn(opts, || {}).unwrap();
         pane.write(b"echo teclado-ok\r").unwrap();
         assert!(wait_for(&pane, "teclado-ok"));
+    }
+
+    /// Regresión: portable-pty relee el registro y concatena el PATH del sistema y del usuario.
+    /// Con PATH grandes pasa de 32.767 caracteres y Windows no deja lanzar procesos desde el shell
+    /// ("no hay suficientes recursos de memoria"). El hijo debe recibir el PATH de Kuntur tal cual.
+    #[test]
+    fn el_hijo_hereda_el_path_sin_duplicarlo() {
+        let esperado = std::env::var_os("PATH").unwrap_or_default().encode_wide().count();
+        let opts = PaneOptions {
+            program: "powershell.exe".into(),
+            args: vec![
+                "-NoProfile".into(),
+                "-Command".into(),
+                "'PATHLEN=' + $env:Path.Length".into(),
+            ],
+            cwd: None,
+            size: GridSize::new(80, 24),
+        };
+        let pane = Pane::spawn(opts, || {}).unwrap();
+        assert!(wait_for(&pane, "PATHLEN="), "PowerShell no respondió");
+        let linea = pane.with_emulator(|e| {
+            (0..24)
+                .map(|r| e.line_text(r))
+                .find(|l| l.contains("PATHLEN="))
+                .unwrap_or_default()
+        });
+        let recibido: usize = linea.trim().trim_start_matches("PATHLEN=").parse().unwrap();
+        assert_eq!(recibido, esperado, "el PATH del hijo no coincide con el de Kuntur");
     }
 }
