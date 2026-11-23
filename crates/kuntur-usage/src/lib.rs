@@ -5,6 +5,7 @@ pub mod aggregate;
 pub mod claude;
 pub mod codex;
 pub mod model;
+pub mod opencode;
 
 pub use aggregate::{ModelRow, Summary, TaskRow, Totals, pct_change, provider_of, summarize};
 pub use model::{AgentKind, Period, UsageRecord};
