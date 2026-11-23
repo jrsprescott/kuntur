@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Prueba de humo de Kuntur: compila, abre la app, escribe comandos DESDE DENTRO (variable
   KUNTUR_SMOKE_INPUT, nunca teclado simulado del sistema), captura solo su ventana y mide RAM.
