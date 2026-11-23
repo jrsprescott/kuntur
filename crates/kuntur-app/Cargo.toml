@@ -10,4 +10,7 @@ name = "kuntur"
 path = "src/main.rs"
 
 [dependencies]
-# Se agregan por fase: kuntur-term (F1), kuntur-config (F2), kuntur-complete (F3), kuntur-agents (F4), kuntur-usage (F5)
+kuntur-term = { path = "../kuntur-term" }
+kuntur-config = { path = "../kuntur-config" }
+gpui-kit = { workspace = true }
+smol = { workspace = true }

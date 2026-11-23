@@ -1,4 +1,24 @@
-//! PTY (ConPTY vía portable-pty) + parser VT (alacritty_terminal). Intercepta OSC 7 (carpeta), OSC 133 (bloques) y OSC 7501 (estado de programa).
-//!
-//! Ver docs/PLAN.md.
+//! Núcleo de terminal de Kuntur: PTY (ConPTY vía portable-pty) + emulador VT (alacritty_terminal).
+//! No depende de la UI: la app dibuja a partir de [`Screen`].
 
+pub mod emulator;
+pub mod keys;
+pub mod mouse;
+pub mod palette;
+pub mod pane;
+pub mod paste;
+pub mod screen;
+pub mod size;
+
+pub use emulator::{Emulator, EventSink, SelectionKind};
+pub use keys::{Key, Mods, encode_key};
+pub use mouse::{MouseAction, MouseButtonKind, MouseMode, MouseReport, MouseReporting, encode_mouse};
+pub use palette::{Palette, Rgb8};
+pub use pane::{Pane, PaneOptions};
+pub use paste::paste_bytes;
+pub use screen::{CellView, Screen};
+pub use size::GridSize;
+
+// Tipos de alacritty que la UI necesita, sin depender de ese crate directamente.
+pub use alacritty_terminal::index::Side;
+pub use alacritty_terminal::term::TermMode;

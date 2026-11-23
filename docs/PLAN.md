@@ -208,6 +208,8 @@ waiting_regex = '(?m)^\s*>\s'
 
 ## 6. Fases
 
+> Planes de implementación (paso a paso, con código y pruebas): [`docs/plans/`](plans/README.md). F1 ya tiene su plan detallado.
+
 | Fase | Entrega | Criterio de "listo" |
 |---|---|---|
 | **F0 — Investigación** ✅ | Toolchain, simulación v2, prueba GPUI | Rust 1.100 + MSVC 14.51 + SDK 10.0.26100; ventana GPUI = 70 MB |
