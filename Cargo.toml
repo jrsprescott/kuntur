@@ -19,12 +19,15 @@ smol = "2"
 # F2 (kuntur-config)
 toml = "1.2"
 serde = { version = "1", features = ["derive"] }
+# F3 (kuntur-usage, kuntur-agents)
+serde_json = "1"
+zstd = "0.14"
+rusqlite = { version = "0.43", features = ["bundled"] }
+jiff = "1"
+sysinfo = "0.40"
 # Se irán activando por fase (ver docs/plans/README.md).
-# sysinfo = "0.40"             # F4 (kuntur-agents)
 # notify = "9"                 # F5 (kuntur-usage)
 # nucleo = "0.5"               # F8 (kuntur-complete)
-# rusqlite = { version = "0.43", features = ["bundled"] }  # F8
-# serde_json = "1"
 
 [profile.release]
 opt-level = 3
