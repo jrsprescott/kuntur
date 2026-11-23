@@ -18,16 +18,16 @@
 |---|---|---|---|---|
 | **F1 · Núcleo de terminal** | Ventana GPUI con PowerShell real: colores, cursor, scroll, selección, copiar/pegar (Ctrl+C inteligente, Ctrl+V, clic derecho, bracketed paste, OSC 52), redimensionar | `kuntur-term`, `kuntur-app` | — | [`2026-11-23-f1-nucleo-terminal.md`](2026-11-23-f1-nucleo-terminal.md) ✅ |
 | **F2 · Sesiones y temas** | Varias sesiones; riel lateral (completo ↔ íconos, nunca oculto) con tarjeta al pasar el mouse; barra de título propia minimalista; temas Blue/Dark/White desde `themes/*.toml`; Ctrl+K (apariencia/atajos); guardar y restaurar sesiones | `kuntur-config`, `kuntur-app` | F1 | [`2026-11-23-f2-sesiones-y-temas.md`](2026-11-23-f2-sesiones-y-temas.md) ✅ |
-| **F3 · Terminal acoplada** | Segundo panel por sesión (Ctrl+`), alto ajustable, en la ruta de la sesión o del worktree de un agente | `kuntur-term`, `kuntur-app` | F2 | Se escribe al iniciar F3 |
-| **F4 · Agentes** | `kuntur-hook.exe` + named pipe; OSC 7501; árbol compacto agente → subagentes con acción actual; permitir desde la fila; worktree por agente; "Enviar a terminal"; perfiles `agents.toml` (OpenCode, Qwen…) | `kuntur-agents`, `kuntur-term`, `kuntur-app` | F3 | Se escribe al iniciar F4 |
-| **F5 · Uso y costos** | Línea compacta + detalle: statusLine de Claude, rollouts de Codex, tok/s, límites 5 h / semanal | `kuntur-usage`, `kuntur-app` | F4 | Se escribe al iniciar F5 |
+| **F3 · Diseño v5: pestañas, agentes y uso** 🆕 | Sesiones como pestañas arriba; panel izquierdo de agentes (buscar, Todos/Esperando/Trabajando, agentes corriendo, instalados con anillo de %, "Archivos" de la carpeta actual); vista **Uso de agentes** (7/30/90/todo, tokens por día, mapa de horas, modelos, agentes, tareas top) con lectores de Claude Code, Codex y OpenCode; RAM abajo a la derecha | `kuntur-usage`, `kuntur-agents`, `kuntur-term`, `kuntur-app` | F2 | [`2026-11-23-f3-v5-agentes-y-uso.md`](2026-11-23-f3-v5-agentes-y-uso.md) |
+| **F4 · Terminal acoplada** | Segundo panel por sesión (Ctrl+`), alto ajustable, en la ruta de la sesión o del worktree de un agente | `kuntur-term`, `kuntur-app` | F3 | Se escribe al iniciar F4 |
+| **F5 · Agentes exactos** | `kuntur-hook.exe` + named pipe; OSC 7501; estado exacto esperando/trabajando; subagentes con acción actual; permitir desde la fila; worktree por agente; "Enviar a terminal"; puente de línea de estado de Claude (anillo 5 h/semanal, con permiso del usuario) | `kuntur-agents`, `kuntur-term`, `kuntur-app` | F3 | Se escribe al iniciar F5 |
 | **F6 · SSH** | `russh`: sesión remota + canal acoplado en la misma conexión, `known_hosts`, ssh-agent de Windows, OSC 7/133 sin tocar el servidor | `kuntur-term`, `kuntur-app` | F3 | Se escribe al iniciar F6 |
 | **F7 · Archivos** | Panel Windows ↔ Linux (local, SFTP, WSL), arrastrar/soltar, CF_HDROP, cola de transferencias | `kuntur-files`, `kuntur-app` | F6 | Se escribe al iniciar F7 |
 | **F8 · Shell y autocompletado** | Integración de shell (OSC 133/7), bloques, editor de entrada, rutas + memoria de carpetas + historial | `kuntur-complete`, `kuntur-term`, `kuntur-app` | F2 | Se escribe al iniciar F8 |
 | **F9 · MCP y comandos** | MCP por sesión/perfil, modelo/esfuerzo/permisos, comandos con atajo por sesión o globales | `kuntur-config`, `kuntur-agents`, `kuntur-app` | F4 | Se escribe al iniciar F9 |
 | **F10 · Pulido y publicación** | Instalador MSI, notificaciones de Windows, accesibilidad, medición final, licencia, README en inglés, CONTRIBUTING, repositorio público | todos | F1–F9 | Se escribe al iniciar F10 |
 
-Orden recomendado: **F1 → F2 → F3 → F4 → F5 → F6 → F7 → F8 → F9 → F10**. F8 puede adelantarse si se prefiere el autocompletado antes que SSH.
+Orden recomendado: **F1 → F2 → F3 → F4 → F5 → F6 → F7 → F8 → F9 → F10**. Replanificado el 2026-11-23 a pedido del usuario: el diseño v5 (pestañas arriba, panel de agentes y uso) se adelantó como F3; el uso/costos de la antigua F5 quedó dentro de F3.
 
 ## Hechos verificados en este equipo (prototipo del 2026-11-23)
 Se compiló y ejecutó un prototipo con exactamente el código del plan F1:
