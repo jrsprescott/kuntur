@@ -4,7 +4,8 @@ use std::sync::Arc;
 
 use gpui_kit::*;
 use kuntur_term::{
-    Emulator, GridSize, Key, Mods, Palette, Pane, PaneOptions, Rgb8, Screen, SelectionKind, Side, TermMode, encode_key,
+    Emulator, GridSize, Key, Mods, MouseAction, MouseButtonKind, MouseMode, MouseReport, MouseReporting, Palette, Pane,
+    PaneOptions, Rgb8, Screen, SelectionKind, Side, TermMode, encode_key, encode_mouse,
 };
 
 const LINE_HEIGHT_FACTOR: f32 = 1.3;
@@ -37,6 +38,10 @@ pub struct TerminalView {
     bounds: Rc<Cell<Bounds<Pixels>>>,
     last_size: Rc<Cell<GridSize>>,
     selecting: bool,
+    /// Botón apretado cuyo clic se envió al programa (modo mouse de nvim, htop, opencode…).
+    mouse_button: Option<MouseButtonKind>,
+    /// Última celda informada al programa: el movimiento solo se envía al cambiar de celda.
+    mouse_cell: Option<(usize, usize)>,
     title: Option<String>,
     exited: bool,
     _pump: Task<()>,
@@ -60,10 +65,15 @@ impl TerminalView {
         let (tx, rx) = smol::channel::bounded::<()>(1);
         let size = GridSize::new(100, 30);
         opts.size = size;
-        let pane = Pane::spawn(opts, move || {
-            let _ = tx.try_send(());
-        })
-        .expect("no se pudo abrir el shell");
+        let notify = |tx: smol::channel::Sender<()>| {
+            move || {
+                let _ = tx.try_send(());
+            }
+        };
+        // Si el shell guardado ya no existe, se abre el predeterminado en vez de fallar.
+        let pane = Pane::spawn(opts, notify(tx.clone()))
+            .or_else(|_| Pane::spawn(PaneOptions::default_shell(size), notify(tx)))
+            .expect("no se pudo abrir el shell");
 
         // El hilo del PTY avisa por el canal; aquí se redibuja en el hilo de la UI.
         let pump = cx.spawn(async move |this, cx| {
@@ -87,6 +97,8 @@ impl TerminalView {
             bounds: Rc::new(Cell::new(Bounds::default())),
             last_size: Rc::new(Cell::new(size)),
             selecting: false,
+            mouse_button: None,
+            mouse_cell: None,
             title: None,
             exited: false,
             _pump: pump,
@@ -269,43 +281,113 @@ impl TerminalView {
         cx.stop_propagation();
     }
 
+    /// Modo de mouse del programa, si los eventos deben ir a él. Shift fuerza el comportamiento de
+    /// Kuntur (seleccionar, copiar/pegar, desplazar el historial).
+    fn mouse_reporting(&self, shift: bool) -> Option<MouseMode> {
+        let mode = self.pane.with_emulator(|e| e.mouse_mode());
+        (mode.report != MouseReporting::Off && !shift).then_some(mode)
+    }
+
+    fn send_mouse(&self, button: MouseButtonKind, action: MouseAction, cell: (usize, usize), m: Modifiers, sgr: bool) {
+        let report = MouseReport {
+            button,
+            action,
+            col: cell.0,
+            row: cell.1,
+            // Shift no se informa: en Kuntur significa "seleccionar en vez de enviar".
+            mods: Mods {
+                ctrl: m.control,
+                alt: m.alt,
+                shift: false,
+            },
+        };
+        if let Some(bytes) = encode_mouse(&report, sgr) {
+            let _ = self.pane.write(&bytes);
+        }
+    }
+
     fn on_mouse_down(&mut self, ev: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         window.focus(&self.focus, cx);
         let m = self.metrics(window);
         let (col, row, side) = self.cell_at(ev.position, m);
-        let kind = match (ev.click_count, ev.modifiers.alt) {
-            (_, true) => SelectionKind::Block,
-            (2, _) => SelectionKind::Word,
-            (n, _) if n >= 3 => SelectionKind::Line,
-            _ => SelectionKind::Simple,
-        };
-        self.pane.with_emulator(|e| e.start_selection(kind, col, row, side));
-        self.selecting = true;
-        cx.notify();
+
+        if let Some(mode) = self.mouse_reporting(ev.modifiers.shift) {
+            let button = match ev.button {
+                MouseButton::Left => MouseButtonKind::Left,
+                MouseButton::Middle => MouseButtonKind::Middle,
+                MouseButton::Right => MouseButtonKind::Right,
+                _ => return,
+            };
+            self.pane.with_emulator(|e| e.clear_selection());
+            self.mouse_button = Some(button);
+            self.mouse_cell = Some((col, row));
+            self.send_mouse(button, MouseAction::Press, (col, row), ev.modifiers, mode.sgr);
+            cx.notify();
+            return;
+        }
+
+        match ev.button {
+            MouseButton::Left => {
+                let kind = match (ev.click_count, ev.modifiers.alt) {
+                    (_, true) => SelectionKind::Block,
+                    (2, _) => SelectionKind::Word,
+                    (n, _) if n >= 3 => SelectionKind::Line,
+                    _ => SelectionKind::Simple,
+                };
+                self.pane.with_emulator(|e| e.start_selection(kind, col, row, side));
+                self.selecting = true;
+                cx.notify();
+            }
+            // Clic derecho: copia si hay selección; si no, pega (igual que Windows Terminal).
+            MouseButton::Right if !self.copy_selection(cx) => self.paste(cx),
+            _ => {}
+        }
     }
 
     fn on_mouse_move(&mut self, ev: &MouseMoveEvent, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.selecting || ev.pressed_button != Some(MouseButton::Left) {
-            return;
-        }
         let m = self.metrics(window);
         let (col, row, side) = self.cell_at(ev.position, m);
-        self.pane.with_emulator(|e| e.update_selection(col, row, side));
-        cx.notify();
-    }
 
-    fn on_mouse_up(&mut self, _ev: &MouseUpEvent, _window: &mut Window, _cx: &mut Context<Self>) {
-        self.selecting = false;
-        // Un clic sin arrastre no deja selección vacía.
-        if self.pane.with_emulator(|e| e.selection_text().is_none()) {
-            self.pane.with_emulator(|e| e.clear_selection());
+        if self.selecting {
+            if ev.pressed_button == Some(MouseButton::Left) {
+                self.pane.with_emulator(|e| e.update_selection(col, row, side));
+                cx.notify();
+            }
+            return;
+        }
+
+        // Arrastre (1002) o cualquier movimiento (1003): solo al cambiar de celda.
+        let mode = self.pane.with_emulator(|e| e.mouse_mode());
+        let send = match mode.report {
+            MouseReporting::Motion => true,
+            MouseReporting::Drag => self.mouse_button.is_some(),
+            MouseReporting::Click | MouseReporting::Off => false,
+        };
+        if send && self.mouse_cell != Some((col, row)) {
+            self.mouse_cell = Some((col, row));
+            let button = self.mouse_button.unwrap_or(MouseButtonKind::None);
+            self.send_mouse(button, MouseAction::Move, (col, row), ev.modifiers, mode.sgr);
         }
     }
 
-    /// Clic derecho: copia si hay selección; si no, pega (igual que Windows Terminal).
-    fn on_right_click(&mut self, _ev: &MouseDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
-        if !self.copy_selection(cx) {
-            self.paste(cx);
+    fn on_mouse_up(&mut self, ev: &MouseUpEvent, window: &mut Window, _cx: &mut Context<Self>) {
+        // El programa recibió el clic: recibe también el soltar (aunque sea fuera del área).
+        if let Some(button) = self.mouse_button.take() {
+            let mode = self.pane.with_emulator(|e| e.mouse_mode());
+            if mode.report != MouseReporting::Off {
+                let m = self.metrics(window);
+                let (col, row, _) = self.cell_at(ev.position, m);
+                self.send_mouse(button, MouseAction::Release, (col, row), ev.modifiers, mode.sgr);
+            }
+            self.mouse_cell = None;
+            return;
+        }
+        if ev.button == MouseButton::Left && self.selecting {
+            self.selecting = false;
+            // Un clic sin arrastre no deja selección vacía.
+            if self.pane.with_emulator(|e| e.selection_text().is_none()) {
+                self.pane.with_emulator(|e| e.clear_selection());
+            }
         }
     }
 
@@ -313,13 +395,25 @@ impl TerminalView {
         let m = self.metrics(window);
         let dy = f32::from(ev.delta.pixel_delta(m.line_h).y);
         let lines = (dy / f32::from(m.line_h)).round() as i32;
-        if lines != 0 {
-            self.pane.with_emulator(|e| e.scroll(lines));
-            cx.notify();
+        if lines == 0 {
+            return;
         }
+        if let Some(mode) = self.mouse_reporting(ev.modifiers.shift) {
+            let (col, row, _) = self.cell_at(ev.position, m);
+            let button = if lines > 0 {
+                MouseButtonKind::WheelUp
+            } else {
+                MouseButtonKind::WheelDown
+            };
+            for _ in 0..lines.unsigned_abs().min(10) {
+                self.send_mouse(button, MouseAction::Press, (col, row), ev.modifiers, mode.sgr);
+            }
+            return;
+        }
+        self.pane.with_emulator(|e| e.scroll(lines));
+        cx.notify();
     }
 }
-
 impl Focusable for TerminalView {
     fn focus_handle(&self, _cx: &App) -> FocusHandle {
         self.focus.clone()
@@ -349,10 +443,13 @@ impl Render for TerminalView {
             .pb(px(4.))
             .track_focus(&self.focus)
             .on_key_down(cx.listener(Self::on_key))
-            .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
+            .on_any_mouse_down(cx.listener(Self::on_mouse_down))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
-            .on_mouse_down(MouseButton::Right, cx.listener(Self::on_right_click))
+            .on_mouse_up(MouseButton::Middle, cx.listener(Self::on_mouse_up))
+            .on_mouse_up(MouseButton::Right, cx.listener(Self::on_mouse_up))
+            // Soltar fuera del área también termina la selección o el arrastre del programa.
+            .on_mouse_up_out(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_scroll(cx.listener(Self::on_wheel))
             .child(
                 canvas(

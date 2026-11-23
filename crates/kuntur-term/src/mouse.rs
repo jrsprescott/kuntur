@@ -7,6 +7,8 @@ pub enum MouseButtonKind {
     Right,
     WheelUp,
     WheelDown,
+    /// Movimiento sin botón apretado (modo 1003).
+    None,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -49,6 +51,7 @@ pub fn encode_mouse(ev: &MouseReport, sgr: bool) -> Option<Vec<u8>> {
         MouseButtonKind::Right => 2,
         MouseButtonKind::WheelUp => 64,
         MouseButtonKind::WheelDown => 65,
+        MouseButtonKind::None => 3,
     };
     if ev.action == MouseAction::Move {
         code += 32;
@@ -128,6 +131,19 @@ mod tests {
             shift: true,
         };
         assert_eq!(encode_mouse(&e, true), Some(b"\x1b[<20;1;1M".to_vec()));
+    }
+
+    #[test]
+    fn movimiento_sin_boton() {
+        // Modo 1003: mover el mouse sin botones se informa como "botón 3" + 32.
+        assert_eq!(
+            encode_mouse(&ev(MouseButtonKind::None, MouseAction::Move, 4, 2), true),
+            Some(b"\x1b[<35;5;3M".to_vec())
+        );
+        assert_eq!(
+            encode_mouse(&ev(MouseButtonKind::None, MouseAction::Move, 0, 0), false),
+            Some(vec![0x1b, b'[', b'M', 32 + 35, 33, 33])
+        );
     }
 
     #[test]
