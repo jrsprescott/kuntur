@@ -7,6 +7,7 @@ use alacritty_terminal::selection::{Selection, SelectionType};
 use alacritty_terminal::term::{Config, Osc52, Term, TermMode, viewport_to_point};
 use alacritty_terminal::vte::ansi::{Processor, StdSyncHandler};
 
+use crate::mouse::{MouseMode, MouseReporting};
 use crate::size::GridSize;
 
 /// Recibe los eventos que emite el emulador (respuestas a la terminal, portapapeles, título…).
@@ -79,6 +80,24 @@ impl Emulator {
 
     pub fn mode(&self) -> TermMode {
         *self.term.mode()
+    }
+
+    /// Modo de mouse que pidió el programa (nvim, htop, opencode…).
+    pub fn mouse_mode(&self) -> MouseMode {
+        let m = self.mode();
+        let report = if m.contains(TermMode::MOUSE_MOTION) {
+            MouseReporting::Motion
+        } else if m.contains(TermMode::MOUSE_DRAG) {
+            MouseReporting::Drag
+        } else if m.contains(TermMode::MOUSE_REPORT_CLICK) {
+            MouseReporting::Click
+        } else {
+            MouseReporting::Off
+        };
+        MouseMode {
+            report,
+            sgr: m.contains(TermMode::SGR_MOUSE),
+        }
     }
 
     /// Texto de una fila visible (sin scroll), sin espacios al final.
@@ -221,5 +240,25 @@ mod tests {
             })
             .collect();
         assert_eq!(copiado, vec!["hola".to_string()]);
+    }
+
+    #[test]
+    fn detecta_modo_de_mouse() {
+        let mut emu = Emulator::new(GridSize::new(10, 2));
+        assert_eq!(
+            emu.mouse_mode(),
+            MouseMode {
+                report: MouseReporting::Off,
+                sgr: false
+            }
+        );
+        emu.feed(b"\x1b[?1002h\x1b[?1006h");
+        assert_eq!(
+            emu.mouse_mode(),
+            MouseMode {
+                report: MouseReporting::Drag,
+                sgr: true
+            }
+        );
     }
 }
