@@ -34,6 +34,8 @@
   .\scripts\smoke.ps1 -Sessions 1 -Commands 'cls' -Type 'cd C:\Win' -Out target\smoke-ghost.png
 .EXAMPLE
   .\scripts\smoke.ps1 -Sessions 1 -Commands 'cls' -History 'git status --short','git log --oneline -5' -Type 'git l' -Out target\smoke-ghost-hist.png
+.EXAMPLE
+  .\scripts\smoke.ps1 -Sessions 1 -Connections remote -Files remote -Out target\smoke-archivos-remotos.png
 #>
 param(
     [string[]]$Commands = @('Write-Host rojo -ForegroundColor Red; Write-Host verde -ForegroundColor Green', 'Get-ChildItem | Select-Object -First 5'),
@@ -95,6 +97,9 @@ param(
     [string]$Type = '',
     # Historial SINTÉTICO del autocompletado (en memoria; nunca se lee ni escribe el historial real).
     [string[]]$History = @(),
+    # Panel "Archivos" (F7). 'remote' (con -Connections remote) muestra un árbol remoto SINTÉTICO en
+    # memoria y una cola de transferencias sintética; nunca un servidor real. 'local' = el árbol local.
+    [ValidateSet('', 'local', 'remote')][string]$Files = '',
     # Pantalla donde se abre la ventana, contando de izquierda a derecha desde 0. Por defecto, la de
     # más a la derecha que NO sea la principal (en la PC del usuario: el monitor Teros), para no
     # interrumpir lo que pasa en la principal. La ventana se abre sin tomar el foco.
@@ -187,6 +192,7 @@ if ($PreviewDiff) { $smokeEnv.KUNTUR_SMOKE_PREVIEW_DIFF = '1' }
 if ($Links) { $smokeEnv.KUNTUR_SMOKE_LINKS = '1' }
 if ($Type) { $smokeEnv.KUNTUR_SMOKE_TYPE = $Type }
 if ($History.Count -gt 0) { $smokeEnv.KUNTUR_SMOKE_HISTORY = ($History -join '\n') }
+if ($Files) { $smokeEnv.KUNTUR_SMOKE_FILES = $Files }
 foreach ($k in $smokeEnv.Keys) { Set-Item "Env:$k" $smokeEnv[$k] }
 $p = Start-Process $exe -PassThru
 foreach ($k in $smokeEnv.Keys) { Remove-Item "Env:$k" }

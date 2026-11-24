@@ -60,6 +60,18 @@ impl Connection {
         self.handle.is_closed()
     }
 
+    /// ¿Es la misma conexión (no una reconexión)?
+    pub fn same(&self, other: &Connection) -> bool {
+        Arc::ptr_eq(&self.handle, &other.handle)
+    }
+
+    /// Canal `subsystem sftp` sobre esta conexión (F7).
+    pub async fn open_sftp(&self, label: String) -> anyhow::Result<crate::sftp::SftpFs> {
+        let channel = self.handle.channel_open_session().await?;
+        channel.request_subsystem(true, "sftp").await?;
+        crate::sftp::SftpFs::open(channel.into_stream(), label).await
+    }
+
     /// Canal con PTY `xterm-256color`: el shell de inicio de sesión o, con `command`, ese comando.
     pub async fn open_terminal(
         &self,

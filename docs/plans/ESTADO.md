@@ -13,7 +13,19 @@
 - Planes: `docs/plans/README.md` (hoja de ruta), `docs/plans/2026-11-23-f3-v5-agentes-y-uso.md` y `docs/plans/2026-11-23-f4-terminal-acoplada.md`.
 - Diseño de referencia: `docs/PLAN.md` ("Cambios de la v4") y la simulación `docs/simulacion/index.html`.
 - **Especificación del usuario** (adoptada el 2026-11-23): `docs/ESPECIFICACION.md`, con las decisiones tomadas (se mantiene GPUI, costo estimado, spike de `wry`…). La hoja de ruta pasó a 11 fases (nueva F8 · Vista previa y diff).
-- **Decisión pendiente:** panel izquierdo con agentes arriba + árbol abajo a la vez (especificación §3) o el botón "Archivos" que alterna (actual). Se aplica en F7.
+- Rama **`fase/f7-archivos`** (sale de `fase/f6-ssh`): Fase 7 · Archivos remotos y transferencias **terminada** (`docs/plans/f7-resultados.md`); faltan las pruebas manuales ⏳ contra un servidor real.
+- **Decisión pendiente (sigue abierta tras F7):** panel izquierdo con agentes arriba + árbol abajo a la vez (especificación §3) o el botón "Archivos" que alterna (actual, se mantuvo en F7 sin cambios).
+
+## Fase 7: archivos remotos y transferencias
+| Parte | Estado |
+|---|---|
+| `kuntur-files`: trait `FileSystem` (`LocalFs`, `MemoryFs`), rutas POSIX/Windows, nombres de conflicto, carpeta del agente, cola de transferencias y trabajador | ✅ con pruebas |
+| `kuntur-ssh`: `SftpFs` (`russh-sftp` 4) sobre la misma conexión (`RemoteSession::sftp`) | ✅ integración con el servidor `russh` en proceso + subsistema SFTP sobre una carpeta temporal |
+| Panel "Archivos" local o remoto según la pestaña (nunca mezclados), etiqueta y ruta visibles, soltar desde el Explorador, clic derecho (Descargar…, Copiar ruta, Borrar…), cola con progreso/cancelar/conflictos, zona "para el agente" | ✅ capturas con datos sintéticos |
+| WSL `\\wsl$\…` como local | ✅; traducir el `cwd` Linux de `wsl.exe` queda ⏳ |
+| Servidor real, archivos grandes, arrastre real desde el Explorador | ⏳ lista manual en `f7-resultados.md` |
+
+Pruebas de humo: `.\scripts\smoke.ps1 -Sessions 1 -Connections remote -Files remote` (árbol y cola **sintéticos**, nunca un servidor real).
 
 ## Fase 5b: agentes exactos
 Pruebas de humo: `.\scripts\smoke.ps1 -Sessions 3 -Panel full -AgentEvents scripts\smoke-agentes.jsonl` (eventos **sintéticos** por el named pipe real: subagentes, Permitir/Rechazar, comando sugerido, anillo de Claude), `-SendSuggestion 3` ("Enviar a terminal" a la acoplada, sin ejecutar) y `-HooksInstall` (instalador contra `target\smoke-claude-settings.json`; nunca `~/.claude`). `kuntur-hook.exe` se compila junto a `kuntur.exe` (`cargo build -p kuntur-app -p kuntur-hook --release`); los ganchos instalados apuntan al que está junto a `kuntur.exe`.

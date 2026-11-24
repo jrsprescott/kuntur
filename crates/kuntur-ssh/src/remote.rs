@@ -17,6 +17,7 @@ use crate::auth::SshTarget;
 use crate::client::{Connection, SshContext, connect, runtime};
 use crate::commands::shell_in_dir;
 use crate::console::{ChannelCmd, Console, DIM, Input, OutputReader, RED, RESET, Routed};
+use crate::sftp::{SftpFs, SftpSlot, block};
 
 /// Estado de una terminal remota (para la franja "Desconectado · Reconectar" de la app).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -34,6 +35,7 @@ pub struct RemoteSession {
     ctx: SshContext,
     conn: tokio::sync::Mutex<Option<Connection>>,
     agents: Mutex<Option<Vec<String>>>,
+    sftp: SftpSlot,
 }
 
 impl RemoteSession {
@@ -43,6 +45,7 @@ impl RemoteSession {
             ctx,
             conn: tokio::sync::Mutex::new(None),
             agents: Mutex::new(None),
+            sftp: SftpSlot::default(),
         })
     }
 
@@ -61,6 +64,28 @@ impl RemoteSession {
             .try_lock()
             .map(|c| c.as_ref().is_some_and(|c| !c.is_closed()))
             .unwrap_or(false)
+    }
+
+    /// Árbol remoto por SFTP sobre la conexión viva (F7). **Bloquea**: llamarlo fuera del hilo de
+    /// la UI. No conecta ni pregunta nada: sin conexión (o mientras se conecta) devuelve un error.
+    /// Si la conexión se rehízo, abre un canal SFTP nuevo.
+    pub fn sftp(&self) -> anyhow::Result<Arc<SftpFs>> {
+        let conn = match self.conn.try_lock() {
+            Ok(slot) => slot.as_ref().filter(|c| !c.is_closed()).cloned(),
+            Err(_) => anyhow::bail!("conectando…"),
+        };
+        let Some(conn) = conn else {
+            anyhow::bail!("sin conexión con el servidor");
+        };
+        let mut cached = self.sftp.0.lock().unwrap();
+        if let Some((c, fs)) = cached.as_ref()
+            && c.same(&conn)
+        {
+            return Ok(fs.clone());
+        }
+        let fs = Arc::new(block(conn.open_sftp(self.target.destination()))?);
+        *cached = Some((conn, fs.clone()));
+        Ok(fs)
     }
 
     /// Terminal nueva sobre esta conexión (conecta si hace falta; si ya está conectada, abre otro

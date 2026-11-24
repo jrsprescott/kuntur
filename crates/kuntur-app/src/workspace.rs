@@ -12,6 +12,7 @@ mod files_panel;
 mod preview_view;
 mod side_panel;
 mod title_bar;
+mod transfers_view;
 mod usage_view;
 
 use std::collections::{HashMap, HashSet};
@@ -320,6 +321,9 @@ impl Workspace {
 
         // Prueba de humo de la vista previa (F8): archivos abiertos y enlaces subrayados.
         this.smoke_preview(Duration::from_millis(2_500 + 600 * smoke_commands + 1_500), window, cx);
+
+        // Prueba de humo del árbol remoto y la cola de transferencias (datos sintéticos, F7).
+        this.smoke_files(cx);
         this
     }
 
