@@ -101,6 +101,19 @@ texts! {
     SidePanelFull => "Completo", "Full";
     SidePanelIcons => "Íconos", "Icons";
     Marquee => "Desplazar el título de la pestaña", "Scroll the tab title";
+    // ── Barra de título ──
+    TipPanelFull => "Panel completo (Ctrl+Shift+B)", "Full panel (Ctrl+Shift+B)";
+    TipPanelCompact => "Panel compacto (Ctrl+Shift+B)", "Compact panel (Ctrl+Shift+B)";
+    TipNewSession => "Nueva sesión (Ctrl+Shift+T)", "New session (Ctrl+Shift+T)";
+    TipCloseSession => "Cerrar sesión (Ctrl+Shift+W)", "Close session (Ctrl+Shift+W)";
+    TipDock => "Terminal acoplada (Ctrl+`)", "Docked terminal (Ctrl+`)";
+    TipUsage => "Uso de agentes (Ctrl+Shift+U)", "Agent usage (Ctrl+Shift+U)";
+    TipAudit => "Auditoría de comandos (Ctrl+Shift+A)", "Command audit (Ctrl+Shift+A)";
+    TipConnections => "Conexiones SSH (Ctrl+Shift+O)", "SSH connections (Ctrl+Shift+O)";
+    TipMcp => "MCP de la sesión (Ctrl+Shift+M)", "Session MCP (Ctrl+Shift+M)";
+    TipActions => "Acciones (Ctrl+Shift+P)", "Actions (Ctrl+Shift+P)";
+    TipOneAlert => "1 alerta sin ver", "1 unseen alert";
+    TipAlerts => "alertas sin ver", "unseen alerts";
     MarqueeHint => "En la pestaña activa, si no entra; se detiene con el mouse", "On the active tab, when it doesn't fit; hovering stops it";
     Language => "Idioma", "Language";
     LanguageAuto => "Automático", "Automatic";

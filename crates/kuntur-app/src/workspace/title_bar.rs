@@ -110,8 +110,8 @@ impl Workspace {
     pub(super) fn render_title_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let c = &self.colors;
         let panel_tip = match self.settings.sidebar {
-            SidebarMode::Icons => "Panel completo (Ctrl+Shift+B)",
-            SidebarMode::Full => "Panel compacto (Ctrl+Shift+B)",
+            SidebarMode::Icons => crate::i18n::t(crate::i18n::T::TipPanelFull),
+            SidebarMode::Full => crate::i18n::t(crate::i18n::T::TipPanelCompact),
         };
         let active = self.sessions.active_id();
         let tabs: Vec<AnyElement> = self
@@ -154,8 +154,13 @@ impl Workspace {
                     )
                     .child(
                         div().flex_shrink_0().ml(px(4.)).child(
-                            icon_button("new-session", IconName::Plus, c, "Nueva sesión (Ctrl+Shift+T)")
-                                .on_click(cx.listener(|this, _, window, cx| this.new_session(window, cx))),
+                            icon_button(
+                                "new-session",
+                                IconName::Plus,
+                                c,
+                                crate::i18n::t(crate::i18n::T::TipNewSession),
+                            )
+                            .on_click(cx.listener(|this, _, window, cx| this.new_session(window, cx))),
                         ),
                     )
                     // Espacio libre: arrastra la ventana.
@@ -166,33 +171,53 @@ impl Workspace {
                             .gap(px(2.))
                             .pr(px(4.))
                             .child(
-                                icon_button("dock", IconName::PanelBottom, c, "Terminal acoplada (Ctrl+`)")
-                                    .when(self.dock_open() && !self.usage.open && !self.audit.open, |this| {
-                                        this.bg(c.surface_2).text_color(c.text)
-                                    })
-                                    .on_click(cx.listener(|this, _, window, cx| this.toggle_dock(window, cx))),
+                                icon_button(
+                                    "dock",
+                                    IconName::PanelBottom,
+                                    c,
+                                    crate::i18n::t(crate::i18n::T::TipDock),
+                                )
+                                .when(self.dock_open() && !self.usage.open && !self.audit.open, |this| {
+                                    this.bg(c.surface_2).text_color(c.text)
+                                })
+                                .on_click(cx.listener(|this, _, window, cx| this.toggle_dock(window, cx))),
                             )
                             .child(
                                 icon_button("theme", IconName::Palette, c, crate::i18n::t(crate::i18n::T::ThemeTip))
                                     .on_click(cx.listener(|this, _, window, cx| this.toggle_theme_menu(window, cx))),
                             )
                             .child(
-                                icon_button("usage", IconName::ChartColumn, c, "Uso de agentes (Ctrl+Shift+U)")
-                                    .when(self.usage.open, |this| this.bg(c.surface_2).text_color(c.text))
-                                    .on_click(cx.listener(|this, _, window, cx| this.toggle_usage(window, cx))),
+                                icon_button(
+                                    "usage",
+                                    IconName::ChartColumn,
+                                    c,
+                                    crate::i18n::t(crate::i18n::T::TipUsage),
+                                )
+                                .when(self.usage.open, |this| this.bg(c.surface_2).text_color(c.text))
+                                .on_click(cx.listener(|this, _, window, cx| this.toggle_usage(window, cx))),
                             )
                             .child(
-                                icon_button("audit", IconName::ScrollText, c, "Auditoría de comandos (Ctrl+Shift+A)")
-                                    .when(self.audit.open, |this| this.bg(c.surface_2).text_color(c.text))
-                                    .on_click(cx.listener(|this, _, window, cx| this.toggle_audit(window, cx))),
+                                icon_button(
+                                    "audit",
+                                    IconName::ScrollText,
+                                    c,
+                                    crate::i18n::t(crate::i18n::T::TipAudit),
+                                )
+                                .when(self.audit.open, |this| this.bg(c.surface_2).text_color(c.text))
+                                .on_click(cx.listener(|this, _, window, cx| this.toggle_audit(window, cx))),
                             )
                             .child(
-                                icon_button("connections", IconName::Server, c, "Conexiones SSH (Ctrl+Shift+O)")
-                                    .when(self.connections.open, |this| this.bg(c.surface_2).text_color(c.text))
-                                    .on_click(cx.listener(|this, _, window, cx| this.toggle_connections(window, cx))),
+                                icon_button(
+                                    "connections",
+                                    IconName::Server,
+                                    c,
+                                    crate::i18n::t(crate::i18n::T::TipConnections),
+                                )
+                                .when(self.connections.open, |this| this.bg(c.surface_2).text_color(c.text))
+                                .on_click(cx.listener(|this, _, window, cx| this.toggle_connections(window, cx))),
                             )
                             .child(
-                                icon_button("mcp", IconName::Plug, c, "MCP de la sesión (Ctrl+Shift+M)")
+                                icon_button("mcp", IconName::Plug, c, crate::i18n::t(crate::i18n::T::TipMcp))
                                     .when(self.mcp.open, |this| this.bg(c.surface_2).text_color(c.text))
                                     .on_click(cx.listener(|this, _, window, cx| this.toggle_mcp(window, cx))),
                             )
@@ -207,8 +232,13 @@ impl Workspace {
                                 .on_click(cx.listener(|this, _, window, cx| this.toggle_settings(None, window, cx))),
                             )
                             .child(
-                                icon_button("command", IconName::Command, c, "Acciones (Ctrl+Shift+P)")
-                                    .on_click(cx.listener(|this, _, window, cx| this.toggle_palette(window, cx))),
+                                icon_button(
+                                    "command",
+                                    IconName::Command,
+                                    c,
+                                    crate::i18n::t(crate::i18n::T::TipActions),
+                                )
+                                .on_click(cx.listener(|this, _, window, cx| this.toggle_palette(window, cx))),
                             ),
                     ),
             )
@@ -236,8 +266,8 @@ impl Workspace {
             parts.extend(title.filter(|t| t != name));
             match alerts {
                 0 => {}
-                1 => parts.push("1 alerta sin ver".into()),
-                n => parts.push(format!("{n} alertas sin ver")),
+                1 => parts.push(crate::i18n::t(crate::i18n::T::TipOneAlert).into()),
+                n => parts.push(format!("{n} {}", crate::i18n::t(crate::i18n::T::TipAlerts))),
             }
             if index < 9 {
                 parts.push(format!("Ctrl+{}", index + 1));
@@ -310,7 +340,9 @@ impl Workspace {
                     .when(!is_active, |this| {
                         this.opacity(0.).group_hover(group, |s| s.opacity(1.))
                     })
-                    .tooltip(|window, cx| Tooltip::new("Cerrar sesión (Ctrl+Shift+W)").build(window, cx))
+                    .tooltip(|window, cx| {
+                        Tooltip::new(crate::i18n::t(crate::i18n::T::TipCloseSession)).build(window, cx)
+                    })
                     .on_click(cx.listener(move |this, _, window, cx| {
                         cx.stop_propagation();
                         this.close_session(id, window, cx);

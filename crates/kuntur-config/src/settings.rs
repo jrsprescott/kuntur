@@ -497,9 +497,13 @@ letra = \"M\"
         let path = tmp("nombre-manual");
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         // Archivo viejo: marquesina encendida y nombres sin la marca.
-        std::fs::write(&path, "[[sessions]]
+        std::fs::write(
+            &path,
+            "[[sessions]]
 name = \"web\"
-").unwrap();
+",
+        )
+        .unwrap();
         let s = Settings::load(&path);
         assert!(s.marquesina);
         assert!(!s.sessions[0].manual_name);
