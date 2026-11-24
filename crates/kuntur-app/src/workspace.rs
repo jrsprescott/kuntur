@@ -9,6 +9,7 @@ mod audit_view;
 mod connections_view;
 mod dock_view;
 mod files_panel;
+mod image_paste_view;
 mod mcp_view;
 mod preview_view;
 mod settings_view;
@@ -160,6 +161,7 @@ fn catalog_from(settings: &Settings) -> Catalog {
             args: a.args.clone(),
             letter: a.letter,
             color: a.color.clone(),
+            image_paste: a.image_paste.clone(),
         })
         .collect();
     Catalog::with_extra(&extra)
@@ -422,6 +424,8 @@ impl Workspace {
         }
         self.check_alerts(cx);
         self.sync_files(false, cx);
+        // Ajustes v0.2: barra del agente (imágenes) de cada terminal.
+        self.sync_image_bars(cx);
         let now = self.visible_snapshot(cx);
         if self.visible.changed(now) {
             cx.notify();

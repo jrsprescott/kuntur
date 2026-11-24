@@ -57,6 +57,8 @@ impl Workspace {
         self.register_terminal(&view, token);
         // F8: rutas y URLs de la salida (Ctrl+clic, clic derecho).
         self.watch_links(&view, window, cx);
+        // Ajustes v0.2: imágenes como Warp (Ctrl+V, arrastrar, "Imagen…").
+        self.watch_paste(&view, window, cx);
         view
     }
 

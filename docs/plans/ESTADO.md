@@ -20,6 +20,16 @@
 - Rama **`fase/f7-archivos`** (sale de `fase/f6-ssh`): Fase 7 · Archivos remotos y transferencias **terminada** (`docs/plans/f7-resultados.md`); faltan las pruebas manuales ⏳ contra un servidor real.
 - **Decisión pendiente (sigue abierta tras F7):** panel izquierdo con agentes arriba + árbol abajo a la vez (especificación §3) o el botón "Archivos" que alterna (actual, se mantuvo en F7 sin cambios).
 
+## Ajustes v0.2 · paso 4: imágenes como Warp (rama `ajustes/v0.2-imagenes`)
+Plan: `docs/plans/2026-11-24-ajustes-v0.2.md` (sección 1, con su "Estado").
+| Parte | Estado |
+|---|---|
+| `image_paste.rs` (entrega según agente / SSH, comillas, nombre `captura-AAAAMMDD-HHMMSS.png`, PNG ≤ 2000 px, limpieza > 7 días), `clipboard_image.rs` (`CF_DIB`), `ImagePaste`/`PasteKey` en el catálogo y `pegar_imagen` en `[[agentes]]` | ✅ con pruebas |
+| Ctrl+V sin texto, arrastrar archivos, "Imagen…" → Claude Code con su tecla (Alt+V en Windows) / ruta local / subida SFTP | ✅ compila; sin probar con `claude` real |
+| Barra del agente con miniaturas `#n`, "Imagen…", ×, aviso; clic → vista previa | ✅ compila; sin captura (un solo monitor) |
+| Humo `-PasteImage` (imagen sintética, sin portapapeles) | ✅ agregado, no ejecutado |
+| Tab/Backspace/Esc en la barra, agentes remotos en la barra | ⏳ ver el plan |
+
 ## Ajustes v0.2 · paso 2: árbol de archivos y menú tipo VS Code (rama `ajustes/v0.2-arbol`)
 Plan: `docs/plans/2026-11-24-ajustes-v0.2.md` (secciones 5 y 6).
 | Parte | Estado |

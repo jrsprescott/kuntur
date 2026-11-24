@@ -108,6 +108,8 @@ impl Workspace {
             v.set_remote();
             v
         });
+        // Ajustes v0.2: imágenes como Warp (en remoto se suben por SFTP).
+        self.watch_paste(&view, window, cx);
         (view, term)
     }
 
