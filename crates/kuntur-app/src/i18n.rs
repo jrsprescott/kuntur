@@ -202,6 +202,20 @@ texts! {
     NoticeDeleted => "Se eliminó", "Deleted";
     PickDownloadHere => "Descargar aquí", "Download here";
     PickUploadHere => "Subir aquí", "Upload here";
+    // ── IA local (ajustes v0.2.1) ──
+    LocalAi => "IA local", "Local AI";
+    LocalServerOn => "servidor encendido", "server on";
+    LocalServerOff => "servidor apagado (clic para iniciarlo)", "server off (click to start it)";
+    LocalOpenCode => "OpenCode con este modelo", "OpenCode with this model";
+    LocalOpenCodeMissing => "Instala OpenCode para usar el modelo como agente", "Install OpenCode to use the model as an agent";
+    LocalChat => "Chat rápido", "Quick chat";
+    LocalStartServer => "Iniciar servidor", "Start server";
+    LocalStarting => "Iniciando el servidor local…", "Starting the local server…";
+    LocalStartFailed => "No se pudo iniciar el servidor local", "Could not start the local server";
+    LocalNoModels => "Sin modelos descargados", "No models downloaded";
+    LocalMore => "más", "more";
+    LocalLoaded => "cargado en memoria", "loaded in memory";
+    LocalRemoteTab => "La IA local corre en esta PC: usa una pestaña local", "Local AI runs on this PC: use a local tab";
     // ── Notificaciones ──
     ToastWaiting => "espera tu respuesta", "is waiting for your reply";
     ToastPermission => "pide permiso", "asks for permission";

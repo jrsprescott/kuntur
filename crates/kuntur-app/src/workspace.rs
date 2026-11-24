@@ -10,6 +10,7 @@ mod connections_view;
 mod dock_view;
 mod files_panel;
 mod image_paste_view;
+mod local_ai_view;
 mod mcp_view;
 mod preview_view;
 mod settings_view;
@@ -48,6 +49,7 @@ use audit_view::AuditState;
 use connections_view::{ConnectionsState, RemoteTab};
 use dock_view::DockDrag;
 use files_panel::FilesState;
+use local_ai_view::LocalAiState;
 use mcp_view::McpState;
 use preview_view::PreviewState;
 use settings_view::SettingsPanel;
@@ -141,6 +143,8 @@ pub struct Workspace {
     preview: PreviewState,
     /// Gestor de MCP por sesión y comandos con atajo (F10).
     mcp: McpState,
+    /// IA local (ajustes v0.2.1): LM Studio, Ollama… y sus modelos.
+    local_ai: LocalAiState,
     home: Option<PathBuf>,
     /// F5b: estado exacto por hooks / OSC 7501, worktrees, instalador de ganchos.
     exact: ExactAgents,
@@ -221,6 +225,7 @@ impl Workspace {
             connections: ConnectionsState::default(),
             preview: PreviewState::default(),
             mcp: McpState::default(),
+            local_ai: LocalAiState::default(),
             home: home_dir(),
             exact: ExactAgents::default(),
             _monitor: Self::spawn_monitor(cx),
@@ -372,6 +377,8 @@ impl Workspace {
         this.start_mcp(window, cx);
         // Ajustes v0.2: panel de Configuración abierto para las capturas.
         this.smoke_settings(window, cx);
+        // Ajustes v0.2.1: IA local con datos sintéticos.
+        this.smoke_local_ai(cx);
         // Ajustes v0.2: buscar versiones nuevas (10 s después de abrir y cada 24 h).
         this.start_updates(cx);
         this
@@ -445,6 +452,7 @@ impl Workspace {
         self.poll_exact(cx);
         if let Some(slow) = slow {
             self.installed = slow.installed;
+            self.apply_local_ai(slow.local);
             self.codex_limits = slow.codex_limits;
         }
         self.check_alerts(cx);
@@ -485,6 +493,7 @@ impl Workspace {
             ram_mb: crate::idle::ram_mb(self.ram),
             installed: self.installed.clone(),
             codex_limits: self.codex_limits.clone(),
+            local: self.local_ai.providers.clone(),
             status,
             ..Default::default()
         }
@@ -1055,6 +1064,7 @@ impl Workspace {
             PaletteAction::Connections => self.open_connections(window, cx),
             PaletteAction::Mcp => self.open_mcp(window, cx),
             PaletteAction::Settings => self.open_settings(None, window, cx),
+            PaletteAction::LocalAiRefresh => self.refresh_local_ai(cx),
             PaletteAction::NewConnection => self.new_connection_form(window, cx),
             PaletteAction::Reconnect => self.reconnect_active(cx),
             PaletteAction::RenameSession => {}
@@ -1161,6 +1171,11 @@ impl Workspace {
         }
         if self.settings_panel.open {
             self.on_settings_key(ev, window, cx);
+            cx.stop_propagation();
+            return;
+        }
+        // Ajustes v0.2.1: Esc cierra el menú de un modelo local.
+        if self.local_menu_key(ev, cx) {
             cx.stop_propagation();
             return;
         }
@@ -1546,6 +1561,7 @@ impl Render for Workspace {
         let settings = self.settings_panel.open.then(|| self.render_settings(cx));
         let file_menu = self.render_file_menu(cx);
         let link_menu = self.render_link_menu(cx);
+        let local_menu = self.render_local_menu(cx);
         self.sync_web_visibility();
         v_flex()
             .relative()
@@ -1592,5 +1608,6 @@ impl Render for Workspace {
             .children(settings)
             .children(file_menu)
             .children(link_menu)
+            .children(local_menu)
     }
 }

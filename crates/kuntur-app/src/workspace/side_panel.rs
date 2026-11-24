@@ -462,6 +462,8 @@ impl Workspace {
                     )
                 })
             })
+            // Ajustes v0.2.1: IA local (LM Studio, Ollama…), ver `local_ai_view.rs`.
+            .children(self.render_local_ai(cx))
             .child(
                 h_flex()
                     .id("files-toggle")
@@ -630,6 +632,13 @@ impl Workspace {
             )
             .child(div().w(px(24.)).h(px(1.)).my(px(4.)).bg(c.border))
             .child(v_flex().items_center().gap(px(4.)).children(tiles))
+            // Ajustes v0.2.1: proveedores de IA local.
+            .child(
+                v_flex()
+                    .items_center()
+                    .gap(px(4.))
+                    .children(self.render_local_ai_compact(cx)),
+            )
             .child(
                 icon_button("compact-files", IconName::Folder, c, "Archivos (Ctrl+Shift+E)")
                     .size(px(34.))

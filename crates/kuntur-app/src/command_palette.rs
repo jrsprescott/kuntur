@@ -48,6 +48,8 @@ pub enum PaletteAction {
     Mcp,
     /// Panel "Configuración" (ajustes v0.2).
     Settings,
+    /// Vuelve a leer la IA local (ajustes v0.2.1).
+    LocalAiRefresh,
 }
 
 #[derive(Clone, Debug)]
@@ -66,7 +68,7 @@ const fn item(action: PaletteAction, label: &'static str, shortcut: Option<&'sta
 }
 
 /// Las acciones fijas, en el orden en que se muestran (después van las de abrir cada agente instalado).
-pub static ITEMS: [PaletteItem; 30] = [
+pub static ITEMS: [PaletteItem; 31] = [
     item(PaletteAction::NewSession, "Nueva sesión", Some("Ctrl+Shift+T")),
     item(PaletteAction::Settings, "Configuración", Some("Ctrl+,")),
     item(PaletteAction::RenameSession, "Renombrar sesión", None),
@@ -94,6 +96,11 @@ pub static ITEMS: [PaletteItem; 30] = [
     item(PaletteAction::Audit, "Auditoría de comandos", Some("Ctrl+Shift+A")),
     item(PaletteAction::ExportAudit, "Auditoría: exportar CSV", None),
     item(PaletteAction::RefreshAgents, "Agentes: actualizar instalados", None),
+    item(
+        PaletteAction::LocalAiRefresh,
+        "IA local: actualizar (LM Studio, Ollama…)",
+        None,
+    ),
     item(
         PaletteAction::SendSelectionToDock,
         "Terminal: enviar selección a la acoplada",

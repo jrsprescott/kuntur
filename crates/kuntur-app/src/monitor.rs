@@ -150,12 +150,17 @@ pub fn codex_sessions_dir() -> Option<PathBuf> {
 pub struct SlowSample {
     pub installed: Vec<String>,
     pub codex_limits: Option<Limits>,
+    /// IA local (ajustes v0.2.1): proveedores instalados y sus modelos (solo `localhost` y disco).
+    pub local: Vec<kuntur_agents::ProviderStatus>,
 }
 
 pub fn slow_sample(catalog: &Catalog) -> SlowSample {
     SlowSample {
         installed: catalog.installed(),
         codex_limits: codex_sessions_dir().and_then(|d| kuntur_usage::codex::latest_limits(&d)),
+        local: home_dir()
+            .map(|h| kuntur_agents::local::detect_now(&h))
+            .unwrap_or_default(),
     }
 }
 
