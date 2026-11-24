@@ -587,6 +587,26 @@ impl Workspace {
         if let Some(id) = first {
             self.mcp_apply_profile_to(id, "godot");
         }
+        if mode == "linea" {
+            // Pega SIN Enter la línea de Claude Code con el MCP de la sesión: nunca se ejecuta.
+            if let Some(store) = &self.mcp.secrets {
+                let _ = store.set("base-datos/DB_PASSWORD", "valor-sintetico");
+            }
+            cx.spawn_in(window, async move |this, cx| {
+                cx.background_executor().timer(Duration::from_secs(4)).await;
+                let _ = this.update_in(cx, |w, _, cx| {
+                    let (Some(id), Some(def)) = (first, w.catalog.get("claude").cloned()) else {
+                        return;
+                    };
+                    let line = w.agent_launch_line(id, &def, ShellFlavor::PowerShell, cx);
+                    if let Some(view) = w.terminal(id, false) {
+                        view.read(cx).paste_text(line, Duration::ZERO);
+                    }
+                });
+            })
+            .detach();
+            return;
+        }
         self.open_mcp(window, cx);
         if mode == "probar" {
             self.probe_all(cx);

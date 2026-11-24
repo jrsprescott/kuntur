@@ -36,6 +36,10 @@
   .\scripts\smoke.ps1 -Sessions 1 -Commands 'cls' -History 'git status --short','git log --oneline -5' -Type 'git l' -Out target\smoke-ghost-hist.png
 .EXAMPLE
   .\scripts\smoke.ps1 -Sessions 1 -Connections remote -Files remote -Out target\smoke-archivos-remotos.png
+.EXAMPLE
+  .\scripts\smoke.ps1 -Sessions 2 -Mcp probar -Out target\smoke-mcp.png
+.EXAMPLE
+  .\scripts\smoke.ps1 -Sessions 1 -Mcp linea -Commands 'cls' -Out target\smoke-mcp-linea.png
 #>
 param(
     [string[]]$Commands = @('Write-Host rojo -ForegroundColor Red; Write-Host verde -ForegroundColor Green', 'Get-ChildItem | Select-Object -First 5'),
@@ -100,6 +104,11 @@ param(
     # Panel "Archivos" (F7). 'remote' (con -Connections remote) muestra un árbol remoto SINTÉTICO en
     # memoria y una cola de transferencias sintética; nunca un servidor real. 'local' = el árbol local.
     [ValidateSet('', 'local', 'remote')][string]$Files = '',
+    # Gestor de MCP (F10) con servidores SINTÉTICOS (el servidor falso kuntur-mcp-falso, uno que no
+    # existe y uno http a un puerto cerrado) y secretos en memoria: 'list' abre el panel, 'probar'
+    # además prueba todos (el falso deja una captura que se abre en la vista previa) y 'linea' pega
+    # SIN Enter la línea que se usaría para abrir Claude Code con el MCP de la sesión (nunca lo ejecuta).
+    [ValidateSet('', 'list', 'probar', 'linea')][string]$Mcp = '',
     # Pantalla donde se abre la ventana, contando de izquierda a derecha desde 0. Por defecto, la de
     # más a la derecha que NO sea la principal (en la PC del usuario: el monitor Teros), para no
     # interrumpir lo que pasa en la principal. La ventana se abre sin tomar el foco.
@@ -110,7 +119,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = Resolve-Path (Join-Path $PSScriptRoot '..')
 Push-Location $root
-try { cargo build -p kuntur-app -p kuntur-hook --release -q } finally { Pop-Location }
+try { cargo build -p kuntur-app -p kuntur-hook -p kuntur-mcp --release -q } finally { Pop-Location }
 $exe = Join-Path $root 'target\release\kuntur.exe'
 
 Add-Type -AssemblyName System.Drawing
@@ -193,6 +202,10 @@ if ($Links) { $smokeEnv.KUNTUR_SMOKE_LINKS = '1' }
 if ($Type) { $smokeEnv.KUNTUR_SMOKE_TYPE = $Type }
 if ($History.Count -gt 0) { $smokeEnv.KUNTUR_SMOKE_HISTORY = ($History -join '\n') }
 if ($Files) { $smokeEnv.KUNTUR_SMOKE_FILES = $Files }
+if ($Mcp) {
+    $smokeEnv.KUNTUR_SMOKE_MCP = $Mcp
+    $smokeEnv.KUNTUR_SMOKE_MCP_FAKE = (Join-Path $root 'target\release\kuntur-mcp-falso.exe')
+}
 foreach ($k in $smokeEnv.Keys) { Set-Item "Env:$k" $smokeEnv[$k] }
 $p = Start-Process $exe -PassThru
 foreach ($k in $smokeEnv.Keys) { Remove-Item "Env:$k" }
@@ -227,6 +240,9 @@ if ($editFile) {
     $dockWait += 1
 }
 if ($Type) { $dockWait += 2 }
+# "Probar" + la captura que se abre sola (sondeo cada 2 s).
+if ($Mcp -eq 'probar') { $dockWait += 4 }
+if ($Mcp -eq 'linea') { $dockWait += 3 }
 Start-Sleep -Seconds ($WaitSec + $Commands.Count + $dockWait)
 
 $r = New-Object KunturSmoke+RECT; [KunturSmoke]::GetClientRect($p.MainWindowHandle, [ref]$r) | Out-Null
