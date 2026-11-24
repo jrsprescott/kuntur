@@ -5,6 +5,7 @@
 ## Dónde está cada cosa
 - **Rama principal `main`: Fases 1 a 9 integradas** (avanzada el 2026-11-23 a `integracion/f5-f9`, sin conflictos: *fast-forward*). 349 pruebas, clippy y fmt en verde, capturas de cada fase revisadas. Conflictos de la integración, atajos y pendientes en `docs/plans/integracion-f5-f9.md`. **Es la rama desde la que se sigue** (próximas: F10 · MCP y comandos, F11 · pulido y publicación).
 - Las ramas `integracion/f5-f9` y `fase/*` quedan como historia de cada fase (no hace falta trabajar en ellas).
+- Rama **`fase/f11-publicacion`** (sale de `main`, en paralelo con F10): **Fase 11 · Pulido y publicación terminada** (`docs/plans/f11-resultados.md`): licencia MIT OR Apache-2.0, ícono, instalador MSI (`scripts\msi.ps1 -Check`, WiX v3 + cargo-wix; AUMID `Kuntur.Kuntur` para las notificaciones), contraste WCAG de los temas (Blue corregido), teclado en Uso/Auditoría/Conexiones, medición final (63–66 MB, ~260 ms de arranque), README en inglés + `README.es.md`, CONTRIBUTING, SECURITY, CHANGELOG y revisión de privacidad del historial. El repositorio **sigue privado** hasta que el usuario decida. Faltan las pruebas manuales ⏳ (instalar el MSI en una PC de prueba).
 - Rama **`fase/f3-v5`**: Fase 3 (diseño v5) **terminada** (`docs/plans/f3-resultados.md`).
 - Rama **`fase/f4-acoplada`** (sale de `fase/f3-v5`): Fase 4 · Terminal acoplada **terminada** (`docs/plans/f4-resultados.md`); faltan las pruebas manuales ⏳ del usuario.
 - Rama de trabajo **`fase/f5-agentes`** (sale de `fase/f4-acoplada`): **Fase 5 terminada** (`docs/plans/f5-resultados.md`, con el detalle en `f5a-resultados.md` y `f5b-resultados.md`). F5a: catálogo configurable, abrir agentes con un clic, agentes de la acoplada, alertas y auditoría. F5b: `kuntur-hook.exe` + named pipe, OSC 7501, estado exacto (trabajando / pide permiso / espera respuesta / terminó), subagentes con su acción, Permitir / Rechazar desde la fila, worktree por agente (la acoplada arranca ahí), "Enviar a terminal", anillo de Claude por su línea de estado e instalador de ganchos con confirmación. Faltan las pruebas manuales ⏳ del usuario (sobre todo **instalar los ganchos** y probar con `claude` real). Pendiente: auditoría desde los hooks.
@@ -16,6 +17,16 @@
 - **Especificación del usuario** (adoptada el 2026-11-23): `docs/ESPECIFICACION.md`, con las decisiones tomadas (se mantiene GPUI, costo estimado, spike de `wry`…). La hoja de ruta pasó a 11 fases (nueva F8 · Vista previa y diff).
 - Rama **`fase/f7-archivos`** (sale de `fase/f6-ssh`): Fase 7 · Archivos remotos y transferencias **terminada** (`docs/plans/f7-resultados.md`); faltan las pruebas manuales ⏳ contra un servidor real.
 - **Decisión pendiente (sigue abierta tras F7):** panel izquierdo con agentes arriba + árbol abajo a la vez (especificación §3) o el botón "Archivos" que alterna (actual, se mantuvo en F7 sin cambios).
+
+## Fase 11: pulido y publicación
+| Parte | Estado |
+|---|---|
+| Licencia, ícono (`assets/kuntur.ico`), recursos de `kuntur.exe` (`build.rs`) | ✅ |
+| MSI: `crates/kuntur-app/wix/main.wxs`, `scripts\msi.ps1 -Check` (WiX 3.14.1 en `%LOCALAPPDATA%\Programs\WiX`, variable `WIX`, `cargo-wix`) | ✅ generado y revisado con `msiexec /a`; instalarlo ⏳ |
+| Notificaciones con AUMID `Kuntur.Kuntur` cuando está instalado | ✅ código y prueba; verlo instalado ⏳ |
+| Contraste WCAG (prueba) y teclado en los paneles | ✅ |
+| Medición: `.\scripts\smoke.ps1 -Sessions 5 -Panel full -AgentEvents scripts\smoke-agentes.jsonl -MaxRamMB 120 -Measure` | ✅ ver `f11-resultados.md` |
+| Documentación pública y capturas `docs/images/` | ✅ |
 
 ## Fase 7: archivos remotos y transferencias
 | Parte | Estado |
