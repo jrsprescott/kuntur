@@ -209,6 +209,8 @@ waiting_regex = '(?m)^\s*>\s'
 ## 6. Fases
 
 > Planes de implementación (paso a paso, con código y pruebas): [`docs/plans/`](plans/README.md). F1 ya tiene su plan detallado.
+>
+> ⚠️ **Numeración histórica (v4).** Las fases se replanificaron el 2026-11-23 (diseño v5 y [especificación del usuario](ESPECIFICACION.md)): ahora son **11**, con la vista previa como F8. La tabla vigente es la de [`plans/README.md`](plans/README.md); esta se conserva por sus criterios de "listo".
 
 | Fase | Entrega | Criterio de "listo" |
 |---|---|---|

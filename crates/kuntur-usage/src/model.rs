@@ -52,23 +52,40 @@ impl UsageRecord {
     }
 }
 
-/// Período de la vista de uso.
+/// Período de la vista de uso: día / 7 días / 30 días / año / todo. Todos son días locales
+/// completos que terminan hoy ("Hoy" = solo hoy; "Año" = hoy y los 364 días anteriores).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Period {
+    Today,
     Days7,
     Days30,
-    Days90,
+    Year,
     All,
 }
 
 impl Period {
+    /// En el orden del selector de la vista.
+    pub const ALL: [Period; 5] = [Period::Today, Period::Days7, Period::Days30, Period::Year, Period::All];
+
     /// Cantidad de días del período (`None` en `All`).
     pub fn days(self) -> Option<i64> {
         match self {
+            Period::Today => Some(1),
             Period::Days7 => Some(7),
             Period::Days30 => Some(30),
-            Period::Days90 => Some(90),
+            Period::Year => Some(365),
             Period::All => None,
+        }
+    }
+
+    /// Texto del selector.
+    pub fn label(self) -> &'static str {
+        match self {
+            Period::Today => "Hoy",
+            Period::Days7 => "7 días",
+            Period::Days30 => "30 días",
+            Period::Year => "1 año",
+            Period::All => "Todo",
         }
     }
 }

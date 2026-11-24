@@ -7,6 +7,8 @@
 - Rama de trabajo **`fase/f3-v5`**: Fase 3 (diseño v5) **en curso**. Aquí se continúa.
 - Planes: `docs/plans/README.md` (hoja de ruta) y `docs/plans/2026-11-23-f3-v5-agentes-y-uso.md` (plan de la fase actual).
 - Diseño de referencia: `docs/PLAN.md` ("Cambios de la v4") y la simulación `docs/simulacion/index.html`.
+- **Especificación del usuario** (adoptada el 2026-11-23): `docs/ESPECIFICACION.md`, con las decisiones tomadas (se mantiene GPUI, costo estimado, spike de `wry`…). La hoja de ruta pasó a 11 fases (nueva F8 · Vista previa y diff).
+- **Decisión pendiente:** panel izquierdo con agentes arriba + árbol abajo a la vez (especificación §3) o el botón "Archivos" que alterna (actual). Se aplica en F7.
 
 ## Fase 3 (v5): qué está hecho y qué falta
 | Parte | Estado |
@@ -15,7 +17,9 @@
 | Task 7: sesiones como **pestañas arriba** | ✅ hecho; capturas revisadas en Blue/Dark/White |
 | Task 8: **panel izquierdo de agentes** (buscar, Todos/Esperando/Trabajando, instalados con anillo %, "Archivos") | ✅ hecho; capturas del panel completo, compacto y "Archivos" (falta ver un agente real en la lista: va en la lista manual de `f3-resultados.md`) |
 | Task 10 (parte): **RAM** abajo a la derecha | ✅ hecho (64–80 MB en las pruebas de humo, objetivo < 90 MB) |
-| Task 9: vista **Uso de agentes** (7/30/90/todo, tokens por día, mapa de horas, modelos, agentes, tareas top) | ⏸ **siguiente paso** |
+| Filtros **Hoy / 7 días / 30 días / 1 año / Todo** en `kuntur-usage` (especificación §10) | ✅ hecho, con pruebas |
+| Task 9: vista **Uso de agentes** (selector de períodos, tarjetas, tokens por día, mapa de horas, modelos, agentes, tareas top, CSV) + botones de ícono Tema y Estadísticas | ⏸ **siguiente paso** |
+| Task 9b: **costo estimado** (`pricing.toml` editable) y **almacén SQLite incremental** | ⏸ pendiente |
 | Task 10 (resto): humo con datos sintéticos de uso (`-Usage`), `f3-resultados.md`, CI | ⏸ pendiente |
 
 Pruebas de humo del panel: `.\scripts\smoke.ps1 -Sessions 1 -Panel files -Commands 'cd C:\Windows\Media'` (`-Panel full|compact|files`).

@@ -487,4 +487,48 @@ mod tests {
 
         assert_eq!(summarize(&records, Period::All, now(), &lima()).previous, None);
     }
+
+    #[test]
+    fn hoy_es_solo_el_dia_local_y_se_compara_con_ayer() {
+        let records = vec![
+            // Hoy (lunes 23, hora local) desde la medianoche.
+            rec("a", "claude-x", "2026-11-23T00:00:00-05:00", 10, 1),
+            rec("a", "claude-x", "2026-11-23T11:59:00-05:00", 20, 2),
+            // Domingo 23:30 local (= lunes 04:30 UTC): ya es ayer.
+            rec("b", "claude-x", "2026-11-23T04:30:00Z", 100, 10),
+            // Anteayer: fuera de ambos.
+            rec("c", "claude-x", "2026-11-21T12:00:00-05:00", 999, 999),
+        ];
+        let s = summarize(&records, Period::Today, now(), &lima());
+        assert_eq!(s.start, ts("2026-11-23T00:00:00-05:00"));
+        assert_eq!(s.end, ts("2026-11-24T00:00:00-05:00"));
+        assert_eq!((s.totals.input, s.totals.output, s.totals.turns), (30, 3, 2));
+        assert_eq!(s.by_day, vec![(date("2026-11-23"), 30, 3)]);
+        let prev = s.previous.expect("ayer es el período anterior");
+        assert_eq!((prev.input, prev.output, prev.turns), (100, 10, 1));
+    }
+
+    #[test]
+    fn un_ano_son_365_dias_locales() {
+        let records = vec![
+            // Primer día del año móvil: 24 de noviembre de 2025.
+            rec("a", "claude-x", "2025-11-24T00:00:00-05:00", 5, 5),
+            // Un minuto antes: pertenece al año anterior.
+            rec("b", "claude-x", "2025-11-23T23:59:00-05:00", 7, 7),
+            rec("c", "claude-x", "2026-11-23T08:00:00-05:00", 1, 1),
+        ];
+        let s = summarize(&records, Period::Year, now(), &lima());
+        assert_eq!(s.start, ts("2025-11-24T00:00:00-05:00"));
+        assert_eq!(s.by_day.len(), 365);
+        assert_eq!(s.totals.turns, 2);
+        assert_eq!(s.previous.expect("año anterior").input, 7);
+    }
+
+    #[test]
+    fn periodos_del_selector_en_orden() {
+        let labels: Vec<_> = Period::ALL.iter().map(|p| p.label()).collect();
+        assert_eq!(labels, ["Hoy", "7 días", "30 días", "1 año", "Todo"]);
+        let days: Vec<_> = Period::ALL.iter().map(|p| p.days()).collect();
+        assert_eq!(days, [Some(1), Some(7), Some(30), Some(365), None]);
+    }
 }

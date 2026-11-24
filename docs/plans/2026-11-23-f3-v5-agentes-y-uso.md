@@ -6,7 +6,7 @@
 1. Las **sesiones pasan a pestañas arriba** (en la barra de título), con `+` para nueva sesión.
 2. A la izquierda, un **panel de agentes**: buscador, filtros **Todos / Esperando / Trabajando**, lista de agentes corriendo en las sesiones (clic = ir a esa sesión) y, si no hay, "No hay agentes corriendo".
 3. Abajo a la izquierda, la **fila de agentes instalados** (Claude Code, Codex, OpenCode, Qwen, Gemini…) como íconos con un **anillo de porcentaje** de uso de su límite cuando hay dato real; y debajo **"Archivos"**, que al hacer clic muestra los archivos de la carpeta de la sesión activa.
-4. Arriba a la derecha, botón **Uso de agentes**: vista con períodos **7 / 30 / 90 días / Todo**, tarjetas (tokens de entrada, de salida, turnos, tiempo de agente), **tokens por día** (barras entrada/salida), **cuándo trabajan** (mapa día × hora), **modelos** (participación por proveedor + tabla entrada/salida/turnos), **agentes** (participación) y **tareas que más tokens usaron** (título, carpeta, modelo).
+4. Arriba a la derecha, botón **Uso de agentes**: vista con períodos **Hoy / 7 días / 30 días / 1 año / Todo** (cambiado de 7/30/90/Todo al adoptar [`ESPECIFICACION.md`](../ESPECIFICACION.md) §10), tarjetas (tokens de entrada, de salida, turnos, tiempo de agente), **tokens por día** (barras entrada/salida), **cuándo trabajan** (mapa día × hora), **modelos** (participación por proveedor + tabla entrada/salida/turnos), **agentes** (participación) y **tareas que más tokens usaron** (título, carpeta, modelo).
 5. Abajo a la derecha, la **RAM que usa Kuntur**.
 
 **Reglas que se mantienen:** diseño minimalista v4 (una sola barra arriba, jerarquía por texto, color solo para estado), atajos Ctrl+Shift, temas Blue/Dark/White en vivo, nada de datos personales en el repo (las pruebas usan datos sintéticos).
@@ -55,8 +55,9 @@ pub struct UsageRecord {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Period { Days7, Days30, Days90, All }
+pub enum Period { Today, Days7, Days30, Year, All }   // 1 / 7 / 30 / 365 días locales / todo
 ```
+(Originalmente `Days7, Days30, Days90, All`; cambiado el 2026-11-23 por la especificación §10, con `Period::ALL` y `label()` para el selector.)
 `aggregate.rs` — `pub fn summarize(records: &[UsageRecord], period: Period, now: i64, tz: &jiff::tz::TimeZone) -> Summary` con:
 - `totals { input, output, turns, sessions, agent_time_secs }` y `previous` (mismo largo, período anterior) para el % de cambio (en `All`, `previous = None`).
 - `by_day: Vec<(jiff::civil::Date, u64 input, u64 output)>` **con días vacíos rellenados** dentro del período (en `All`: desde el primer registro).
@@ -116,15 +117,23 @@ pub enum Period { Days7, Days30, Days90, All }
 - Debajo: **"Archivos"** (ícono `Folder`): alterna el contenido del panel a un explorador de la carpeta actual de la sesión activa (carpetas primero, tamaño y fecha en tenue, ↑ subir, clic en carpeta entra, doble clic en archivo lo abre con la app de Windows, clic derecho copia la ruta). Sin carpeta conocida: "Carpeta desconocida (abre un shell PowerShell)".
 
 ### Task 9: Vista "Uso de agentes"
-- Botón arriba a la derecha (ícono `ChartColumn` o similar de Lucide) y acción en la paleta; Esc vuelve a la terminal. Ocupa el área central.
-- Cabecera "Uso de agentes" + rango de fechas en tenue + selector **7 días / 30 días / 90 días / Todo**.
-- 4 tarjetas: Tokens de entrada, Tokens de salida, Turnos, Tiempo de agente — valor grande, % de cambio vs. período anterior en verde/rojo.
-- **Tokens por día**: barras apiladas (entrada / salida) dibujadas con `canvas`; eje de fechas mínimo; tooltip al pasar.
+- Botón de ícono arriba a la derecha (`ChartColumn` o similar de Lucide): **abre la vista y la cierra al volver a pulsarlo** (§4); acción en la paleta; Esc vuelve a la terminal. Ocupa el área central.
+- Botón de ícono **Tema** al lado (§4): menú Blue / Dark / White con el actual marcado; guarda la preferencia (ya existe `set_theme` + `persist`).
+- Cabecera "Uso de agentes" + rango de fechas en tenue + selector **Hoy / 7 días / 30 días / 1 año / Todo** (`Period::ALL`, `label()`; ✅ modelo y pruebas hechos).
+- 4 tarjetas: Tokens de entrada (incluye caché lectura + escritura, con "NN % desde caché" debajo), Tokens de salida, Turnos, Tiempo de agente — valor grande, % de cambio vs. período anterior en verde/rojo (en "Hoy", contra ayer).
+- Línea de resumen bajo las tarjetas (§10): agente más usado · agentes usados · sesiones · **costo estimado**.
+- **Tokens por día**: barras apiladas (entrada / salida) dibujadas con `canvas`; eje de fechas mínimo; tooltip al pasar. Con muchos días se agrupa: **1 año** → por semana; **Todo** con más de 120 días → por mes (función pura en `kuntur-usage`, con pruebas). En **Hoy** las barras son por hora.
 - **Cuándo trabajan**: mapa 7 × 24 con intensidad por cuantiles.
 - **Modelos**: barra de participación por proveedor + tabla (modelo, entrada, salida, turnos).
 - **Agentes**: participación por agente con barra fina.
 - **Tareas que más tokens usaron**: título, carpeta (último segmento), modelo, total.
 - Carga en hilo aparte con indicador "Leyendo historial…"; se cachea y solo relee archivos cambiados (por fecha de modificación) al reabrir.
+- **Exportar CSV** (§10): botón en la cabecera; escribe los registros del período (fecha local, agente, modelo, entrada, salida, caché, sesión, carpeta) donde el usuario elija.
+
+### Task 9b: Costo estimado y almacén incremental (§10)
+- **Costo estimado**: `kuntur-usage/src/pricing.rs` — tabla de precios por modelo (prefijo → USD por millón de tokens de entrada, salida, lectura y escritura de caché) cargada de `pricing.toml` **editable por el usuario** en `%APPDATA%\Kuntur\`. Los valores iniciales se verifican en las páginas oficiales al implementar (no se inventan). Modelo sin precio → "sin precio" y no suma. OpenCode trae costo real (`cost`): se usa ese y se marca como real. La UI dice siempre "estimado". Reemplaza "cuentas que más facturan", que los historiales locales no registran.
+- **Almacén SQLite** (`%APPDATA%\Kuntur\usage.db`, `rusqlite`): tabla de registros + tabla de archivos importados (ruta, tamaño, fecha de modificación, posición leída). Al abrir la vista solo se importa lo nuevo (JSONL: desde la última posición; zstd y OpenCode: si cambió la fecha). Deduplicación con la misma clave de cada lector. Reemplaza la caché en memoria de la Task 9.
+- **Pruebas:** importar dos veces el mismo archivo no duplica; agregar líneas a un JSONL importa solo las nuevas; costo con tabla sintética (incluye caché y modelo sin precio).
 
 ### Task 10: Indicador de RAM y aceptación
 - Abajo a la derecha, texto tenue "Kuntur · 62 MB" (memoria de trabajo del proceso, `sysinfo`, cada 2 s). Sin barra de estado completa: solo una línea de 22 px con la carpeta actual a la izquierda y la RAM a la derecha.
@@ -134,4 +143,4 @@ pub enum Period { Days7, Days30, Days90, All }
 - CI verde y push de la rama `fase/f3-v5`.
 
 ## Fuera de alcance
-Estado exacto esperando/trabajando por hooks y OSC 7501 (heurística por ahora) · puente de línea de estado de Claude Code para el anillo de 5 h/semanal (requiere tu permiso para tocar `~/.claude/settings.json`) · lectores de Qwen y Gemini · terminal acoplada, SSH, MCP (fases siguientes).
+Estado exacto esperando/trabajando por hooks y OSC 7501 (heurística por ahora) · puente de línea de estado de Claude Code para el anillo de 5 h/semanal (requiere tu permiso para tocar `~/.claude/settings.json`) · lectores de Qwen, Gemini, Kimi y DeepSeek · registro propio de la app como fuente de uso · terminal acoplada, alertas, auditoría, SSH, vista previa, MCP (fases siguientes, ver [`README.md`](README.md)).
