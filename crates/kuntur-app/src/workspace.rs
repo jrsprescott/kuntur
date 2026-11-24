@@ -1049,8 +1049,7 @@ impl Workspace {
             cx.stop_propagation();
             return;
         }
-        if self.usage.open && ev.keystroke.key == "escape" && !m.modified() {
-            self.close_usage(window, cx);
+        if self.usage.open && self.on_usage_key(ev, window, cx) {
             cx.stop_propagation();
             return;
         }

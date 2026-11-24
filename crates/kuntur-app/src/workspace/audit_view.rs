@@ -186,8 +186,26 @@ impl Workspace {
     pub(super) fn on_audit_key(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) -> bool {
         let ks = &ev.keystroke;
         let m = ks.modifiers;
+        let key = ks.key.to_ascii_lowercase();
+        // F11: ←/→ período, ↑/↓ agente, Ctrl+S exportar (el buscador no tiene cursor: las flechas
+        // quedan libres).
+        if let Some(forward) = crate::keynav::horizontal(&key, m.modified()) {
+            let next = crate::keynav::cycle(&Period::ALL, self.audit.filter.period, forward);
+            self.set_audit_period(next, cx);
+            return true;
+        }
+        if let Some(down) = crate::keynav::vertical(&key, m.modified()) {
+            let options = [None, Some(AGENTS[0]), Some(AGENTS[1])];
+            let next = crate::keynav::cycle(&options, self.audit.filter.agent, down);
+            self.set_audit_agent(next, cx);
+            return true;
+        }
+        if key == "s" && m.control && !m.shift && !m.alt {
+            self.export_audit(cx);
+            return true;
+        }
         let query = &mut self.audit.filter.query;
-        match ks.key.to_ascii_lowercase().as_str() {
+        match key.as_str() {
             "escape" if !m.modified() => {
                 if query.is_empty() {
                     self.close_audit(window, cx);

@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
+license.workspace = true
 
 # Biblioteca (protocolo, named pipe, instalador de ganchos) + binario `kuntur-hook.exe`, que invocan
 # los hooks y la línea de estado de Claude Code.

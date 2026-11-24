@@ -6,6 +6,7 @@ mod agents_panel;
 mod command_palette;
 mod connections;
 mod dock;
+mod keynav;
 mod monitor;
 mod notify;
 mod sessions;
@@ -90,6 +91,11 @@ fn main() {
 
     gpui_kit::application().with_assets(KunturAssets).run(move |cx| {
         gpui_kit::init(cx);
+        // Instalado con el MSI (F11): la ventana usa el AUMID del acceso del menú Inicio (se agrupa
+        // con él en la barra de tareas). Sin instalar no se toca nada.
+        if notify::app_id_registered() {
+            cx.set_app_identity(notify::APP_ID, notify::APP_NAME);
+        }
         // Al cerrar la ventana termina la app (y con ella los shells).
         cx.on_window_closed(|cx, _| {
             if cx.windows().is_empty() {

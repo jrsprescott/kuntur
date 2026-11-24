@@ -40,6 +40,8 @@ pub(super) struct ConnectionsState {
     form: Option<ConnectionForm>,
     /// Conexión que pide confirmar el borrado.
     confirm_delete: Option<String>,
+    /// Fila elegida con el teclado (F11: ↑/↓, Enter, F2, Supr).
+    selected: usize,
     /// Contexto SSH (known_hosts, secretos): se crea con la primera sesión remota.
     ctx: Option<SshContext>,
 }
@@ -287,11 +289,7 @@ impl Workspace {
             return;
         }
         let Some(form) = self.connections.form.as_mut() else {
-            match key.as_str() {
-                "escape" => self.close_connections(window, cx),
-                "n" if m.control && !m.shift => self.new_connection_form(window, cx),
-                _ => {}
-            }
+            self.on_connections_list_key(&key, m, window, cx);
             return;
         };
         match key.as_str() {
@@ -316,6 +314,50 @@ impl Workspace {
                 }
             }
             _ => {}
+        }
+        cx.notify();
+    }
+
+    /// Lista con el teclado (F11): ↑/↓ eligen, Enter conecta, F2 edita, Supr pide confirmar el
+    /// borrado (Enter = sí, Esc = no), Ctrl+N nueva, Esc cierra.
+    fn on_connections_list_key(&mut self, key: &str, m: Modifiers, window: &mut Window, cx: &mut Context<Self>) {
+        let len = self.settings.connections.len();
+        let selected = self.connections.selected.min(len.saturating_sub(1));
+        let name = self.settings.connections.get(selected).map(|c| c.name.clone());
+        let confirming = self.connections.confirm_delete.is_some();
+        match key {
+            "escape" if confirming => self.connections.confirm_delete = None,
+            "escape" => {
+                self.close_connections(window, cx);
+                return;
+            }
+            "n" if m.control && !m.shift => {
+                self.new_connection_form(window, cx);
+                return;
+            }
+            _ if m.modified() => return,
+            "up" | "down" => {
+                self.connections.selected = crate::keynav::step(selected, len, key == "down");
+                self.connections.confirm_delete = None;
+            }
+            "enter" if confirming => {
+                if let Some(target) = self.connections.confirm_delete.clone() {
+                    self.delete_connection(&target, cx);
+                }
+            }
+            "enter" => {
+                if let Some(name) = name {
+                    self.connect_to(&name, window, cx);
+                }
+                return;
+            }
+            "f2" => {
+                if let Some(name) = name {
+                    self.edit_connection(&name, cx);
+                }
+            }
+            "delete" => self.connections.confirm_delete = name,
+            _ => return,
         }
         cx.notify();
     }
@@ -534,7 +576,7 @@ impl Workspace {
                     .border_color(c.border)
                     .text_size(px(11.))
                     .text_color(c.muted)
-                    .child("Clic: nueva pestaña conectada · Huellas en known_hosts · Contraseñas solo en el Administrador de credenciales de Windows"),
+                    .child("Clic o Enter: nueva pestaña conectada · ↑↓ elegir · F2 editar · Supr borrar · Contraseñas solo en el Administrador de credenciales de Windows"),
             )
             .into_any_element()
     }
@@ -568,6 +610,12 @@ impl Workspace {
             detail.push("recuerda la contraseña".into());
         }
         let confirming = self.connections.confirm_delete.as_deref() == Some(conn.name.as_str());
+        // F11: la fila elegida con el teclado se resalta y muestra sus acciones (F2 / Supr).
+        let selected = index
+            == self
+                .connections
+                .selected
+                .min(self.settings.connections.len().saturating_sub(1));
 
         let actions: AnyElement = if confirming {
             let yes = name.clone();
@@ -611,7 +659,7 @@ impl Workspace {
             let (edit_name, del_name) = (name.clone(), name.clone());
             h_flex()
                 .gap(px(2.))
-                .opacity(0.)
+                .opacity(if selected { 1. } else { 0. })
                 .group_hover(group.clone(), |s| s.opacity(1.))
                 .child(
                     row_icon(("conn-edit", index), IconName::Pencil, c, "Editar").on_click(cx.listener(
@@ -660,6 +708,7 @@ impl Workspace {
             .items_center()
             .rounded(px(7.))
             .cursor_pointer()
+            .when(selected, |s| s.bg(hover))
             .hover(move |s| s.bg(hover))
             .on_click(cx.listener(move |this, _, window, cx| this.connect_to(&name, window, cx)))
             .child(

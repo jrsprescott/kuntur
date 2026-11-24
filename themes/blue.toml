@@ -7,19 +7,19 @@ mono = "JetBrains Mono"
 size = 13
 
 [ui]
-window_gradient = ["#1a379a", "#2156d4", "#3b82f6"]   # 140°
+window_gradient = ["#1a379a", "#1d43ad", "#1f4fc2"]   # 140° (F11: más oscuro por el contraste WCAG; antes #2156d4 y #3b82f6)
 titlebar = "#09144299"        # rgba(9,20,66,.55)
 surface = "#08144466"
 surface_2 = "#ffffff13"
 border = "#ffffff26"
 popover = "#13308a"
 text = "#eaf2ff"
-muted = "#a9c1ee"
-accent = "#22d3ee"
+muted = "#bcd0f5"         # F11: antes #a9c1ee (contraste)
+accent = "#5eeafd"        # F11: antes #22d3ee
 accent_2 = "#93c5fd"
-ok = "#4ade80"
-warn = "#fbbf24"
-error = "#f87171"
+ok = "#6ee7a0"            # F11: antes #4ade80
+warn = "#fcd34d"          # F11: antes #fbbf24
+error = "#fca5a5"         # F11: antes #f87171
 terminal_bg = "#050e3466"
 
 [ansi]   # 0-7 normales, 8-15 brillantes

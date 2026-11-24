@@ -148,6 +148,83 @@ pub fn apply_to_kit(t: &Theme, cx: &mut App) {
     });
 }
 
+/// Contraste WCAG de los temas (F11, accesibilidad): cada color de texto contra cada fondo real
+/// de la interfaz (las capas con alfa se mezclan sobre cada color del degradado de la ventana).
+#[cfg(test)]
+mod contraste {
+    use super::{opaque, over};
+    use kuntur_config::{Rgba8, Theme, ThemeId, builtin};
+    use kuntur_term::Rgb8;
+
+    /// Mínimo WCAG 2 AA para texto normal.
+    const TEXTO: f32 = 4.5;
+    /// Mínimo WCAG 2 AA para texto grande y componentes de la interfaz (texto tenue, estados).
+    const TENUE: f32 = 3.0;
+
+    /// Fondos sobre los que se dibuja texto: el degradado y cada capa de la interfaz mezclada sobre
+    /// cada color del degradado (`surface_2` también sobre `surface`).
+    fn fondos(t: &Theme) -> Vec<(String, Rgb8)> {
+        let ui = &t.ui;
+        let mut out = Vec::new();
+        for (i, &stop) in ui.window_gradient.iter().enumerate() {
+            let base = opaque(stop);
+            out.push((format!("degradado[{i}]"), base));
+            let capas: [(&str, Rgba8); 5] = [
+                ("titlebar", ui.titlebar),
+                ("surface", ui.surface),
+                ("surface_2", ui.surface_2),
+                ("popover", ui.popover),
+                ("terminal_bg", ui.terminal_bg),
+            ];
+            for (nombre, capa) in capas {
+                out.push((format!("{nombre} sobre degradado[{i}]"), over(capa, base)));
+            }
+            out.push((
+                format!("surface_2 sobre surface sobre degradado[{i}]"),
+                over(ui.surface_2, over(ui.surface, base)),
+            ));
+        }
+        out
+    }
+
+    /// Pares (color, fondo) por debajo del mínimo, con su contraste.
+    fn fallas(id: ThemeId) -> Vec<String> {
+        let t = builtin(id);
+        let ui = &t.ui;
+        let colores: [(&str, Rgba8, f32); 6] = [
+            ("text", ui.text, TEXTO),
+            ("muted", ui.muted, TENUE),
+            ("accent", ui.accent, TENUE),
+            ("ok", ui.ok, TENUE),
+            ("warn", ui.warn, TENUE),
+            ("error", ui.error, TENUE),
+        ];
+        let mut out = Vec::new();
+        for (fondo, bg) in fondos(&t) {
+            for (nombre, color, min) in colores {
+                let ratio = opaque(color).contrast(bg);
+                if ratio < min {
+                    out.push(format!("{}: {nombre} sobre {fondo} = {ratio:.2} (< {min})", id.key()));
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn los_tres_temas_cumplen_el_contraste_wcag() {
+        let todas: Vec<String> = ThemeId::ALL.into_iter().flat_map(fallas).collect();
+        assert!(todas.is_empty(), "contraste insuficiente:\n{}", todas.join("\n"));
+    }
+
+    #[test]
+    fn la_prueba_detecta_un_tema_sin_contraste() {
+        // Gris claro sobre blanco: 1,5:1.
+        let gris = Rgb8::hex(0xcccccc);
+        assert!(gris.contrast(Rgb8::hex(0xffffff)) < TENUE);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
