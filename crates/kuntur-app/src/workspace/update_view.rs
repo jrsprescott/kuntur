@@ -234,7 +234,7 @@ impl Workspace {
             UpdatePhase::Downloading(u) => self.download_text(u),
             UpdatePhase::Installing => t(T::UpdatesInstalling).into(),
             UpdatePhase::Failed(e) => format!("{}: {e}", t(T::UpdatesFailed)),
-            UpdatePhase::Idle => format!("{} {}", t(T::UpdatesVersion), kuntur_update::CURRENT_VERSION),
+            UpdatePhase::Idle => kuntur_update::CURRENT_VERSION.to_string(),
         }
     }
 

@@ -428,7 +428,7 @@ impl Workspace {
             .track_focus(&self.focus)
             .w(px(PANEL_W))
             .max_w(relative(0.95))
-            .max_h(px(620.))
+            .max_h(relative(0.94))
             .bg(c.popover)
             .border_1()
             .border_color(c.border)

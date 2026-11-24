@@ -33,7 +33,7 @@
 
 Orden recomendado: **F1 → F2 → F3 → F4 → F5 → F6 → F7 → F8 → F9 → F10 → F11**.
 
-**Después de F11 — Ajustes v0.2** (rama `ajustes/v0.2`): imágenes como Warp (`[Image #1]`), árbol de archivos con menú contextual tipo VS Code (español/inglés), título de la IA en la pestaña (con desplazamiento), notificaciones menos insistentes y panel de Configuración con temas en círculos → [`2026-11-24-ajustes-v0.2.md`](2026-11-24-ajustes-v0.2.md) (pendiente).
+**Después de F11 — Ajustes v0.2** (rama `ajustes/v0.2`): imágenes como Warp (`[Image #1]`), árbol de archivos con menú contextual tipo VS Code (español/inglés), título de la IA en la pestaña (con desplazamiento), notificaciones menos insistentes y panel de Configuración con temas en círculos → [`2026-11-24-ajustes-v0.2.md`](2026-11-24-ajustes-v0.2.md) ✅ ([resultados](ajustes-v0.2-resultados.md)).
 - 2026-11-24: F10 y F11 integradas en `integracion/f10-f11` (ver [`integracion-f10-f11.md`](integracion-f10-f11.md)); al avanzar `main`, la hoja de ruta queda completa.
 - 2026-11-23: el diseño v5 (pestañas arriba, panel de agentes y uso) se adelantó como F3; el uso/costos de la antigua F5 quedó dentro de F3.
 - 2026-11-23: se adoptó la especificación del usuario ([`ESPECIFICACION.md`](../ESPECIFICACION.md)). Cambios: F3 suma filtros Hoy/1 año, costo estimado, CSV y SQLite; F5 suma alertas (las notificaciones salen de la antigua F10), auditoría y agentes configurables; F6 suma el gestor de conexiones; F7 suma transferencias completas; **nueva F8 · Vista previa y diff**; la antigua F8 (shell) pasa a F9, MCP a F10 y pulido a F11.

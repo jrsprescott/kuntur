@@ -108,6 +108,8 @@ param(
     # Panel "Archivos" (F7). 'remote' (con -Connections remote) muestra un árbol remoto SINTÉTICO en
     # memoria y una cola de transferencias sintética; nunca un servidor real. 'local' = el árbol local.
     [ValidateSet('', 'local', 'remote')][string]$Files = '',
+    # Con -Files: abre el menú contextual sobre la primera carpeta del árbol (ajustes v0.2).
+    [switch]$FileMenu,
     # Gestor de MCP (F10) con servidores SINTÉTICOS (el servidor falso kuntur-mcp-falso, uno que no
     # existe y uno http a un puerto cerrado) y secretos en memoria: 'list' abre el panel, 'probar'
     # además prueba todos (el falso deja una captura que se abre en la vista previa) y 'linea' pega
@@ -232,6 +234,11 @@ if ($Links) { $smokeEnv.KUNTUR_SMOKE_LINKS = '1' }
 if ($Type) { $smokeEnv.KUNTUR_SMOKE_TYPE = $Type }
 if ($History.Count -gt 0) { $smokeEnv.KUNTUR_SMOKE_HISTORY = ($History -join '\n') }
 if ($Files) { $smokeEnv.KUNTUR_SMOKE_FILES = $Files }
+if ($FileMenu) {
+    $smokeEnv.KUNTUR_SMOKE_FILE_MENU = '1'
+    # Después de los comandos de la sesión (2,5 s + 0,6 s por comando) y de leer la carpeta.
+    $smokeEnv.KUNTUR_SMOKE_FILE_MENU_MS = "$(2500 + 600 * $Commands.Count + 2000)"
+}
 if ($Mcp) {
     $smokeEnv.KUNTUR_SMOKE_MCP = $Mcp
     $smokeEnv.KUNTUR_SMOKE_MCP_FAKE = (Join-Path $root 'target\release\kuntur-mcp-falso.exe')

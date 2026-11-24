@@ -366,7 +366,7 @@ impl Workspace {
         this.smoke_preview(Duration::from_millis(2_500 + 600 * smoke_commands + 1_500), window, cx);
 
         // Prueba de humo del árbol remoto y la cola de transferencias (datos sintéticos, F7).
-        this.smoke_files(cx);
+        this.smoke_files(window, cx);
 
         // F10: MCP por sesión (limpieza de temporales, capturas → vista previa, prueba de humo).
         this.start_mcp(window, cx);

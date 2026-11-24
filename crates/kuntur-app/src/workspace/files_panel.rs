@@ -1419,7 +1419,7 @@ impl Workspace {
 
     /// `KUNTUR_SMOKE_FILES=remote`: panel "Archivos" con un árbol remoto **sintético** (en memoria)
     /// y una cola de transferencias sintética. Requiere una pestaña remota (`-Connections remote`).
-    pub(super) fn smoke_files(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn smoke_files(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Ok(mode) = std::env::var("KUNTUR_SMOKE_FILES") else {
             return;
         };
@@ -1476,6 +1476,27 @@ impl Workspace {
             self.files.tree.set_root(self.files.dir.clone());
             self.files.tree.expand("/home/demo/proyecto/src");
             self.load_files(false, cx);
+        }
+        // Ajustes v0.2: menú contextual abierto sobre la primera carpeta del árbol (para la captura).
+        if std::env::var_os("KUNTUR_SMOKE_FILE_MENU").is_some() {
+            // Espera a que el árbol siga a la carpeta final de la sesión (después de sus comandos):
+            // si se abriera antes, se cerraría al cambiar la raíz.
+            let delay = Duration::from_millis(
+                std::env::var("KUNTUR_SMOKE_FILE_MENU_MS")
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(2_500),
+            );
+            cx.spawn_in(window, async move |this, cx| {
+                cx.background_executor().timer(delay).await;
+                let _ = this.update_in(cx, |w, window, cx| {
+                    let folder = w.files.tree.rows().into_iter().find(|r| r.entry.is_dir && !r.expanded);
+                    if let Some(row) = folder {
+                        w.open_file_menu(row.entry, point(px(150.), px(150.)), window, cx);
+                    }
+                });
+            })
+            .detach();
         }
     }
 

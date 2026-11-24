@@ -41,15 +41,31 @@ valle desde lo alto, ves de un vistazo todas tus sesiones y lo que hace cada age
   PDF y HTML (WebView2) en una vista dividida que se recarga sola.
 - **Integración con el shell:** bloques OSC 133 (una marca fina por comando, roja si falló) y **autocompletado en
   gris** de rutas, memoria de carpetas e historial por carpeta (Tab o → aceptan).
+- **Capturas para tu agente, como en Warp:** Ctrl+V con una imagen en el portapapeles la adjunta — Claude Code
+  muestra `[Image #N]`, los demás agentes reciben la ruta del PNG guardado y las pestañas SSH primero la suben —, y
+  una barra del agente muestra las miniaturas.
+- **La pestaña dice qué hace el agente:** el título que pone el agente (en Claude Code, el tema de la conversación)
+  reemplaza a "PowerShell"; si es largo, en la pestaña activa se desplaza y se detiene con el mouse.
+- **Árbol de archivos como el Explorer de VS Code**, con su menú de clic derecho (nuevo archivo/carpeta, cambiar
+  nombre, eliminar a la Papelera, cortar/copiar/pegar entre local y remoto, copiar ruta, mostrar en el Explorador,
+  agregar al chat…).
+- **Configuración** (Ctrl+,): temas, tamaño de letra, idioma (español / inglés), notificaciones que no molestan
+  (por tipo, como mucho una por sesión cada pocos minutos y solo en segundo plano) y búsqueda de actualizaciones.
+- **Actualizar con un clic:** un aviso cuando sale una versión nueva; Kuntur descarga el instalador, verifica su
+  SHA-256 y su firma, lo instala y se vuelve a abrir.
 
-| Uso (Blue) | Vista previa y diff (White) |
+| Configuración (Blue) | Archivos y menú contextual (Dark) |
 |---|---|
-| ![Vista de uso de agentes con datos sintéticos](docs/images/kuntur-usage.png) | ![Vista previa de Markdown y diff a colores](docs/images/kuntur-preview.png) |
+| ![Panel de Configuración con los temas como círculos de color](docs/images/kuntur-settings.png) | ![Árbol de archivos con el menú contextual tipo VS Code](docs/images/kuntur-files.png) |
+
+| Uso (Blue) | Vista previa (White) |
+|---|---|
+| ![Vista de uso de agentes con datos sintéticos](docs/images/kuntur-usage.png) | ![Vista previa de Markdown](docs/images/kuntur-preview.png) |
 
 ## Instalar
 
 Descarga `kuntur-<versión>-x86_64.msi` de la página de Releases del proyecto y ejecútalo. Instala `kuntur.exe` y
-`kuntur-hook.exe` en `C:\Program Files\Kuntur` y agrega **Kuntur** al menú Inicio. Se desinstala desde
+`kuntur-hook.exe` en `C:\Program Files\Kuntur` y agrega **Kuntur** al menú Inicio y al escritorio. Se desinstala desde
 *Configuración → Aplicaciones*; tu configuración en `%APPDATA%\Kuntur` se conserva.
 
 Requisitos: Windows 11 x64 (probado; Windows 10 1809+ debería funcionar porque tiene ConPTY), GPU con DirectX 11/12.
@@ -95,6 +111,7 @@ kuntur/
 | Atajo | Acción |
 |---|---|
 | Ctrl+Shift+P | Paleta de comandos (temas, sesiones, acciones) |
+| Ctrl+, | Configuración (temas, idioma, notificaciones, actualizaciones) |
 | Ctrl+Shift+T / Ctrl+Shift+W | Nueva sesión / cerrar sesión |
 | Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+1…9 | Cambiar de sesión |
 | Ctrl+Shift+B | Panel lateral: completo ↔ íconos |

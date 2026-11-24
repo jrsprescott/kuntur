@@ -24,12 +24,23 @@ Spanish, are in [`docs/plans/`](docs/plans/).
   (see `docs/FIRMA.md`).
 - Linux and macOS groundwork: data folders per OS (XDG / Library), `$SHELL` as the default shell, and CI jobs that
   build there (Windows is still the only released platform).
-- _(pending: AI title in the session tab with marquee; Warp-style image paste)_
+- **AI title in the session tab:** while an agent runs, the tab shows the title it sets (in Claude Code, the topic of
+  the conversation) instead of "PowerShell"; when it does not fit, the active tab scrolls it back and forth and stops
+  on hover. A name given by hand always wins. Default tab names follow the shell (PowerShell, cmd, bash, zsh…).
+- **Warp-style image paste:** Ctrl+V with a screenshot in the clipboard attaches it instead of pasting nothing.
+  Claude Code gets its own image-paste key and shows `[Image #N]`; other agents and the plain shell get the saved
+  PNG path; SSH tabs upload it by SFTP first. Dragging an image onto the terminal works the same. An agent bar shows
+  the thumbnails (click to preview).
+- Title bar tooltips in Spanish and English.
 
 ### Changed
 - Release binaries no longer contain paths of the build machine (`--remap-path-prefix`), and `msi.ps1` refuses to
   build an installer that does.
 - The theme button opens Settings at the themes.
+
+## [0.1.0] — 2026-11-24 (preview)
+
+First preview release (phases F1–F11).
 
 ### Added (F10 · MCP and commands)
 - New `kuntur-mcp` crate: MCP server catalog (`[[mcp]]`, stdio or http) and profiles (`[[mcp_perfiles]]`) in

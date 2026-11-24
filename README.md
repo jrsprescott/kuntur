@@ -37,15 +37,29 @@ valley from above, you see every session at a glance and what each agent is doin
   HTML (WebView2) in a split view that reloads on change.
 - **Shell integration:** OSC 133 blocks (a thin mark per command, red on error) and **ghost-text completion** for
   paths, folder memory and per-folder history (Tab or → accepts).
+- **Screenshots for your agent, like Warp:** Ctrl+V with an image in the clipboard attaches it — Claude Code shows
+  `[Image #N]`, other agents get the saved PNG path, SSH tabs upload it first — and an agent bar shows thumbnails.
+- **The tab shows what the agent is doing:** the title the agent sets (in Claude Code, the topic of the
+  conversation) replaces "PowerShell"; long titles scroll on the active tab and stop on hover.
+- **File tree like VS Code's Explorer** with its right-click menu (new file/folder, rename, delete to the Recycle
+  Bin, cut/copy/paste between local and remote, copy path, reveal in File Explorer, add to chat…).
+- **Settings** (Ctrl+,): themes, font size, language (Spanish / English), notifications that do not nag (per type,
+  at most one per session every few minutes, only in the background) and update checks.
+- **Updates in one click:** a notice when a new version is out; Kuntur downloads the installer, verifies its SHA-256
+  and signature, installs it and reopens.
 
-| Usage (Blue) | Preview and diff (White) |
+| Settings (Blue) | Files and right-click menu (Dark) |
 |---|---|
-| ![Agent usage view with synthetic data](docs/images/kuntur-usage.png) | ![Markdown preview and colored diff](docs/images/kuntur-preview.png) |
+| ![Settings panel with themes as color circles](docs/images/kuntur-settings.png) | ![File tree with the VS Code-like context menu](docs/images/kuntur-files.png) |
+
+| Usage (Blue) | Preview (White) |
+|---|---|
+| ![Agent usage view with synthetic data](docs/images/kuntur-usage.png) | ![Markdown preview](docs/images/kuntur-preview.png) |
 
 ## Install
 
 Download `kuntur-<version>-x86_64.msi` from the project's Releases page and run it. It installs `kuntur.exe` and
-`kuntur-hook.exe` in `C:\Program Files\Kuntur` and adds **Kuntur** to the Start menu. Uninstall from *Settings →
+`kuntur-hook.exe` in `C:\Program Files\Kuntur` and adds **Kuntur** to the Start menu and the desktop. Uninstall from *Settings →
 Apps*; your settings in `%APPDATA%\Kuntur` are kept.
 
 Requirements: Windows 11 x64 (tested; Windows 10 1809+ should work, since it has ConPTY), a GPU with DirectX 11/12. Recommended font: Cascadia Mono
@@ -71,6 +85,7 @@ The first build takes several minutes (GPUI and SQLite). To build the MSI you al
 | Shortcut | Action |
 |---|---|
 | Ctrl+Shift+P | Command palette (themes, sessions, actions) |
+| Ctrl+, | Settings (themes, language, notifications, updates) |
 | Ctrl+Shift+T / Ctrl+Shift+W | New session / close session |
 | Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+1…9 | Switch sessions |
 | Ctrl+Shift+B | Side panel: full ↔ icons |
