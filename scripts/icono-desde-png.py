@@ -64,7 +64,8 @@ def main() -> None:
             small = small.filter(ImageFilter.UnsharpMask(radius=1, percent=120, threshold=0))
         return small
 
-    at(64).save(out / "kuntur-64.png")
+    # La barra de título lo muestra a ~18 px: se usa el trazo grueso aunque el archivo sea de 64 px.
+    bold.resize((64, 64), Image.LANCZOS).save(out / "kuntur-64.png")
     frames = [at(s) for s in ICO_SIZES]
     frames[-1].save(out / "kuntur.ico", format="ICO", sizes=[(s, s) for s in ICO_SIZES], append_images=frames[:-1])
     print("box", (left, top, right, bottom), "lado", side)
