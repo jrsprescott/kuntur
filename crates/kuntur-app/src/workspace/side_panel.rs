@@ -423,7 +423,14 @@ impl Workspace {
         let c = &self.colors;
         let files_on = self.panel == PanelView::Files;
         let hover = c.hover;
-        let tiles: Vec<AnyElement> = self.installed.iter().map(|id| self.installed_tile(id, cx)).collect();
+        // Pestaña remota (F6): los agentes instalados en el servidor, no los de esta PC.
+        let remote = self.active_remote_agents();
+        let (ids, others) = match &remote {
+            Some(names) => crate::connections::remote_agent_ids(&self.catalog, names),
+            None => (self.installed.clone(), Vec::new()),
+        };
+        let tiles: Vec<AnyElement> = ids.iter().map(|id| self.installed_tile(id, cx)).collect();
+        let has_agents = !tiles.is_empty() || !others.is_empty();
         v_flex()
             .flex_shrink_0()
             .border_t_1()
@@ -432,15 +439,28 @@ impl Workspace {
             .pt(px(8.))
             .pb(px(8.))
             .gap(px(6.))
-            .when(!tiles.is_empty(), |this| {
+            .when(has_agents, |this| {
                 this.child(
                     div()
                         .px(px(6.))
                         .text_size(px(11.))
                         .text_color(c.muted)
-                        .child("Agentes instalados"),
+                        .child(if remote.is_some() {
+                            "Agentes en el servidor"
+                        } else {
+                            "Agentes instalados"
+                        }),
                 )
                 .child(h_flex().px(px(2.)).gap(px(4.)).flex_wrap().children(tiles))
+                .when(!others.is_empty(), |this| {
+                    this.child(
+                        div()
+                            .px(px(6.))
+                            .text_size(px(11.))
+                            .text_color(c.muted)
+                            .child(others.join(" · ")),
+                    )
+                })
             })
             .child(
                 h_flex()
@@ -578,7 +598,12 @@ impl Workspace {
                     .into_any_element()
             })
             .collect();
-        let tiles: Vec<AnyElement> = self.installed.iter().map(|id| self.installed_tile(id, cx)).collect();
+        // Pestaña remota (F6): los del servidor.
+        let ids = match self.active_remote_agents() {
+            Some(names) => crate::connections::remote_agent_ids(&self.catalog, &names).0,
+            None => self.installed.clone(),
+        };
+        let tiles: Vec<AnyElement> = ids.iter().map(|id| self.installed_tile(id, cx)).collect();
         let files_on = self.panel == PanelView::Files;
 
         v_flex()

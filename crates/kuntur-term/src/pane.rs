@@ -1,4 +1,4 @@
-use std::io::{Read, Write};
+use std::io::Read;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use alacritty_terminal::event::Event;
 use alacritty_terminal::term::TermMode;
-use portable_pty::{Child, CommandBuilder, MasterPty, native_pty_system};
+use portable_pty::{CommandBuilder, native_pty_system};
 
 use crate::agent_signal::{AgentSignal, parse_7501};
 use crate::cwd::cwd_from_osc;
@@ -15,6 +15,7 @@ use crate::emulator::Emulator;
 use crate::osc::OscScanner;
 use crate::paste::paste_bytes;
 use crate::size::GridSize;
+use crate::transport::{LocalPty, Transport};
 
 /// Qué programa abrir en el panel.
 #[derive(Clone, Debug)]
@@ -71,23 +72,21 @@ fn find_in_path(exe: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// Un programa corriendo en un PTY (ConPTY en Windows) conectado a su emulador.
+/// Un programa conectado a su emulador: local (ConPTY) o remoto (cualquier [`Transport`]).
 pub struct Pane {
     emulator: Arc<Mutex<Emulator>>,
-    writer: Arc<Mutex<Box<dyn Write + Send>>>,
-    master: Mutex<Box<dyn MasterPty + Send>>,
-    child: Mutex<Box<dyn Child + Send + Sync>>,
+    transport: Arc<dyn Transport>,
     exited: Arc<AtomicBool>,
     title: Arc<Mutex<Option<String>>>,
     clipboard: Arc<Mutex<Option<String>>>,
-    pid: Option<u32>,
     cwd: Arc<Mutex<Option<PathBuf>>>,
     last_output: Arc<Mutex<Instant>>,
     agent_signal: Arc<Mutex<Option<AgentSignal>>>,
 }
 
 impl Pane {
-    /// Abre el programa. `on_change` se llama (desde otro hilo) cada vez que hay salida nueva.
+    /// Abre el programa en un PTY local. `on_change` se llama (desde otro hilo) cada vez que hay
+    /// salida nueva.
     pub fn spawn(opts: PaneOptions, on_change: impl Fn() + Send + 'static) -> anyhow::Result<Pane> {
         let pair = native_pty_system().openpty(opts.size.into())?;
 
@@ -111,12 +110,23 @@ impl Pane {
         }
 
         let child = pair.slave.spawn_command(cmd)?;
-        let pid = child.process_id();
         drop(pair.slave);
 
-        let mut reader = pair.master.try_clone_reader()?;
-        let writer: Arc<Mutex<Box<dyn Write + Send>>> = Arc::new(Mutex::new(pair.master.take_writer()?));
-        let emulator = Arc::new(Mutex::new(Emulator::new(opts.size)));
+        let reader = pair.master.try_clone_reader()?;
+        let writer = pair.master.take_writer()?;
+        let transport = Arc::new(LocalPty::new(pair.master, writer, child));
+        Self::with_transport(transport, reader, opts.size, on_change)
+    }
+
+    /// Conecta un emulador nuevo a un transporte cualquiera: `reader` trae la salida del programa
+    /// (su fin = el programa terminó) y `transport` lleva las teclas, el tamaño y las respuestas.
+    pub fn with_transport(
+        transport: Arc<dyn Transport>,
+        mut reader: Box<dyn Read + Send>,
+        size: GridSize,
+        on_change: impl Fn() + Send + 'static,
+    ) -> anyhow::Result<Pane> {
+        let emulator = Arc::new(Mutex::new(Emulator::new(size)));
         let exited = Arc::new(AtomicBool::new(false));
         let title = Arc::new(Mutex::new(None));
         let clipboard = Arc::new(Mutex::new(None));
@@ -126,9 +136,9 @@ impl Pane {
 
         {
             let agent_signal = agent_signal.clone();
-            let (emulator, writer, exited, title, clipboard, cwd, last_output) = (
+            let (emulator, transport, exited, title, clipboard, cwd, last_output) = (
                 emulator.clone(),
-                writer.clone(),
+                transport.clone(),
                 exited.clone(),
                 title.clone(),
                 clipboard.clone(),
@@ -162,9 +172,7 @@ impl Pane {
                         match event {
                             // Respuestas que el programa pidió (posición del cursor, atributos…).
                             Event::PtyWrite(s) => {
-                                let mut w = writer.lock().unwrap();
-                                let _ = w.write_all(s.as_bytes());
-                                let _ = w.flush();
+                                let _ = transport.write(s.as_bytes());
                             }
                             Event::ClipboardStore(_, text) => *clipboard.lock().unwrap() = Some(text),
                             Event::Title(t) => *title.lock().unwrap() = Some(t),
@@ -180,13 +188,10 @@ impl Pane {
 
         Ok(Pane {
             emulator,
-            writer,
-            master: Mutex::new(pair.master),
-            child: Mutex::new(child),
+            transport,
             exited,
             title,
             clipboard,
-            pid,
             cwd,
             last_output,
             agent_signal,
@@ -195,9 +200,7 @@ impl Pane {
 
     /// Envía bytes al programa (teclas).
     pub fn write(&self, bytes: &[u8]) -> std::io::Result<()> {
-        let mut w = self.writer.lock().unwrap();
-        w.write_all(bytes)?;
-        w.flush()
+        self.transport.write(bytes)
     }
 
     /// Pega texto respetando el modo bracketed paste del programa.
@@ -207,7 +210,7 @@ impl Pane {
     }
 
     pub fn resize(&self, size: GridSize) -> anyhow::Result<()> {
-        self.master.lock().unwrap().resize(size.into())?;
+        self.transport.resize(size)?;
         self.emulator.lock().unwrap().resize(size);
         Ok(())
     }
@@ -226,9 +229,9 @@ impl Pane {
         self.title.lock().unwrap().clone()
     }
 
-    /// PID del programa (el shell de la sesión).
+    /// PID del programa (el shell de la sesión); `None` si es remoto.
     pub fn pid(&self) -> Option<u32> {
-        self.pid
+        self.transport.pid()
     }
 
     /// Carpeta actual informada por el shell (OSC 7 / OSC 9;9); `None` hasta el primer aviso.
@@ -247,13 +250,80 @@ impl Pane {
     }
 
     pub fn has_exited(&self) -> bool {
-        self.exited.load(Ordering::SeqCst) || self.child.lock().unwrap().try_wait().ok().flatten().is_some()
+        self.exited.load(Ordering::SeqCst) || self.transport.has_exited()
     }
 }
 
 impl Drop for Pane {
     fn drop(&mut self) {
-        let _ = self.child.lock().unwrap().kill();
+        self.transport.kill();
+    }
+}
+
+#[cfg(test)]
+mod transport_tests {
+    use super::*;
+
+    /// Transporte falso: guarda lo escrito y los tamaños.
+    #[derive(Default)]
+    struct Recorder {
+        written: Mutex<Vec<u8>>,
+        sizes: Mutex<Vec<GridSize>>,
+        killed: AtomicBool,
+    }
+
+    impl Transport for Recorder {
+        fn write(&self, bytes: &[u8]) -> std::io::Result<()> {
+            self.written.lock().unwrap().extend_from_slice(bytes);
+            Ok(())
+        }
+        fn resize(&self, size: GridSize) -> anyhow::Result<()> {
+            self.sizes.lock().unwrap().push(size);
+            Ok(())
+        }
+        fn kill(&self) {
+            self.killed.store(true, Ordering::SeqCst);
+        }
+    }
+
+    fn wait(cond: impl Fn() -> bool) -> bool {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline {
+            if cond() {
+                return true;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        false
+    }
+
+    #[test]
+    fn un_transporte_cualquiera_alimenta_el_emulador() {
+        let rec = Arc::new(Recorder::default());
+        // Texto, la carpeta por OSC 7 (como un bash remoto) y una consulta de posición del cursor.
+        let salida = b"hola remoto\r\n\x1b]7;file://servidor/var/www\x07\x1b[6n".to_vec();
+        let pane = Pane::with_transport(
+            rec.clone(),
+            Box::new(std::io::Cursor::new(salida)),
+            GridSize::new(80, 24),
+            || {},
+        )
+        .unwrap();
+        assert!(wait(|| pane.has_exited()), "el fin del lector termina el panel");
+        assert!(pane.with_emulator(|e| e.contains_text("hola remoto")));
+        assert_eq!(pane.cwd().as_deref(), Some(std::path::Path::new("/var/www")));
+        assert_eq!(pane.pid(), None);
+        // La respuesta del emulador (posición del cursor) vuelve por el transporte.
+        assert!(String::from_utf8_lossy(&rec.written.lock().unwrap()).contains("R"));
+        pane.write(b"ls\r").unwrap();
+        assert!(rec.written.lock().unwrap().ends_with(b"ls\r"));
+        pane.resize(GridSize::new(100, 30)).unwrap();
+        assert_eq!(rec.sizes.lock().unwrap().as_slice(), &[GridSize::new(100, 30)]);
+        drop(pane);
+        assert!(
+            rec.killed.load(Ordering::SeqCst),
+            "cerrar el panel cierra el transporte"
+        );
     }
 }
 

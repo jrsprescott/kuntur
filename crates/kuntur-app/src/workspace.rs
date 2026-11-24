@@ -6,6 +6,7 @@
 
 mod agents_exact;
 mod audit_view;
+mod connections_view;
 mod dock_view;
 mod files_panel;
 mod side_panel;
@@ -38,6 +39,7 @@ use crate::terminal_view::{TerminalEvent, TerminalView};
 use crate::theme_bridge::{FALLBACK_MONO, FALLBACK_UI, UiColors, apply_to_kit, palette_from, pick_font};
 use agents_exact::ExactAgents;
 use audit_view::AuditState;
+use connections_view::{ConnectionsState, RemoteTab};
 use dock_view::DockDrag;
 use files_panel::FilesState;
 use usage_view::UsageState;
@@ -67,6 +69,8 @@ struct Session {
     /// ocultarla no la destruye.
     dock: Option<Entity<TerminalView>>,
     dock_state: DockState,
+    /// Sesión remota (F6): conexión y terminal principal; `None` = local.
+    remote: Option<RemoteTab>,
     _events: Subscription,
     _dock_events: Option<Subscription>,
 }
@@ -112,6 +116,8 @@ pub struct Workspace {
     usage: UsageState,
     /// Vista "Auditoría" (también ocupa el área central).
     audit: AuditState,
+    /// Gestor de conexiones SSH (panel flotante, F6).
+    connections: ConnectionsState,
     home: Option<PathBuf>,
     /// F5b: estado exacto por hooks / OSC 7501, worktrees, instalador de ganchos.
     exact: ExactAgents,
@@ -179,6 +185,7 @@ impl Workspace {
             files: FilesState::default(),
             usage: UsageState::default(),
             audit: AuditState::new(cx),
+            connections: ConnectionsState::default(),
             home: home_dir(),
             exact: ExactAgents::default(),
             _monitor: Self::spawn_monitor(cx),
@@ -204,6 +211,12 @@ impl Workspace {
         } else {
             let saved = this.settings.sessions.clone();
             for s in saved {
+                // Remotas: se reconectan solas; si su conexión ya no existe, se abren locales.
+                if let Some(conn) = &s.connection
+                    && this.open_remote(conn, s.cwd.clone(), Some(s.name.clone()), s.dock_ratio, window, cx)
+                {
+                    continue;
+                }
                 this.add_session(Some(s.name), s.shell, s.dock_ratio, window, cx);
             }
             if this.sessions.is_empty() {
@@ -297,6 +310,8 @@ impl Workspace {
             let input = std::env::var("KUNTUR_SMOKE_DOCK_INPUT").ok();
             this.smoke_dock(delay, input, mode == "reopen", window, cx);
         }
+        // Prueba de humo del gestor de conexiones (conexiones sintéticas).
+        this.smoke_connections(window, cx);
         this
     }
 
@@ -524,9 +539,13 @@ impl Workspace {
         .detach();
     }
 
-    /// Carpeta actual de la sesión activa (OSC 7 / OSC 9;9).
+    /// Carpeta actual de la sesión activa (OSC 7 / OSC 9;9). Las remotas no: el panel "Archivos" lee
+    /// el disco local y nunca debe mezclar local con remoto (el árbol remoto llega en F7).
     fn active_cwd(&self, cx: &App) -> Option<PathBuf> {
-        self.sessions.active().and_then(|e| e.value.view.read(cx).cwd())
+        self.sessions
+            .active()
+            .filter(|e| e.value.remote.is_none())
+            .and_then(|e| e.value.view.read(cx).cwd())
     }
 
     // ── Sesiones ────────────────────────────────────────────────────────────
@@ -561,6 +580,7 @@ impl Workspace {
                 shell,
                 dock: None,
                 dock_state: DockState::with_ratio(dock_ratio),
+                remote: None,
                 _events: events,
                 _dock_events: None,
             },
@@ -790,6 +810,8 @@ impl Workspace {
                 name: e.name.clone(),
                 shell: e.value.shell.clone(),
                 dock_ratio: e.value.dock_state.saved_ratio(),
+                connection: e.value.remote.as_ref().map(|r| r.connection.clone()),
+                cwd: e.value.remote.as_ref().and_then(|r| r.main.cwd()),
             })
             .collect();
         if let Some(path) = &self.config_path {
@@ -805,6 +827,7 @@ impl Workspace {
             .iter()
             .filter_map(|id| self.catalog.get(id).map(|a| (a.id.clone(), a.name.clone())))
             .collect();
+        self.connections.open = false;
         self.palette = Some(PaletteState::with_agents(agents));
         window.focus(&self.focus, cx);
         cx.notify();
@@ -893,6 +916,9 @@ impl Workspace {
             PaletteAction::SendSelectionToDock => self.send_selection_to_dock(window, cx),
             PaletteAction::SendSuggestion => self.send_suggestion(window, cx),
             PaletteAction::InstallClaudeHooks => self.open_installer(cx),
+            PaletteAction::Connections => self.open_connections(window, cx),
+            PaletteAction::NewConnection => self.new_connection_form(window, cx),
+            PaletteAction::Reconnect => self.reconnect_active(cx),
             PaletteAction::RenameSession => {}
         }
     }
@@ -992,6 +1018,11 @@ impl Workspace {
             cx.stop_propagation();
             return;
         }
+        if self.connections.open {
+            self.on_connections_key(ev, window, cx);
+            cx.stop_propagation();
+            return;
+        }
         if self.search_focus.is_focused(window) && self.on_search_key(ev, window, cx) {
             cx.stop_propagation();
             return;
@@ -1029,6 +1060,8 @@ impl Workspace {
             (true, "p") => self.toggle_palette(window, cx),
             (true, "u") => self.toggle_usage(window, cx),
             (true, "a") => self.toggle_audit(window, cx),
+            (true, "o") => self.toggle_connections(window, cx),
+            (true, "r") => self.reconnect_active(cx),
             (_, "=" | "+") => self.set_font_size(self.settings.font_size + FONT_STEP, cx),
             (false, "-") => self.set_font_size(self.settings.font_size - FONT_STEP, cx),
             (false, "0") => self.set_font_size(Settings::default().font_size, cx),
@@ -1276,9 +1309,11 @@ impl Workspace {
     /// Línea inferior de 22 px: carpeta actual a la izquierda y la RAM de Kuntur a la derecha.
     fn render_status_line(&self, cx: &App) -> impl IntoElement {
         let c = &self.colors;
-        let cwd = self
-            .focused_cwd(cx)
-            .map(|p| kuntur_files::display_path(&p, self.home.as_deref()));
+        let remote = self.sessions.active_id().and_then(|id| self.remote_label(id));
+        let cwd = self.focused_cwd(cx).map(|p| match &remote {
+            Some(r) => format!("{r}:{}", p.display()),
+            None => kuntur_files::display_path(&p, self.home.as_deref()),
+        });
         let ram = self
             .ram
             .map(|b| format!("Kuntur · {} MB", (b as f64 / (1024.0 * 1024.0)).round() as u64));
@@ -1330,6 +1365,7 @@ impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = self.colors.clone();
         let palette = self.palette.as_ref().map(|p| self.render_palette(p, cx));
+        let connections = self.connections.open.then(|| self.render_connections(cx));
         v_flex()
             .relative()
             .size_full()
@@ -1369,5 +1405,6 @@ impl Render for Workspace {
             )
             .children(palette)
             .children(self.render_exact_overlay(cx))
+            .children(connections)
     }
 }

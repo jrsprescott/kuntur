@@ -16,6 +16,7 @@ kuntur-agents = { path = "../kuntur-agents" }
 kuntur-hook = { path = "../kuntur-hook" }
 kuntur-usage = { path = "../kuntur-usage" }
 kuntur-files = { path = "../kuntur-files" }
+kuntur-ssh = { path = "../kuntur-ssh" }
 gpui-kit = { workspace = true }
 smol = { workspace = true }
 sysinfo = { workspace = true }

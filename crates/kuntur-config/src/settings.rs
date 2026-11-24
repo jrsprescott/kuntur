@@ -2,6 +2,8 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::connections::ConnectionConfig;
+
 /// Vista del riel de sesiones. No existe "oculta": el mínimo son los íconos.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -22,6 +24,18 @@ pub struct SessionConfig {
     /// Alto de la terminal acoplada (proporción del área de terminales); `None` = el de siempre.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dock_ratio: Option<f32>,
+    /// Sesión remota: nombre de la conexión guardada (`None` = local). §6 de la especificación.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub connection: Option<String>,
+    /// Última carpeta conocida (OSC 7 / OSC 9;9): una sesión remota se reconecta ahí.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cwd: Option<String>,
+}
+
+impl SessionConfig {
+    pub fn is_remote(&self) -> bool {
+        self.connection.is_some()
+    }
 }
 
 /// Agente agregado por el usuario (`[[agentes]]` en `config.toml`). Si el ejecutable es el de uno
@@ -60,6 +74,8 @@ pub struct Settings {
     /// Agentes extra (§5).
     #[serde(rename = "agentes", skip_serializing_if = "Vec::is_empty")]
     pub agents: Vec<AgentConfig>,
+    /// Conexiones SSH guardadas (gestor de conexiones, F6).
+    pub connections: Vec<ConnectionConfig>,
 }
 
 impl Default for Settings {
@@ -71,6 +87,7 @@ impl Default for Settings {
             alerts: true,
             sessions: Vec::new(),
             agents: Vec::new(),
+            connections: Vec::new(),
         }
     }
 }
@@ -148,16 +165,39 @@ mod tests {
                     name: "web".into(),
                     shell: None,
                     dock_ratio: None,
+                    ..Default::default()
                 },
                 SessionConfig {
                     name: "api".into(),
                     shell: Some("cmd.exe".into()),
                     dock_ratio: Some(0.5),
+                    ..Default::default()
+                },
+                SessionConfig {
+                    name: "servidor".into(),
+                    connection: Some("produccion".into()),
+                    cwd: Some("/var/www".into()),
+                    ..Default::default()
                 },
             ],
+            connections: vec![ConnectionConfig {
+                name: "produccion".into(),
+                host: "srv.ejemplo.test".into(),
+                port: 2222,
+                user: "deploy".into(),
+                key: Some("C:\\llaves\\id_ed25519".into()),
+                remember: true,
+            }],
         };
         s.save(&path).unwrap();
         assert_eq!(Settings::load(&path), s);
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("[[connections]]"));
+        assert!(
+            !text.to_lowercase().contains("password"),
+            "nunca se guardan contraseñas"
+        );
+        assert!(Settings::load(&path).sessions[2].is_remote());
     }
 
     #[test]

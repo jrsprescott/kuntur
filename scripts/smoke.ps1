@@ -22,6 +22,8 @@
   .\scripts\smoke.ps1 -Sessions 3 -Panel full -AgentEvents scripts\smoke-agentes.jsonl -Out target\smoke-exacto.png
 .EXAMPLE
   .\scripts\smoke.ps1 -Sessions 1 -HooksInstall -Theme white -Out target\smoke-ganchos.png
+.EXAMPLE
+  .\scripts\smoke.ps1 -Sessions 1 -Connections list -Out target\smoke-conexiones.png
 #>
 param(
     [string[]]$Commands = @('Write-Host rojo -ForegroundColor Red; Write-Host verde -ForegroundColor Green', 'Get-ChildItem | Select-Object -First 5'),
@@ -63,6 +65,10 @@ param(
     # Abre "Instalar ganchos de Claude Code" contra target\smoke-claude-settings.json (se crea con un
     # ejemplo si no existe). Nunca contra ~/.claude: la prueba no pulsa "Instalar".
     [switch]$HooksInstall,
+    # Gestor de conexiones SSH con conexiones SINTÉTICAS (dominios .test, 127.0.0.1): 'list' abre el
+    # panel, 'form' el formulario de edición y 'remote' una pestaña remota a un puerto sin servidor
+    # (muestra el error y la franja "Desconectado · Reconectar"). Nunca usa ~/.ssh ni credenciales.
+    [ValidateSet('', 'list', 'form', 'remote')][string]$Connections = '',
     # Pantalla donde se abre la ventana, contando de izquierda a derecha desde 0. Por defecto, la de
     # más a la derecha que NO sea la principal (en la PC del usuario: el monitor Teros), para no
     # interrumpir lo que pasa en la principal. La ventana se abre sin tomar el foco.
@@ -136,6 +142,7 @@ if ($HooksInstall) {
     $smokeEnv.KUNTUR_CLAUDE_SETTINGS = $claudeSettings
 }
 if ($Dock -and $DockCommands.Count -gt 0) { $smokeEnv.KUNTUR_SMOKE_DOCK_INPUT = ($DockCommands -join '\n') }
+if ($Connections) { $smokeEnv.KUNTUR_SMOKE_CONNECTIONS = $Connections }
 foreach ($k in $smokeEnv.Keys) { Set-Item "Env:$k" $smokeEnv[$k] }
 $p = Start-Process $exe -PassThru
 foreach ($k in $smokeEnv.Keys) { Remove-Item "Env:$k" }

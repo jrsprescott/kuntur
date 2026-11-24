@@ -41,6 +41,9 @@ pub enum PaletteAction {
     SendSuggestion,
     /// Muestra qué se agregará a `~/.claude/settings.json` y lo instala si el usuario confirma (F5b).
     InstallClaudeHooks,
+    Connections,
+    NewConnection,
+    Reconnect,
 }
 
 #[derive(Clone, Debug)]
@@ -59,7 +62,7 @@ const fn item(action: PaletteAction, label: &'static str, shortcut: Option<&'sta
 }
 
 /// Las acciones fijas, en el orden en que se muestran (después van las de abrir cada agente instalado).
-pub static ITEMS: [PaletteItem; 25] = [
+pub static ITEMS: [PaletteItem; 28] = [
     item(PaletteAction::NewSession, "Nueva sesión", Some("Ctrl+Shift+T")),
     item(PaletteAction::RenameSession, "Renombrar sesión", None),
     item(PaletteAction::CloseSession, "Cerrar sesión", Some("Ctrl+Shift+W")),
@@ -100,6 +103,13 @@ pub static ITEMS: [PaletteItem; 25] = [
         PaletteAction::InstallClaudeHooks,
         "Claude Code: instalar ganchos de Kuntur",
         None,
+    ),
+    item(PaletteAction::Connections, "Conexiones SSH", Some("Ctrl+Shift+O")),
+    item(PaletteAction::NewConnection, "Conexiones SSH: nueva", None),
+    item(
+        PaletteAction::Reconnect,
+        "Sesión remota: reconectar",
+        Some("Ctrl+Shift+R"),
     ),
 ];
 
@@ -346,6 +356,19 @@ mod tests {
         p.clear();
         p.insert("auditoria");
         assert_eq!(p.selected_action(), Some(PaletteAction::Audit));
+    }
+
+    #[test]
+    fn conexiones_y_reconectar_se_encuentran() {
+        let mut p = PaletteState::new();
+        p.insert("ssh");
+        assert_eq!(p.selected_action(), Some(PaletteAction::Connections));
+        p.clear();
+        p.insert("nueva conexion");
+        assert_eq!(p.selected_action(), Some(PaletteAction::NewConnection));
+        p.clear();
+        p.insert("reconectar");
+        assert_eq!(p.selected_action(), Some(PaletteAction::Reconnect));
     }
 
     #[test]

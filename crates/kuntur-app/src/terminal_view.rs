@@ -9,6 +9,15 @@ use kuntur_term::{
 };
 
 const LINE_HEIGHT_FACTOR: f32 = 1.3;
+/// Tamaño hasta el primer dibujo (después se ajusta al área real).
+pub const INITIAL_SIZE: GridSize = GridSize { cols: 100, rows: 30 };
+
+/// `on_change` de un panel: avisa a la vista (desde el hilo lector) que hay salida nueva.
+pub fn notifier(tx: smol::channel::Sender<()>) -> impl Fn() + Send + 'static {
+    move || {
+        let _ = tx.try_send(());
+    }
+}
 /// Contraste mínimo del texto contra su fondo (WCAG 3:1): ningún color de programa queda invisible.
 const MIN_CONTRAST: f32 = 3.0;
 
@@ -62,18 +71,30 @@ impl TerminalView {
         font_family: SharedString,
         font_size: f32,
     ) -> Self {
-        let (tx, rx) = smol::channel::bounded::<()>(1);
-        let size = GridSize::new(100, 30);
+        let size = INITIAL_SIZE;
         opts.size = size;
-        let notify = |tx: smol::channel::Sender<()>| {
-            move || {
-                let _ = tx.try_send(());
-            }
+        let make = move |tx: smol::channel::Sender<()>| {
+            // Si el shell guardado ya no existe, se abre el predeterminado en vez de fallar.
+            Pane::spawn(opts, notifier(tx.clone()))
+                .or_else(|_| Pane::spawn(PaneOptions::default_shell(size), notifier(tx)))
+                .expect("no se pudo abrir el shell")
         };
-        // Si el shell guardado ya no existe, se abre el predeterminado en vez de fallar.
-        let pane = Pane::spawn(opts, notify(tx.clone()))
-            .or_else(|_| Pane::spawn(PaneOptions::default_shell(size), notify(tx)))
-            .expect("no se pudo abrir el shell");
+        Self::with_pane(window, cx, make, palette, font_family, font_size)
+    }
+
+    /// Vista sobre un panel ya armado (por ejemplo, una terminal remota por SSH). `make` recibe el
+    /// canal de aviso: [`notifier`] lo convierte en el `on_change` del panel.
+    pub fn with_pane(
+        window: &mut Window,
+        cx: &mut Context<Self>,
+        make: impl FnOnce(smol::channel::Sender<()>) -> Pane,
+        palette: Palette,
+        font_family: SharedString,
+        font_size: f32,
+    ) -> Self {
+        let (tx, rx) = smol::channel::bounded::<()>(1);
+        let size = INITIAL_SIZE;
+        let pane = make(tx);
 
         // El hilo del PTY avisa por el canal; aquí se redibuja en el hilo de la UI.
         let pump = cx.spawn(async move |this, cx| {
