@@ -68,6 +68,11 @@ Descarga `kuntur-<versión>-x86_64.msi` de la página de Releases del proyecto y
 `kuntur-hook.exe` en `C:\Program Files\Kuntur` y agrega **Kuntur** al menú Inicio y al escritorio. Se desinstala desde
 *Configuración → Aplicaciones*; tu configuración en `%APPDATA%\Kuntur` se conserva.
 
+**Firma de código:** las versiones para Windows se firman con SignPath Foundation — firma de código gratuita de
+[SignPath.io](https://about.signpath.io/), certificado de [SignPath Foundation](https://signpath.org/). Hasta la
+primera versión firmada, SmartScreen puede mostrar "Editor desconocido". Ver
+[CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md) (política de firma y de privacidad).
+
 Requisitos: Windows 11 x64 (probado; Windows 10 1809+ debería funcionar porque tiene ConPTY), GPU con DirectX 11/12.
 Fuente recomendada: Cascadia Mono (viene con Windows 11). La vista previa de PDF/HTML usa WebView2, que trae Windows.
 
