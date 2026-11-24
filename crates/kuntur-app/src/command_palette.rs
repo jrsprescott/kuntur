@@ -13,6 +13,7 @@ pub enum PaletteAction {
     CloseSession,
     NextSession,
     PrevSession,
+    ToggleDock,
     Theme(ThemeId),
     RailFull,
     RailIcons,
@@ -42,12 +43,17 @@ const fn item(action: PaletteAction, label: &'static str, shortcut: Option<&'sta
 }
 
 /// Todas las acciones, en el orden en que se muestran.
-pub const ITEMS: [PaletteItem; 18] = [
+pub const ITEMS: [PaletteItem; 19] = [
     item(PaletteAction::NewSession, "Nueva sesión", Some("Ctrl+Shift+T")),
     item(PaletteAction::RenameSession, "Renombrar sesión", None),
     item(PaletteAction::CloseSession, "Cerrar sesión", Some("Ctrl+Shift+W")),
     item(PaletteAction::NextSession, "Siguiente sesión", Some("Ctrl+Tab")),
     item(PaletteAction::PrevSession, "Sesión anterior", Some("Ctrl+Shift+Tab")),
+    item(
+        PaletteAction::ToggleDock,
+        "Terminal acoplada: mostrar/ocultar",
+        Some("Ctrl+`"),
+    ),
     item(PaletteAction::Theme(ThemeId::Blue), "Tema: Blue", None),
     item(PaletteAction::Theme(ThemeId::Dark), "Tema: Dark", None),
     item(PaletteAction::Theme(ThemeId::White), "Tema: White", None),
@@ -240,6 +246,16 @@ mod tests {
         assert_eq!(p.selected, 0);
         p.clear();
         assert_eq!(p.filtered().len(), ITEMS.len());
+    }
+
+    #[test]
+    fn la_terminal_acoplada_se_encuentra() {
+        let mut p = PaletteState::new();
+        p.insert("acoplada");
+        assert_eq!(p.selected_action(), Some(PaletteAction::ToggleDock));
+        p.clear();
+        p.insert("terminal ocultar");
+        assert_eq!(p.selected_action(), Some(PaletteAction::ToggleDock));
     }
 
     #[test]

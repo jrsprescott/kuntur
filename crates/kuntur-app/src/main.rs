@@ -4,6 +4,7 @@
 
 mod agents_panel;
 mod command_palette;
+mod dock;
 mod monitor;
 mod sessions;
 mod terminal_view;

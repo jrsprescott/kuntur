@@ -19,6 +19,9 @@ pub struct SessionConfig {
     /// Programa del shell; `None` = el predeterminado (PowerShell 7 o Windows PowerShell).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shell: Option<String>,
+    /// Alto de la terminal acoplada (proporción del área de terminales); `None` = el de siempre.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dock_ratio: Option<f32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -100,10 +103,18 @@ mod tests {
             theme: "blue".into(),
             sidebar: SidebarMode::Full,
             font_size: 15.0,
-            sessions: vec![SessionConfig {
-                name: "web".into(),
-                shell: None,
-            }],
+            sessions: vec![
+                SessionConfig {
+                    name: "web".into(),
+                    shell: None,
+                    dock_ratio: None,
+                },
+                SessionConfig {
+                    name: "api".into(),
+                    shell: Some("cmd.exe".into()),
+                    dock_ratio: Some(0.5),
+                },
+            ],
         };
         s.save(&path).unwrap();
         assert_eq!(Settings::load(&path), s);
@@ -124,6 +135,25 @@ mod tests {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, "sidebar = \"hidden\"\n").unwrap();
         assert_eq!(Settings::load(&path).sidebar, SidebarMode::Icons);
+    }
+
+    #[test]
+    fn sesiones_de_archivos_viejos_sin_alto_acoplado() {
+        let path = tmp("sin-dock");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &path,
+            "[[sessions]]
+name = \"web\"
+",
+        )
+        .unwrap();
+        let s = Settings::load(&path);
+        assert_eq!(s.sessions.len(), 1);
+        assert_eq!(s.sessions[0].dock_ratio, None);
+        // Y sin alto propio no se escribe el campo.
+        let text = toml::to_string_pretty(&s).unwrap();
+        assert!(!text.contains("dock_ratio"));
     }
 
     #[test]

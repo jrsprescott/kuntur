@@ -1,5 +1,5 @@
 //! Barra de título (34 px): botón del panel · pestañas de sesiones · `+` · espacio de arrastre ·
-//! botones de ícono (Tema, Uso de agentes, Acciones) · botones de Windows.
+//! botones de ícono (Terminal acoplada, Tema, Uso de agentes, Acciones) · botones de Windows.
 
 use gpui_kit::component::TitleBar;
 use kuntur_agents::AgentState;
@@ -85,6 +85,13 @@ impl Workspace {
                             .flex_shrink_0()
                             .gap(px(2.))
                             .pr(px(4.))
+                            .child(
+                                icon_button("dock", IconName::PanelBottom, c, "Terminal acoplada (Ctrl+`)")
+                                    .when(self.dock_open() && !self.usage.open, |this| {
+                                        this.bg(c.surface_2).text_color(c.text)
+                                    })
+                                    .on_click(cx.listener(|this, _, window, cx| this.toggle_dock(window, cx))),
+                            )
                             .child(
                                 icon_button("theme", IconName::Palette, c, "Tema: Blue · Dark · White")
                                     .on_click(cx.listener(|this, _, window, cx| this.toggle_theme_menu(window, cx))),

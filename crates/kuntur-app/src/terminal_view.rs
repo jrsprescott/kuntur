@@ -168,6 +168,11 @@ impl TerminalView {
         window.focus(&self.focus, cx);
     }
 
+    /// ¿Tiene el teclado?
+    pub fn is_focused(&self, window: &Window) -> bool {
+        self.focus.is_focused(window)
+    }
+
     fn metrics(&self, window: &mut Window) -> Metrics {
         let font_size = px(self.font_size);
         let text = window.text_system();
@@ -445,6 +450,8 @@ impl Render for TerminalView {
         let screen = self.pane.with_emulator(|e| Screen::capture(e, &self.palette));
         let bg = self.background;
         let cursor_color = to_color(self.palette.cursor);
+        // Con dos paneles (principal y acoplada) el cursor dice cuál tiene el teclado.
+        let focused = self.focus.is_focused(window);
         let (family, font_size) = (self.font_family.clone(), px(self.font_size));
         let (pane, bounds_cell, size_cell) = (self.pane.clone(), self.bounds.clone(), self.last_size.clone());
 
@@ -486,6 +493,7 @@ impl Render for TerminalView {
                             family,
                             size: font_size,
                             cursor: cursor_color,
+                            focused,
                         };
                         paint_screen(&screen, bounds, metrics, &style, window, cx)
                     },
@@ -499,6 +507,8 @@ struct TextStyleCfg {
     family: SharedString,
     size: Pixels,
     cursor: Hsla,
+    /// Sin el teclado, el cursor se dibuja hueco.
+    focused: bool,
 }
 
 fn paint_screen(
@@ -571,15 +581,17 @@ fn paint_screen(
             .shape_line(text.into(), font_size, &runs, Some(m.cell_w));
         let _ = line.paint(point(bounds.origin.x, y), m.line_h, TextAlign::Left, None, window, cx);
     }
-    // 3) Cursor: bloque semitransparente.
+    // 3) Cursor: bloque semitransparente; hueco si el panel no tiene el teclado.
     if let Some((c, r)) = screen.cursor {
         let origin = point(
             bounds.origin.x + m.cell_w * c as f32,
             bounds.origin.y + m.line_h * r as f32,
         );
-        window.paint_quad(fill(
-            Bounds::new(origin, size(m.cell_w, m.line_h)),
-            cursor.opacity(0.55),
-        ));
+        let cell = Bounds::new(origin, size(m.cell_w, m.line_h));
+        if style.focused {
+            window.paint_quad(fill(cell, cursor.opacity(0.55)));
+        } else {
+            window.paint_quad(outline(cell, cursor.opacity(0.7), BorderStyle::default()));
+        }
     }
 }

@@ -4,6 +4,7 @@
 //! arriba, jerarquía por peso y color de texto, íconos de un solo color, color solo para estado y lo
 //! secundario al pasar el mouse.
 
+mod dock_view;
 mod files_panel;
 mod side_panel;
 mod title_bar;
@@ -23,10 +24,12 @@ use kuntur_usage::codex::Limits;
 
 use crate::agents_panel::{AgentFilter, AgentRow};
 use crate::command_palette::{PaletteAction, PaletteItem, PaletteMode, PaletteState};
+use crate::dock::{DockState, is_toggle_key};
 use crate::monitor::{Sample, Sampler, SlowSample, home_dir, slow_sample};
 use crate::sessions::{SessionList, next_default_name, short_title};
 use crate::terminal_view::{TerminalEvent, TerminalView};
 use crate::theme_bridge::{FALLBACK_MONO, FALLBACK_UI, UiColors, apply_to_kit, palette_from, pick_font};
+use dock_view::DockDrag;
 use files_panel::FilesState;
 use usage_view::UsageState;
 
@@ -51,7 +54,12 @@ struct Session {
     view: Entity<TerminalView>,
     /// Programa del shell (`None` = el predeterminado); se guarda con la sesión.
     shell: Option<String>,
+    /// Terminal acoplada (F4): existe desde que se abre por primera vez hasta que su shell termina;
+    /// ocultarla no la destruye.
+    dock: Option<Entity<TerminalView>>,
+    dock_state: DockState,
     _events: Subscription,
+    _dock_events: Option<Subscription>,
 }
 
 pub struct Workspace {
@@ -137,20 +145,22 @@ impl Workspace {
         if let Some(n) = smoke_sessions {
             this.config_path = None;
             for _ in 0..n {
-                this.add_session(None, None, window, cx);
+                this.add_session(None, None, None, window, cx);
             }
         } else {
             let saved = this.settings.sessions.clone();
             for s in saved {
-                this.add_session(Some(s.name), s.shell, window, cx);
+                this.add_session(Some(s.name), s.shell, s.dock_ratio, window, cx);
             }
             if this.sessions.is_empty() {
-                this.add_session(None, None, window, cx);
+                this.add_session(None, None, None, window, cx);
             }
         }
 
         // KUNTUR_SMOKE_INPUT escribe comandos solo en la primera sesión.
-        if let (Ok(input), Some(first)) = (std::env::var("KUNTUR_SMOKE_INPUT"), this.sessions.iter().next()) {
+        let smoke_input = std::env::var("KUNTUR_SMOKE_INPUT").ok();
+        let smoke_commands = smoke_input.as_ref().map_or(0, |i| i.split("\\n").count()) as u64;
+        if let (Some(input), Some(first)) = (smoke_input, this.sessions.iter().next()) {
             first.value.view.read(cx).send_smoke_input(input);
         }
 
@@ -197,6 +207,15 @@ impl Workspace {
             this.config_path = None;
             this.usage.set_initial_period(&period);
             this.open_usage(window, cx);
+        }
+
+        // Prueba de humo: terminal acoplada ("open") de la primera sesión, abierta después de los
+        // comandos de la principal; "reopen" además la oculta y la vuelve a mostrar.
+        if let Ok(mode) = std::env::var("KUNTUR_SMOKE_DOCK") {
+            this.config_path = None;
+            let delay = Duration::from_millis(2_500 + 600 * smoke_commands + 1_500);
+            let input = std::env::var("KUNTUR_SMOKE_DOCK_INPUT").ok();
+            this.smoke_dock(delay, input, mode == "reopen", window, cx);
         }
         this
     }
@@ -279,30 +298,16 @@ impl Workspace {
         &mut self,
         name: Option<String>,
         shell: Option<String>,
+        dock_ratio: Option<f32>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let size = GridSize::new(100, 30);
-        let opts = match shell.clone() {
-            Some(program) => PaneOptions {
-                program,
-                args: Vec::new(),
-                cwd: None,
-                size,
-            },
-            None => PaneOptions::default_shell(size),
-        };
+        let opts = Self::pane_options(shell.clone(), None);
         let name = name.unwrap_or_else(|| {
             let existing: Vec<&str> = self.sessions.iter().map(|e| e.name.as_str()).collect();
             next_default_name("PowerShell", &existing)
         });
-        let palette = palette_from(&self.theme);
-        let (family, size_pt, background) = (self.mono_font.clone(), self.settings.font_size, self.colors.terminal);
-        let view = cx.new(|cx| {
-            let mut v = TerminalView::new(window, cx, opts, palette.clone(), family, size_pt);
-            v.set_palette(palette, background, cx);
-            v
-        });
+        let view = self.new_terminal(opts, window, cx);
         let events = cx.subscribe_in(&view, window, |this, view, ev: &TerminalEvent, window, cx| match ev {
             TerminalEvent::TitleChanged => cx.notify(),
             TerminalEvent::Exited => {
@@ -317,14 +322,17 @@ impl Workspace {
             Session {
                 view,
                 shell,
+                dock: None,
+                dock_state: DockState::with_ratio(dock_ratio),
                 _events: events,
+                _dock_events: None,
             },
         );
         cx.notify();
     }
 
     fn new_session(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.add_session(None, None, window, cx);
+        self.add_session(None, None, None, window, cx);
         self.persist();
         self.usage.open = false;
         self.focus_active(window, cx);
@@ -336,7 +344,7 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Cierra la sesión (su PTY termina al soltar la vista). Cerrar la última cierra la ventana.
+    /// Cierra la sesión (su PTY y el de su acoplada terminan al soltar las vistas). Cerrar la última cierra la ventana.
     fn close_session(&mut self, id: u64, window: &mut Window, cx: &mut Context<Self>) {
         if self.sessions.close(id).is_none() {
             return;
@@ -360,15 +368,16 @@ impl Workspace {
         }
     }
 
-    /// Lleva el teclado a la terminal activa (y el panel Archivos a su carpeta). Con la vista de
-    /// uso abierta, el teclado queda en la ventana (Esc la cierra) y no en la terminal oculta.
+    /// Lleva el teclado a la terminal activa —la principal o la acoplada, la que lo tuvo por última
+    /// vez— (y el panel Archivos a su carpeta). Con la vista de uso abierta, el teclado queda en la
+    /// ventana (Esc la cierra) y no en la terminal oculta.
     fn focus_active(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.usage.open {
             window.focus(&self.focus, cx);
             return;
         }
-        if let Some(e) = self.sessions.active() {
-            e.value.view.update(cx, |v, cx| v.focus(window, cx));
+        if let Some(view) = self.sessions.active_id().and_then(|id| self.focus_target(id)) {
+            view.update(cx, |v, cx| v.focus(window, cx));
         }
         self.sync_files(false, cx);
     }
@@ -486,10 +495,8 @@ impl Workspace {
             return;
         }
         self.settings.font_size = size;
-        for e in self.sessions.iter() {
-            e.value
-                .view
-                .update(cx, |v, cx| v.set_font(self.mono_font.clone(), size, cx));
+        for view in self.all_terminals() {
+            view.update(cx, |v, cx| v.set_font(self.mono_font.clone(), size, cx));
         }
         self.persist();
         cx.notify();
@@ -505,8 +512,8 @@ impl Workspace {
         self.ui_font = pick_font(&installed, &theme.fonts.ui, FALLBACK_UI);
         self.colors = UiColors::from_theme(&theme);
         let palette = palette_from(&theme);
-        for e in self.sessions.iter() {
-            e.value.view.update(cx, |v, cx| {
+        for view in self.all_terminals() {
+            view.update(cx, |v, cx| {
                 v.set_palette(palette.clone(), self.colors.terminal, cx);
                 v.set_font(self.mono_font.clone(), self.settings.font_size, cx);
             });
@@ -519,7 +526,15 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Guarda la configuración (tema, riel, fuente y sesiones con nombre + shell). En las pruebas
+    /// Todas las terminales: la principal y la acoplada (aunque esté oculta) de cada sesión.
+    fn all_terminals(&self) -> Vec<Entity<TerminalView>> {
+        self.sessions
+            .iter()
+            .flat_map(|e| std::iter::once(e.value.view.clone()).chain(e.value.dock.clone()))
+            .collect()
+    }
+
+    /// Guarda la configuración (tema, riel, fuente y sesiones con nombre, shell y alto acoplado). En las pruebas
     /// de humo `config_path` es `None` y no se toca nada.
     fn persist(&mut self) {
         self.settings.sessions = self
@@ -528,6 +543,7 @@ impl Workspace {
             .map(|e| SessionConfig {
                 name: e.name.clone(),
                 shell: e.value.shell.clone(),
+                dock_ratio: e.value.dock_state.saved_ratio(),
             })
             .collect();
         if let Some(path) = &self.config_path {
@@ -576,6 +592,7 @@ impl Workspace {
             }
             PaletteAction::NextSession => self.cycle(true, window, cx),
             PaletteAction::PrevSession => self.cycle(false, window, cx),
+            PaletteAction::ToggleDock => self.toggle_dock(window, cx),
             PaletteAction::Theme(id) => self.set_theme(id, window, cx),
             PaletteAction::RailFull => self.set_sidebar(SidebarMode::Full, cx),
             PaletteAction::RailIcons => self.set_sidebar(SidebarMode::Icons, cx),
@@ -625,6 +642,7 @@ impl Workspace {
             PaletteAction::PanelAgents => self.panel == PanelView::Agents,
             PaletteAction::PanelFiles => self.panel == PanelView::Files,
             PaletteAction::Usage => self.usage.open,
+            PaletteAction::ToggleDock => self.dock_open(),
             _ => false,
         }
     }
@@ -701,6 +719,11 @@ impl Workspace {
         let m = ev.keystroke.modifiers;
         if self.usage.open && ev.keystroke.key == "escape" && !m.modified() {
             self.close_usage(window, cx);
+            cx.stop_propagation();
+            return;
+        }
+        if is_toggle_key(&ev.keystroke.key, m.control, m.shift, m.alt) && !m.platform {
+            self.toggle_dock(window, cx);
             cx.stop_propagation();
             return;
         }
@@ -968,7 +991,7 @@ impl Workspace {
     fn render_status_line(&self, cx: &App) -> impl IntoElement {
         let c = &self.colors;
         let cwd = self
-            .active_cwd(cx)
+            .focused_cwd(cx)
             .map(|p| kuntur_files::display_path(&p, self.home.as_deref()));
         let ram = self
             .ram
@@ -1020,7 +1043,6 @@ impl Workspace {
 impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = self.colors.clone();
-        let active = self.sessions.active().map(|e| e.value.view.clone());
         let palette = self.palette.as_ref().map(|p| self.render_palette(p, cx));
         v_flex()
             .relative()
@@ -1030,6 +1052,11 @@ impl Render for Workspace {
             .font_family(self.ui_font.clone())
             .text_size(px(UI_TEXT))
             .capture_key_down(cx.listener(Self::on_key))
+            // Soltar el separador de la acoplada: se guarda su alto.
+            .on_drop(cx.listener(|this, _: &DockDrag, _, cx| {
+                this.persist();
+                cx.notify();
+            }))
             .child(self.render_title_bar(cx))
             .child(
                 h_flex()
@@ -1046,7 +1073,7 @@ impl Render for Workspace {
                                 if self.usage.open {
                                     this.child(self.render_usage(cx))
                                 } else {
-                                    this.children(active)
+                                    this.child(self.render_terminals(cx))
                                 }
                             }))
                             .child(self.render_status_line(cx)),

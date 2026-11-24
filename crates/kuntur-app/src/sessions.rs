@@ -92,6 +92,14 @@ impl<T> SessionList<T> {
         self.active().map(|e| e.id)
     }
 
+    pub fn get(&self, id: u64) -> Option<&Entry<T>> {
+        self.items.iter().find(|e| e.id == id)
+    }
+
+    pub fn get_mut(&mut self, id: u64) -> Option<&mut Entry<T>> {
+        self.items.iter_mut().find(|e| e.id == id)
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = &Entry<T>> {
         self.items.iter()
     }
@@ -203,6 +211,19 @@ mod tests {
         assert_eq!(short_title("  opencode  "), "opencode");
         assert_eq!(short_title("pwsh.exe"), "pwsh.exe");
         assert_eq!(short_title(r"Admin: C:\Windows\cmd.exe"), "cmd");
+    }
+
+    #[test]
+    fn buscar_y_modificar_por_id() {
+        let mut s = SessionList::new();
+        let a = s.push("uno", 1);
+        let b = s.push("dos", 2);
+        assert_eq!(s.get(a).map(|e| e.value), Some(1));
+        s.get_mut(a).unwrap().value = 10;
+        assert_eq!(s.get(a).unwrap().value, 10);
+        assert_eq!(s.get(b).unwrap().value, 2);
+        assert!(s.get(99).is_none());
+        assert!(s.get_mut(99).is_none());
     }
 
     #[test]

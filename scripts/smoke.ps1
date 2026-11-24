@@ -14,6 +14,8 @@
   .\scripts\smoke.ps1 -Sessions 1 -Panel files -Out target\smoke-files.png
 .EXAMPLE
   .\scripts\smoke.ps1 -Sessions 1 -Usage 30 -Theme dark -Out target\smoke-usage.png
+.EXAMPLE
+  .\scripts\smoke.ps1 -Sessions 2 -Commands 'cd C:\Windows' -Dock reopen -DockCommands 'Get-Location' -Out target\smoke-dock.png
 #>
 param(
     [string[]]$Commands = @('Write-Host rojo -ForegroundColor Red; Write-Host verde -ForegroundColor Green', 'Get-ChildItem | Select-Object -First 5'),
@@ -32,7 +34,12 @@ param(
     # Panel izquierdo: completo, compacto (solo íconos) o en "Archivos". Vacío = el de la configuración.
     [ValidateSet('', 'full', 'compact', 'files')][string]$Panel = '',
     # Abre "Uso de agentes" con datos SINTÉTICOS (nunca el historial real) en ese período.
-    [ValidateSet('', 'hoy', '7', '30', 'ano', 'todo')][string]$Usage = ''
+    [ValidateSet('', 'hoy', '7', '30', 'ano', 'todo')][string]$Usage = '',
+    # Terminal acoplada de la primera sesión, abierta después de los comandos de la principal (hereda
+    # su carpeta). 'reopen' además la oculta y la vuelve a mostrar: el historial debe seguir ahí.
+    [ValidateSet('', 'open', 'reopen')][string]$Dock = '',
+    # Comandos que se escriben en la terminal acoplada (desde dentro de la app, como -Commands).
+    [string[]]$DockCommands = @()
 )
 $ErrorActionPreference = 'Stop'
 $root = Resolve-Path (Join-Path $PSScriptRoot '..')
@@ -70,6 +77,8 @@ if ($Palette -or $PaletteQuery -or $PaletteRename) { $smokeEnv.KUNTUR_SMOKE_PALE
 if ($PaletteQuery) { $smokeEnv.KUNTUR_SMOKE_PALETTE_QUERY = $PaletteQuery }
 if ($Panel) { $smokeEnv.KUNTUR_SMOKE_PANEL = $Panel }
 if ($Usage) { $smokeEnv.KUNTUR_SMOKE_USAGE = $Usage }
+if ($Dock) { $smokeEnv.KUNTUR_SMOKE_DOCK = $Dock }
+if ($Dock -and $DockCommands.Count -gt 0) { $smokeEnv.KUNTUR_SMOKE_DOCK_INPUT = ($DockCommands -join '\n') }
 foreach ($k in $smokeEnv.Keys) { Set-Item "Env:$k" $smokeEnv[$k] }
 $p = Start-Process $exe -PassThru
 foreach ($k in $smokeEnv.Keys) { Remove-Item "Env:$k" }
@@ -78,7 +87,12 @@ foreach ($k in $saved.Keys) { Set-Item "Env:$k" $saved[$k] }
 $deadline = (Get-Date).AddSeconds(20)
 while ((Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 300; $p.Refresh(); if ($p.MainWindowHandle -ne 0) { break } }
 if ($p.MainWindowHandle -eq 0) { Stop-Process -Id $p.Id -Force; throw 'Kuntur no abrió ventana' }
-Start-Sleep -Seconds ($WaitSec + $Commands.Count)
+# La acoplada se abre después de los comandos de la principal y escribe los suyos; 'reopen' la oculta
+# y la vuelve a mostrar (~2 s más).
+$dockWait = 0
+if ($Dock) { $dockWait = 5 + $DockCommands.Count }
+if ($Dock -eq 'reopen') { $dockWait += 3 }
+Start-Sleep -Seconds ($WaitSec + $Commands.Count + $dockWait)
 
 $r = New-Object KunturSmoke+RECT; [KunturSmoke]::GetClientRect($p.MainWindowHandle, [ref]$r) | Out-Null
 $bmp = New-Object System.Drawing.Bitmap ([Math]::Max(1, $r.R)), ([Math]::Max(1, $r.B))

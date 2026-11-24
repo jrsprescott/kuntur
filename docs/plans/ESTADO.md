@@ -4,11 +4,25 @@
 
 ## Dónde está cada cosa
 - Rama principal `main`: **Fases 1 y 2** (terminal real + sesiones, temas, paleta, persistencia). Estable.
-- Rama de trabajo **`fase/f3-v5`**: Fase 3 (diseño v5) **en curso**. Aquí se continúa.
-- Planes: `docs/plans/README.md` (hoja de ruta) y `docs/plans/2026-11-23-f3-v5-agentes-y-uso.md` (plan de la fase actual).
+- Rama **`fase/f3-v5`**: Fase 3 (diseño v5) **terminada** (`docs/plans/f3-resultados.md`).
+- Rama de trabajo **`fase/f4-acoplada`** (sale de `fase/f3-v5`): Fase 4 · Terminal acoplada **terminada** (`docs/plans/f4-resultados.md`); faltan las pruebas manuales ⏳ del usuario. La **siguiente fase es F5** (agentes exactos, alertas y auditoría), que se empieza desde esta rama.
+- Planes: `docs/plans/README.md` (hoja de ruta), `docs/plans/2026-11-23-f3-v5-agentes-y-uso.md` y `docs/plans/2026-11-23-f4-terminal-acoplada.md`.
 - Diseño de referencia: `docs/PLAN.md` ("Cambios de la v4") y la simulación `docs/simulacion/index.html`.
 - **Especificación del usuario** (adoptada el 2026-11-23): `docs/ESPECIFICACION.md`, con las decisiones tomadas (se mantiene GPUI, costo estimado, spike de `wry`…). La hoja de ruta pasó a 11 fases (nueva F8 · Vista previa y diff).
 - **Decisión pendiente:** panel izquierdo con agentes arriba + árbol abajo a la vez (especificación §3) o el botón "Archivos" que alterna (actual). Se aplica en F7.
+
+## Fase 4: terminal acoplada
+| Parte | Estado |
+|---|---|
+| Lógica pura `crates/kuntur-app/src/dock.rs` (estado por sesión, Ctrl+` como VS Code, límites del separador, carpeta inicial, Ctrl+`/Ctrl+Ñ) | ✅ con pruebas |
+| Vista: `crates/kuntur-app/src/workspace/dock_view.rs` (panel debajo de la principal, separador arrastrable, encabezado "Terminal · shell · carpeta" con ×) | ✅ capturas en Blue/Dark/White |
+| Ocultar sin perder historial (el PTY sigue vivo; se suelta solo si su shell termina o se cierra la sesión) | ✅ comprobado con `-Dock reopen` |
+| Arranca en la carpeta de la sesión (OSC 9;9) o en la personal | ✅ |
+| Alto por sesión guardado en `config.toml` (`dock_ratio` de cada sesión, opcional) | ✅ |
+| Botón de ícono en la barra, acción en la paleta, cursor hueco en el panel sin teclado | ✅ |
+| Abrir en el **worktree de un agente** | ⏳ pendiente para F5 (depende de los worktrees por agente) |
+
+Prueba de humo de la acoplada: `.\scripts\smoke.ps1 -Sessions 2 -Commands 'cd C:\Windows\Media' -Dock reopen -DockCommands 'Get-Location'` (`-Dock open|reopen`).
 
 ## Fase 3 (v5): qué está hecho y qué falta
 | Parte | Estado |
@@ -39,8 +53,8 @@ Decisión pendiente ya tomada: la tarjeta "Tokens de entrada" **incluye la cach�
 ```powershell
 git clone https://github.com/jrsprescott/kuntur.git
 cd kuntur
-git switch fase/f3-v5
-cargo test --workspace            # ~90 pruebas
+git switch fase/f4-acoplada
+cargo test --workspace            # ~150 pruebas
 cargo build -p kuntur-app --release
 .\target\release\kuntur.exe       # o doble clic
 .\scripts\smoke.ps1               # prueba de humo: captura target\smoke.png y mide RAM
@@ -51,10 +65,10 @@ La primera compilación tarda varios minutos (GPUI + SQLite).
 - **Privacidad:** nada de rutas personales, nombres de instituciones ni datos reales de historiales en el repo. Las pruebas usan datos sintéticos. La prueba `crates/kuntur-usage/tests/datos_reales.rs` está `#[ignore]` y solo imprime totales.
 - **Antes de cada commit:** `cargo fmt --all`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`.
 - **Pruebas visuales:** solo con `scripts/smoke.ps1` (entrada por `KUNTUR_SMOKE_INPUT`, captura con PrintWindow). **Nunca** simular teclado del sistema (SendKeys): las teclas pueden caer en otra ventana.
-- **Diseño:** minimalista (una barra arriba, jerarquía por texto, color solo para estado), atajos con Ctrl+Shift.
+- **Diseño:** minimalista (una barra arriba, jerarquía por texto, color solo para estado), atajos con Ctrl+Shift (excepción heredada de VS Code: Ctrl+` para la terminal acoplada; en teclados en español, Ctrl+Ñ).
 - Si en la PC el `PATH` del usuario contiene la entrada `%PATH%` (se infla y Windows lo descarta), Kuntur no encontrará `claude`/`npm`: quitar esa entrada.
 
 ## Sincronizar entre PCs
 - Al terminar en una PC: `git add -A`, `git commit`, `git push`.
-- Al llegar a la otra: `git status` (que esté limpio) y `git pull` en la rama `fase/f3-v5`.
+- Al llegar a la otra: `git status` (que esté limpio) y `git pull` en la rama de trabajo (hoy `fase/f4-acoplada`).
 - El ejecutable compilado de cada avance se publica como *pre-release* privada en GitHub (Releases), para probar sin compilar.
