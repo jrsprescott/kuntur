@@ -202,7 +202,7 @@ impl Workspace {
             codex_limits: None,
             ram: None,
             visible: crate::idle::VisibleTracker::default(),
-            files: FilesState::default(),
+            files: FilesState::new(cx),
             usage: UsageState::default(),
             audit: AuditState::new(cx),
             connections: ConnectionsState::default(),
@@ -1130,6 +1130,11 @@ impl Workspace {
             cx.stop_propagation();
             return;
         }
+        // Ajustes v0.2: árbol de archivos enfocado (flechas, F2, Supr, Ctrl+C/X/V…).
+        if self.files.focus.is_focused(window) && self.on_files_key(ev, window, cx) {
+            cx.stop_propagation();
+            return;
+        }
         if self.search_focus.is_focused(window) && self.on_search_key(ev, window, cx) {
             cx.stop_propagation();
             return;
@@ -1484,6 +1489,7 @@ impl Render for Workspace {
         let connections = self.connections.open.then(|| self.render_connections(cx));
         let mcp = self.mcp.open.then(|| self.render_mcp(cx));
         let settings = self.settings_panel.open.then(|| self.render_settings(cx));
+        let file_menu = self.render_file_menu(cx);
         let link_menu = self.render_link_menu(cx);
         self.sync_web_visibility();
         v_flex()
@@ -1529,6 +1535,7 @@ impl Render for Workspace {
             .children(connections)
             .children(mcp)
             .children(settings)
+            .children(file_menu)
             .children(link_menu)
     }
 }
