@@ -154,13 +154,24 @@ pub struct SlowSample {
     pub local: Vec<kuntur_agents::ProviderStatus>,
 }
 
+/// ¿Corre una prueba de humo? (cualquier variable `KUNTUR_SMOKE_*`). Entonces no se leen datos reales
+/// que se verían en las capturas, como los modelos locales del usuario.
+pub fn in_smoke_test() -> bool {
+    std::env::vars_os().any(|(k, _)| k.to_string_lossy().starts_with("KUNTUR_SMOKE_"))
+}
+
 pub fn slow_sample(catalog: &Catalog) -> SlowSample {
     SlowSample {
         installed: catalog.installed(),
         codex_limits: codex_sessions_dir().and_then(|d| kuntur_usage::codex::latest_limits(&d)),
-        local: home_dir()
-            .map(|h| kuntur_agents::local::detect_now(&h))
-            .unwrap_or_default(),
+        // En las pruebas de humo, nunca los modelos reales (las capturas se publican).
+        local: if in_smoke_test() {
+            Vec::new()
+        } else {
+            home_dir()
+                .map(|h| kuntur_agents::local::detect_now(&h))
+                .unwrap_or_default()
+        },
     }
 }
 

@@ -51,6 +51,8 @@ valle desde lo alto, ves de un vistazo todas tus sesiones y lo que hace cada age
   agregar al chat…).
 - **Configuración** (Ctrl+,): temas, tamaño de letra, idioma (español / inglés), notificaciones que no molestan
   (por tipo, como mucho una por sesión cada pocos minutos y solo en segundo plano) y búsqueda de actualizaciones.
+- **IA local:** detecta LM Studio y Ollama (y Jan, llama.cpp), muestra sus modelos y abre **OpenCode con un modelo
+  local** con un clic: un agente que corre 100 % en tu PC, sin nube y sin costo.
 - **Actualizar con un clic:** un aviso cuando sale una versión nueva; Kuntur descarga el instalador, verifica su
   SHA-256 y su firma, lo instala y se vuelve a abrir.
 

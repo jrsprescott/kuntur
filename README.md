@@ -45,6 +45,8 @@ valley from above, you see every session at a glance and what each agent is doin
   Bin, cut/copy/paste between local and remote, copy path, reveal in File Explorer, add to chat…).
 - **Settings** (Ctrl+,): themes, font size, language (Spanish / English), notifications that do not nag (per type,
   at most one per session every few minutes, only in the background) and update checks.
+- **Local AI:** detects LM Studio and Ollama (and Jan, llama.cpp), lists their models and opens **OpenCode with a
+  local model** in one click — an agent that runs 100 % on your machine, no cloud and no cost.
 - **Updates in one click:** a notice when a new version is out; Kuntur downloads the installer, verifies its SHA-256
   and signature, installs it and reopens.
 

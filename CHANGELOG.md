@@ -6,6 +6,25 @@ Spanish, are in [`docs/plans/`](docs/plans/).
 
 ## [Unreleased]
 
+## [0.2.1] — íconos e IA local
+
+### Added
+- **New app icon:** an Andean condor in neon blue and violet (app, taskbar, Start menu and desktop shortcut), with
+  thicker strokes at 16–32 px so it reads in the taskbar.
+- **Kuntur icon and name in the title bar** over the full side panel; clicking it opens the project on GitHub.
+- **Brand icons** for the agents (Claude, OpenAI/Codex, OpenCode, Qwen, Gemini, Kimi, DeepSeek) and local providers
+  (LM Studio, Ollama), from [Lobe Icons](https://github.com/lobehub/lobe-icons) (MIT; logos are trademarks of their
+  owners). Custom agents keep their colored letter.
+- **Local AI:** Kuntur detects LM Studio, Ollama, Jan and llama.cpp (only `localhost`), lists their models (size,
+  loaded or not) in a "Local AI" section and offers **OpenCode with this model** (a per-session OpenCode config with
+  the local OpenAI-compatible provider, together with the session MCP servers; the global config is never touched),
+  **Quick chat** and **Start server**.
+- Code signing and privacy policy (`CODE_SIGNING_POLICY.md`) for the SignPath Foundation application.
+
+### Changed
+- **Agent usage:** agents that are no longer installed keep their history and show "not installed"; models served
+  locally (LM Studio, Ollama…) count as "Local" with cost US$ 0 instead of "no price".
+
 ## [0.2.0] — ajustes v0.2
 
 ### Added

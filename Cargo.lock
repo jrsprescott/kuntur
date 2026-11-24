@@ -4697,7 +4697,7 @@ dependencies = [
 
 [[package]]
 name = "kuntur-agents"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "kuntur-hook",
  "kuntur-usage",
@@ -4707,7 +4707,7 @@ dependencies = [
 
 [[package]]
 name = "kuntur-app"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "embed-resource",
  "gpui-kit",
@@ -4737,7 +4737,7 @@ dependencies = [
 
 [[package]]
 name = "kuntur-audit"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "jiff",
  "kuntur-usage",
@@ -4748,7 +4748,7 @@ dependencies = [
 
 [[package]]
 name = "kuntur-complete"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "kuntur-config",
  "nucleo-matcher",
@@ -4756,7 +4756,7 @@ dependencies = [
 
 [[package]]
 name = "kuntur-config"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "serde",
  "toml 1.2.2+spec-1.1.0",
@@ -4764,14 +4764,14 @@ dependencies = [
 
 [[package]]
 name = "kuntur-files"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "jiff",
 ]
 
 [[package]]
 name = "kuntur-hook"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -4780,7 +4780,7 @@ dependencies = [
 
 [[package]]
 name = "kuntur-mcp"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "keyring-core",
@@ -4795,7 +4795,7 @@ dependencies = [
 
 [[package]]
 name = "kuntur-preview"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "notify 9.0.0",
  "similar",
@@ -4804,7 +4804,7 @@ dependencies = [
 
 [[package]]
 name = "kuntur-ssh"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "keyring-core",
@@ -4819,7 +4819,7 @@ dependencies = [
 
 [[package]]
 name = "kuntur-term"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "alacritty_terminal",
  "anyhow",
@@ -4828,7 +4828,7 @@ dependencies = [
 
 [[package]]
 name = "kuntur-update"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "semver",
  "serde",
@@ -4840,7 +4840,7 @@ dependencies = [
 
 [[package]]
 name = "kuntur-usage"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "jiff",
  "rusqlite",

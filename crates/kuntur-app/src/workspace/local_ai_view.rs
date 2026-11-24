@@ -49,7 +49,7 @@ impl Workspace {
     /// "IA local: actualizar" (paleta): lectura completa ya, y en LM Studio también `lms ls`
     /// (las claves reales de sus modelos). El usuario lo pidió, así que arrancar su servicio está bien.
     pub(super) fn refresh_local_ai(&mut self, cx: &mut Context<Self>) {
-        if self.local_ai.smoke {
+        if self.local_ai.smoke || crate::monitor::in_smoke_test() {
             return;
         }
         let home = self.home.clone();
