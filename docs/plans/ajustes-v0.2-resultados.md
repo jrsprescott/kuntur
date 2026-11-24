@@ -38,9 +38,14 @@ MSI que las tenga) y los tooltips de la barra de título están en español e in
   encuentra la 0.2.0, descarga el MSI completo y el SHA-256 coincide; firma "sin firmar" (se acepta mientras el
   `kuntur.exe` en uso tampoco esté firmado). La 0.1.0 no trae actualizador: se pasa a la 0.2.0 a mano una vez.
 
+- Título en la pestaña con un agente simulado ✅: `ping` como agente extra (`target/smoke-titulo.toml`, fuera del
+  repo) y `$Host.UI.RawUI.WindowTitle = '✳ Arreglar el inicio de sesión…'`; la pestaña muestra el título sin el `✳`,
+  la otra sigue en "PowerShell 2" y aparece la barra del agente. La marquesina no se mueve en la captura porque la
+  prueba abre la ventana sin foco (se pausa a propósito).
+
 ## Pendiente
 - Pruebas manuales con agentes reales: Win+Shift+S → Ctrl+V dentro de `claude` (Windows lee `CF_DIB`), Codex,
-  OpenCode y una pestaña SSH; título de Claude Code en la pestaña.
+  OpenCode y una pestaña SSH; título de Claude Code en la pestaña y marquesina con la ventana enfocada.
 - Certificado de firma (SignPath Foundation o propio) — ver `docs/FIRMA.md`.
 - Árbol: portapapeles del sistema (copiar en Kuntur y pegar en el Explorador), selección múltiple, arrastrar dentro
   del árbol; "Buscar en la carpeta" y "Abrir línea de tiempo".
