@@ -1,18 +1,28 @@
-//! Lecturas periódicas fuera del hilo de la UI: agentes corriendo en cada sesión (árbol de
-//! procesos), memoria de Kuntur, agentes instalados y límites de Codex.
+//! Lecturas periódicas fuera del hilo de la UI: agentes corriendo en cada terminal (principal y
+//! acoplada, por el árbol de procesos), memoria de Kuntur, agentes instalados y límites de Codex.
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
-use kuntur_agents::{AgentKind, ProcInfo, RunningAgent, find_agents};
+use kuntur_agents::{Catalog, ProcInfo, RunningAgent, find_agents};
 use kuntur_usage::codex::Limits;
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+
+/// El shell de una terminal: la principal de una sesión o su acoplada.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ShellRef {
+    pub session: u64,
+    pub docked: bool,
+    pub pid: u32,
+}
 
 /// Resultado de una lectura.
 #[derive(Clone, Debug, Default)]
 pub struct Sample {
-    /// (sesión, agente), en el orden de las sesiones pedidas.
-    pub agents: Vec<(u64, RunningAgent)>,
+    /// (sesión, ¿acoplada?, agente), en el orden de las terminales pedidas.
+    pub agents: Vec<(u64, bool, RunningAgent)>,
+    /// Terminales (sesión, ¿acoplada?) cuyo shell tiene procesos hijos: no se les escribe un comando.
+    pub busy: HashSet<(u64, bool)>,
     /// Memoria de trabajo de Kuntur (bytes).
     pub ram: Option<u64>,
 }
@@ -41,6 +51,15 @@ pub fn descendants(roots: &[u32], procs: &[ProcInfo]) -> HashSet<u32> {
     found
 }
 
+/// Terminales cuyo shell tiene algún proceso descendiente (otro programa ocupa la terminal).
+pub fn busy_shells(shells: &[ShellRef], procs: &[ProcInfo]) -> HashSet<(u64, bool)> {
+    shells
+        .iter()
+        .filter(|s| !descendants(&[s.pid], procs).is_empty())
+        .map(|s| (s.session, s.docked))
+        .collect()
+}
+
 /// Conserva el estado de `sysinfo` entre lecturas (la línea de comando de cada proceso se lee una
 /// sola vez).
 pub struct Sampler {
@@ -56,8 +75,8 @@ impl Sampler {
         }
     }
 
-    /// Lee procesos y memoria. `shells` = (id de sesión, PID del shell).
-    pub fn sample(&mut self, shells: &[(u64, u32)]) -> Sample {
+    /// Lee procesos y memoria de las terminales `shells`, reconociendo los agentes de `catalog`.
+    pub fn sample(&mut self, shells: &[ShellRef], catalog: &Catalog) -> Sample {
         let Some(sys) = self.sys.as_mut() else {
             return Sample::default();
         };
@@ -75,7 +94,7 @@ impl Sampler {
                 })
                 .collect()
         };
-        let roots: Vec<u32> = shells.iter().map(|&(_, pid)| pid).collect();
+        let roots: Vec<u32> = shells.iter().map(|s| s.pid).collect();
         let procs = snapshot(sys);
         // 2) Línea de comando solo de lo que corre dentro de las sesiones (`node codex.js`…).
         let inside: Vec<Pid> = descendants(&roots, &procs).into_iter().map(Pid::from_u32).collect();
@@ -95,10 +114,16 @@ impl Sampler {
         let procs = if inside.is_empty() { procs } else { snapshot(sys) };
         let agents = shells
             .iter()
-            .flat_map(|&(id, pid)| find_agents(pid, &procs).into_iter().map(move |a| (id, a)))
+            .flat_map(|s| {
+                find_agents(catalog, s.pid, &procs)
+                    .into_iter()
+                    .map(move |a| (s.session, s.docked, a))
+            })
             .collect();
+        let busy = busy_shells(shells, &procs);
         Sample {
             agents,
+            busy,
             ram: sys.process(self.own).map(|p| p.memory()),
         }
     }
@@ -120,16 +145,16 @@ pub fn codex_sessions_dir() -> Option<PathBuf> {
     }
 }
 
-/// Lecturas lentas que cambian poco: agentes instalados y límites de Codex.
+/// Lecturas lentas que cambian poco: agentes instalados (ids del catálogo) y límites de Codex.
 #[derive(Clone, Debug, Default)]
 pub struct SlowSample {
-    pub installed: Vec<AgentKind>,
+    pub installed: Vec<String>,
     pub codex_limits: Option<Limits>,
 }
 
-pub fn slow_sample() -> SlowSample {
+pub fn slow_sample(catalog: &Catalog) -> SlowSample {
     SlowSample {
-        installed: kuntur_agents::installed(),
+        installed: catalog.installed(),
         codex_limits: codex_sessions_dir().and_then(|d| kuntur_usage::codex::latest_limits(&d)),
     }
 }
@@ -172,9 +197,23 @@ mod tests {
     }
 
     #[test]
+    fn terminales_ocupadas() {
+        let procs = vec![p(1, 0, 100), p(2, 1, 110), p(4, 0, 100), p(7, 4, 50)];
+        let shell = |session, docked, pid| ShellRef { session, docked, pid };
+        let busy = busy_shells(&[shell(1, false, 1), shell(1, true, 4), shell(2, false, 9)], &procs);
+        // La acoplada solo tiene un "hijo" con PID reutilizado: está libre.
+        assert_eq!(busy, HashSet::from([(1, false)]));
+    }
+
+    #[test]
     fn lee_la_memoria_propia() {
         let mut s = Sampler::new();
-        let sample = s.sample(&[(1, std::process::id())]);
+        let me = ShellRef {
+            session: 1,
+            docked: false,
+            pid: std::process::id(),
+        };
+        let sample = s.sample(&[me], &Catalog::builtin());
         assert!(sample.ram.is_some_and(|b| b > 0));
         assert!(sample.agents.is_empty());
     }

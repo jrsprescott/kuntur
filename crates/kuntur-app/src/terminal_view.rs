@@ -132,6 +132,18 @@ impl TerminalView {
         });
     }
 
+    /// Escribe una línea en el shell y Enter, como si se tecleara (abrir un agente por pedido del
+    /// usuario). `delay` deja arrancar al shell de una terminal recién abierta.
+    pub fn send_line(&self, line: String, delay: std::time::Duration) {
+        let pane = self.pane.clone();
+        std::thread::spawn(move || {
+            if !delay.is_zero() {
+                std::thread::sleep(delay);
+            }
+            let _ = pane.write(format!("{line}\r").as_bytes());
+        });
+    }
+
     pub fn set_palette(&mut self, palette: Palette, background: Hsla, cx: &mut Context<Self>) {
         self.palette = palette;
         self.background = background;

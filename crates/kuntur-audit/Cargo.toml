@@ -1,0 +1,13 @@
+[package]
+name = "kuntur-audit"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+kuntur-usage = { path = "../kuntur-usage" }
+jiff = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+zstd = { workspace = true }

@@ -19,3 +19,8 @@ gpui-kit = { workspace = true }
 smol = { workspace = true }
 sysinfo = { workspace = true }
 jiff = { workspace = true }
+kuntur-audit = { path = "../kuntur-audit" }
+
+[target.'cfg(windows)'.dependencies]
+# Notificaciones de Windows (alertas, F5).
+tauri-winrt-notification = "0.8.1"

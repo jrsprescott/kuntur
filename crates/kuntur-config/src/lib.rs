@@ -3,5 +3,5 @@
 pub mod settings;
 pub mod theme;
 
-pub use settings::{SessionConfig, Settings, SidebarMode};
+pub use settings::{AgentConfig, SessionConfig, Settings, SidebarMode};
 pub use theme::{Rgba8, Theme, ThemeId, builtin};

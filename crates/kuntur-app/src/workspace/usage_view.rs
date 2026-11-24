@@ -14,7 +14,7 @@ use kuntur_usage::store::{Sources, UsageStore};
 use kuntur_usage::{Period, Summary, UsageRecord, pct_change, summarize};
 
 use super::files_panel::empty_note;
-use super::side_panel::{badge, brand};
+use super::side_panel::brand;
 use super::*;
 use crate::usage_format::{
     change, compact, cost_detail, duration, folder_name, heat_levels, no_change_note, providers, range, share,
@@ -94,7 +94,7 @@ fn provider_color(provider: &str, c: &UiColors) -> Hsla {
 }
 
 fn agent_color(kind: AgentKind, c: &UiColors) -> Hsla {
-    kuntur_agents::info(kind).map_or(c.muted, |i| brand(i.color))
+    kuntur_agents::brand_color(kind).map_or(c.muted, brand)
 }
 
 /// Carpeta de datos de Kuntur (`%APPDATA%\Kuntur`): ahí van `usage.db` y `pricing.toml`.
@@ -149,6 +149,7 @@ impl Workspace {
 
     pub(super) fn open_usage(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.usage.open = true;
+        self.audit.open = false;
         self.usage.notice = None;
         window.focus(&self.focus, cx);
         let stale = self.usage.loaded_at.is_none_or(|t| t.elapsed() > RELOAD_AFTER);
@@ -674,30 +675,34 @@ impl Workspace {
                 String::new()
             };
             let color = agent_color(kind, c);
-            h_flex().gap(px(10.)).items_center().child(badge(kind, 22., 6.)).child(
-                v_flex()
-                    .flex_1()
-                    .min_w_0()
-                    .gap(px(5.))
-                    .child(
-                        h_flex()
-                            .justify_between()
-                            .text_size(px(12.5))
-                            .child(div().text_color(c.text).child(kind.name()))
-                            .child(
-                                div()
-                                    .text_color(c.muted)
-                                    .child(format!("{}{money} · {pct} %", compact(tokens))),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .h(px(4.))
-                            .rounded(px(2.))
-                            .bg(track)
-                            .child(div().h_full().rounded(px(2.)).w(relative(pct as f32 / 100.)).bg(color)),
-                    ),
-            )
+            h_flex()
+                .gap(px(10.))
+                .items_center()
+                .child(self.usage_badge(kind, 22., 6.))
+                .child(
+                    v_flex()
+                        .flex_1()
+                        .min_w_0()
+                        .gap(px(5.))
+                        .child(
+                            h_flex()
+                                .justify_between()
+                                .text_size(px(12.5))
+                                .child(div().text_color(c.text).child(kind.name()))
+                                .child(
+                                    div()
+                                        .text_color(c.muted)
+                                        .child(format!("{}{money} · {pct} %", compact(tokens))),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .h(px(4.))
+                                .rounded(px(2.))
+                                .bg(track)
+                                .child(div().h_full().rounded(px(2.)).w(relative(pct as f32 / 100.)).bg(color)),
+                        ),
+                )
         });
         section(c, "Agentes", None).child(v_flex().gap(px(12.)).children(rows))
     }

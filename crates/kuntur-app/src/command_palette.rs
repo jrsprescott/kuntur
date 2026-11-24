@@ -1,6 +1,8 @@
 //! Paleta de comandos (Ctrl+Shift+P): lista de acciones, filtro y estado. Sin GPUI: se prueba
 //! aparte; el `Workspace` la dibuja y ejecuta la acción elegida.
 
+use std::borrow::Cow;
+
 use kuntur_config::ThemeId;
 
 /// Largo máximo del nombre de una sesión.
@@ -25,25 +27,31 @@ pub enum PaletteAction {
     Usage,
     ExportUsage,
     EditPrices,
+    /// Vuelve a leer los agentes extra de `config.toml` y busca los instalados.
+    RefreshAgents,
+    Audit,
+    ExportAudit,
+    /// Abre el agente n de `PaletteState::agents` en la sesión activa.
+    LaunchAgent(usize),
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct PaletteItem {
     pub action: PaletteAction,
-    pub label: &'static str,
+    pub label: Cow<'static, str>,
     pub shortcut: Option<&'static str>,
 }
 
 const fn item(action: PaletteAction, label: &'static str, shortcut: Option<&'static str>) -> PaletteItem {
     PaletteItem {
         action,
-        label,
+        label: Cow::Borrowed(label),
         shortcut,
     }
 }
 
-/// Todas las acciones, en el orden en que se muestran.
-pub const ITEMS: [PaletteItem; 19] = [
+/// Las acciones fijas, en el orden en que se muestran (después van las de abrir cada agente instalado).
+pub static ITEMS: [PaletteItem; 22] = [
     item(PaletteAction::NewSession, "Nueva sesión", Some("Ctrl+Shift+T")),
     item(PaletteAction::RenameSession, "Renombrar sesión", None),
     item(PaletteAction::CloseSession, "Cerrar sesión", Some("Ctrl+Shift+W")),
@@ -67,6 +75,9 @@ pub const ITEMS: [PaletteItem; 19] = [
     item(PaletteAction::Usage, "Uso de agentes", Some("Ctrl+Shift+U")),
     item(PaletteAction::ExportUsage, "Uso de agentes: exportar CSV", None),
     item(PaletteAction::EditPrices, "Uso de agentes: editar precios", None),
+    item(PaletteAction::Audit, "Auditoría de comandos", Some("Ctrl+Shift+A")),
+    item(PaletteAction::ExportAudit, "Auditoría: exportar CSV", None),
+    item(PaletteAction::RefreshAgents, "Agentes: actualizar instalados", None),
 ];
 
 /// Minúsculas y sin tildes; la puntuación cuenta como espacio.
@@ -108,6 +119,10 @@ pub struct PaletteState {
     pub selected: usize,
     /// El texto es el nombre actual "seleccionado": lo primero que se escribe lo reemplaza.
     pub replace_on_type: bool,
+    /// Ids de los agentes instalados cuando se abrió la paleta ("Agentes: abrir …").
+    pub agents: Vec<String>,
+    /// Acciones de abrir cada agente.
+    extra: Vec<PaletteItem>,
 }
 
 impl Default for PaletteState {
@@ -123,13 +138,35 @@ impl PaletteState {
             query: String::new(),
             selected: 0,
             replace_on_type: false,
+            agents: Vec::new(),
+            extra: Vec::new(),
         }
     }
 
+    /// Paleta con "Agentes: abrir <nombre>" para cada agente instalado (`(id, nombre)`).
+    pub fn with_agents(agents: Vec<(String, String)>) -> Self {
+        let mut p = Self::new();
+        p.extra = agents
+            .iter()
+            .enumerate()
+            .map(|(i, (_, name))| PaletteItem {
+                action: PaletteAction::LaunchAgent(i),
+                label: Cow::Owned(format!("Agentes: abrir {name}")),
+                shortcut: None,
+            })
+            .collect();
+        p.agents = agents.into_iter().map(|(id, _)| id).collect();
+        p
+    }
+
     /// Acciones que coinciden con lo escrito (vacío en modo renombrar).
-    pub fn filtered(&self) -> Vec<&'static PaletteItem> {
+    pub fn filtered(&self) -> Vec<&PaletteItem> {
         match self.mode {
-            PaletteMode::Search => ITEMS.iter().filter(|i| matches(&self.query, i.label)).collect(),
+            PaletteMode::Search => ITEMS
+                .iter()
+                .chain(&self.extra)
+                .filter(|i| matches(&self.query, &i.label))
+                .collect(),
             PaletteMode::Rename { .. } => Vec::new(),
         }
     }
@@ -256,6 +293,24 @@ mod tests {
         p.clear();
         p.insert("terminal ocultar");
         assert_eq!(p.selected_action(), Some(PaletteAction::ToggleDock));
+    }
+
+    #[test]
+    fn abrir_agentes_instalados() {
+        let mut p = PaletteState::with_agents(vec![
+            ("claude".into(), "Claude Code".into()),
+            ("extra:aider".into(), "Aider".into()),
+        ]);
+        assert_eq!(p.filtered().len(), ITEMS.len() + 2);
+        p.insert("abrir aider");
+        assert_eq!(p.selected_action(), Some(PaletteAction::LaunchAgent(1)));
+        assert_eq!(p.agents[1], "extra:aider");
+        p.clear();
+        p.insert("agentes actualizar");
+        assert_eq!(p.selected_action(), Some(PaletteAction::RefreshAgents));
+        p.clear();
+        p.insert("auditoria");
+        assert_eq!(p.selected_action(), Some(PaletteAction::Audit));
     }
 
     #[test]

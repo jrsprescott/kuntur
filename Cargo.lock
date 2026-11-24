@@ -3786,12 +3786,25 @@ dependencies = [
  "gpui-kit",
  "jiff",
  "kuntur-agents",
+ "kuntur-audit",
  "kuntur-config",
  "kuntur-files",
  "kuntur-term",
  "kuntur-usage",
  "smol",
  "sysinfo 0.40.4",
+ "tauri-winrt-notification",
+]
+
+[[package]]
+name = "kuntur-audit"
+version = "0.1.0"
+dependencies = [
+ "jiff",
+ "kuntur-usage",
+ "serde",
+ "serde_json",
+ "zstd",
 ]
 
 [[package]]

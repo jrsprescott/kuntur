@@ -1,5 +1,5 @@
 //! Barra de título (34 px): botón del panel · pestañas de sesiones · `+` · espacio de arrastre ·
-//! botones de ícono (Terminal acoplada, Tema, Uso de agentes, Acciones) · botones de Windows.
+//! botones de ícono (Terminal acoplada, Tema, Uso de agentes, Auditoría, Acciones) · botones de Windows.
 
 use gpui_kit::component::TitleBar;
 use kuntur_agents::AgentState;
@@ -20,7 +20,7 @@ impl Workspace {
 
     /// Estado más urgente de los agentes de una sesión: esperando gana a trabajando.
     fn session_state(&self, id: u64, cx: &App) -> Option<AgentState> {
-        if !self.running.iter().any(|(sid, _)| *sid == id) {
+        if !self.running.iter().any(|(sid, _, _)| *sid == id) {
             return None;
         }
         let entry = self.sessions.iter().find(|e| e.id == id)?;
@@ -87,7 +87,7 @@ impl Workspace {
                             .pr(px(4.))
                             .child(
                                 icon_button("dock", IconName::PanelBottom, c, "Terminal acoplada (Ctrl+`)")
-                                    .when(self.dock_open() && !self.usage.open, |this| {
+                                    .when(self.dock_open() && !self.usage.open && !self.audit.open, |this| {
                                         this.bg(c.surface_2).text_color(c.text)
                                     })
                                     .on_click(cx.listener(|this, _, window, cx| this.toggle_dock(window, cx))),
@@ -102,6 +102,11 @@ impl Workspace {
                                     .on_click(cx.listener(|this, _, window, cx| this.toggle_usage(window, cx))),
                             )
                             .child(
+                                icon_button("audit", IconName::ScrollText, c, "Auditoría de comandos (Ctrl+Shift+A)")
+                                    .when(self.audit.open, |this| this.bg(c.surface_2).text_color(c.text))
+                                    .on_click(cx.listener(|this, _, window, cx| this.toggle_audit(window, cx))),
+                            )
+                            .child(
                                 icon_button("command", IconName::Command, c, "Acciones (Ctrl+Shift+P)")
                                     .on_click(cx.listener(|this, _, window, cx| this.toggle_palette(window, cx))),
                             ),
@@ -109,13 +114,15 @@ impl Workspace {
             )
     }
 
-    /// Pestaña: ícono, nombre (elipsis a 200 px), punto si sus agentes esperan o trabajan y `×`
-    /// (visible en la activa y al pasar el mouse). Doble clic renombra; clic medio cierra.
+    /// Pestaña: ícono, nombre (elipsis a 200 px), punto si sus agentes esperan o trabajan, insignia
+    /// de alertas sin ver (§12) y `×` (visible en la activa y al pasar el mouse). Doble clic renombra;
+    /// clic medio cierra.
     fn render_tab(&self, index: usize, id: u64, name: &str, is_active: bool, cx: &mut Context<Self>) -> AnyElement {
         let c = &self.colors;
         let group: SharedString = format!("tab-{id}").into();
         let hover = c.hover;
         let state = self.session_state(id, cx);
+        let alerts = self.badges.get(&id).copied().unwrap_or(0);
         let title = self
             .sessions
             .iter()
@@ -124,6 +131,11 @@ impl Workspace {
         let tip: SharedString = {
             let mut parts = vec![name.to_string()];
             parts.extend(title);
+            match alerts {
+                0 => {}
+                1 => parts.push("1 alerta sin ver".into()),
+                n => parts.push(format!("{n} alertas sin ver")),
+            }
             if index < 9 {
                 parts.push(format!("Ctrl+{}", index + 1));
             }
@@ -176,7 +188,10 @@ impl Workspace {
                     .when(is_active, |this| this.font_weight(FontWeight::MEDIUM))
                     .child(name.to_string()),
             )
-            .when_some(state, |this, state| this.child(state_dot(c, state, 6.)))
+            .when_some(state.filter(|_| alerts == 0), |this, state| {
+                this.child(state_dot(c, state, 6.))
+            })
+            .when(alerts > 0, |this| this.child(alert_badge(c, alerts)))
             .child(
                 div()
                     .id(("tab-close", id))
@@ -200,6 +215,25 @@ impl Workspace {
             )
             .into_any_element()
     }
+}
+
+/// Insignia de alertas sin ver: contador sobre ámbar (el color de "esperando").
+fn alert_badge(c: &UiColors, count: u32) -> Div {
+    let text = if count > 9 { "9+".to_string() } else { count.to_string() };
+    div()
+        .flex_shrink_0()
+        .h(px(15.))
+        .min_w(px(15.))
+        .px(px(4.))
+        .rounded_full()
+        .flex()
+        .items_center()
+        .justify_center()
+        .bg(c.warn)
+        .text_color(rgb(0x1a1a1a))
+        .text_size(px(10.))
+        .font_weight(FontWeight::BOLD)
+        .child(text)
 }
 
 /// Punto de estado: trabajando = acento, esperando = ámbar.

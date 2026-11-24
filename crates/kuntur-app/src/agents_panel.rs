@@ -1,17 +1,22 @@
 //! Lógica del panel de agentes (sin GPUI): filas, filtro Todos / Esperando / Trabajando, búsqueda,
 //! tiempos y textos del anillo de límites. El `Workspace` la dibuja.
 
-use kuntur_agents::{AgentKind, AgentState};
+use kuntur_agents::AgentState;
 use kuntur_usage::codex::Limits;
 
 use crate::command_palette::matches;
 
-/// Un agente corriendo en una sesión, listo para mostrar.
+/// Un agente corriendo en una terminal (principal o acoplada) de una sesión, listo para mostrar.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AgentRow {
     pub session_id: u64,
     pub session_name: String,
-    pub kind: AgentKind,
+    /// Corre en la terminal acoplada de la sesión.
+    pub docked: bool,
+    /// Id del agente en el catálogo.
+    pub agent: String,
+    /// Nombre para mostrar ("Agente" si ya no está en el catálogo).
+    pub name: String,
     pub pid: u32,
     pub state: AgentState,
     /// Segundos Unix en que arrancó.
@@ -19,8 +24,22 @@ pub struct AgentRow {
 }
 
 impl AgentRow {
-    pub fn name(&self) -> &'static str {
-        kuntur_agents::info(self.kind).map_or("Agente", |i| i.name)
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// "web" o "web · acoplada".
+    pub fn place(&self) -> String {
+        place(&self.session_name, self.docked)
+    }
+}
+
+/// Dónde corre un agente: el nombre de la sesión, y "· acoplada" si es la terminal acoplada.
+pub fn place(session_name: &str, docked: bool) -> String {
+    if docked {
+        format!("{session_name} · acoplada")
+    } else {
+        session_name.to_string()
     }
 }
 
@@ -52,12 +71,12 @@ impl AgentFilter {
     }
 }
 
-/// Filas que pasan el filtro y la búsqueda (por nombre del agente o de la sesión; sin mayúsculas
-/// ni tildes; cada palabra debe aparecer).
+/// Filas que pasan el filtro y la búsqueda (por nombre del agente o de la sesión, o "acoplada"; sin
+/// mayúsculas ni tildes; cada palabra debe aparecer).
 pub fn filter_rows<'a>(rows: &'a [AgentRow], filter: AgentFilter, query: &str) -> Vec<&'a AgentRow> {
     rows.iter()
         .filter(|r| filter.accepts(r.state))
-        .filter(|r| matches(query, &format!("{} {}", r.name(), r.session_name)))
+        .filter(|r| matches(query, &format!("{} {}", r.name(), r.place())))
         .collect()
 }
 
@@ -142,11 +161,13 @@ pub fn ring_tooltip(name: &str, limits: Option<&Limits>) -> String {
 mod tests {
     use super::*;
 
-    fn row(session: &str, kind: AgentKind, state: AgentState) -> AgentRow {
+    fn row(session: &str, agent: &str, state: AgentState) -> AgentRow {
         AgentRow {
             session_id: 1,
             session_name: session.into(),
-            kind,
+            docked: false,
+            agent: agent.into(),
+            name: kuntur_agents::Catalog::builtin().get(agent).unwrap().name.clone(),
             pid: 10,
             state,
             started_at: 0,
@@ -155,9 +176,9 @@ mod tests {
 
     fn rows() -> Vec<AgentRow> {
         vec![
-            row("web", AgentKind::ClaudeCode, AgentState::Working),
-            row("api", AgentKind::Codex, AgentState::Waiting),
-            row("Documentación", AgentKind::OpenCode, AgentState::Waiting),
+            row("web", "claude", AgentState::Working),
+            row("api", "codex", AgentState::Waiting),
+            row("Documentación", "opencode", AgentState::Waiting),
         ]
     }
 
@@ -170,7 +191,7 @@ mod tests {
         assert!(waiting.iter().all(|r| r.state == AgentState::Waiting));
         let working = filter_rows(&r, AgentFilter::Working, "");
         assert_eq!(working.len(), 1);
-        assert_eq!(working[0].kind, AgentKind::ClaudeCode);
+        assert_eq!(working[0].agent, "claude");
         assert_eq!(counts(&r), [3, 2, 1]);
     }
 
@@ -179,13 +200,21 @@ mod tests {
         let r = rows();
         assert_eq!(filter_rows(&r, AgentFilter::All, "codex")[0].session_name, "api");
         assert_eq!(filter_rows(&r, AgentFilter::All, "CLAUDE web").len(), 1);
-        assert_eq!(
-            filter_rows(&r, AgentFilter::All, "documentacion")[0].kind,
-            AgentKind::OpenCode
-        );
+        assert_eq!(filter_rows(&r, AgentFilter::All, "documentacion")[0].agent, "opencode");
         assert!(filter_rows(&r, AgentFilter::All, "claude api").is_empty());
         // La búsqueda se combina con el filtro.
         assert!(filter_rows(&r, AgentFilter::Working, "codex").is_empty());
+    }
+
+    #[test]
+    fn agentes_de_la_acoplada() {
+        let mut r = rows();
+        r[1].docked = true;
+        assert_eq!(r[1].place(), "api · acoplada");
+        assert_eq!(r[0].place(), "web");
+        let found = filter_rows(&r, AgentFilter::All, "acoplada");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].agent, "codex");
     }
 
     #[test]

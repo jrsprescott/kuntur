@@ -3,10 +3,9 @@
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
-use kuntur_usage::AgentKind;
 use sysinfo::System;
 
-use crate::catalog::match_process;
+use crate::catalog::Catalog;
 
 /// Tiempo sin salida a partir del cual un agente se considera esperando.
 pub const WORKING_WINDOW: Duration = Duration::from_secs(3);
@@ -20,7 +19,8 @@ pub enum AgentState {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RunningAgent {
-    pub kind: AgentKind,
+    /// Id del agente en el catálogo (`claude`, `codex`, `extra:…`).
+    pub agent: String,
     pub pid: u32,
     /// Segundos Unix en que arrancó el proceso.
     pub started_at: u64,
@@ -47,7 +47,7 @@ pub fn state_for(last_output_age: Duration) -> AgentState {
 
 /// Agentes entre los descendientes de `root` (sin contar `root`), ordenados por PID. Un agente que
 /// corre dentro de otro del mismo tipo (p. ej. `node codex.js` → `codex.exe`) se cuenta una vez.
-pub fn find_agents(root: u32, procs: &[ProcInfo]) -> Vec<RunningAgent> {
+pub fn find_agents(catalog: &Catalog, root: u32, procs: &[ProcInfo]) -> Vec<RunningAgent> {
     let by_pid: HashMap<u32, &ProcInfo> = procs.iter().map(|p| (p.pid, p)).collect();
     let mut children: HashMap<u32, Vec<&ProcInfo>> = HashMap::new();
     for p in procs {
@@ -63,16 +63,16 @@ pub fn find_agents(root: u32, procs: &[ProcInfo]) -> Vec<RunningAgent> {
     let mut found = Vec::new();
     let mut visited = HashSet::from([root]);
     // (proceso, agente del ancestro más cercano dentro de la sesión)
-    let mut pending: Vec<(u32, Option<AgentKind>)> = vec![(root, None)];
+    let mut pending: Vec<(u32, Option<&str>)> = vec![(root, None)];
     while let Some((pid, inherited)) = pending.pop() {
         for child in children.get(&pid).into_iter().flatten() {
             if !visited.insert(child.pid) {
                 continue;
             }
-            let kind = match_process(&child.name, &child.cmd);
+            let kind = catalog.match_process(&child.name, &child.cmd).map(|a| a.id.as_str());
             if let Some(kind) = kind.filter(|k| Some(*k) != inherited) {
                 found.push(RunningAgent {
-                    kind,
+                    agent: kind.to_string(),
                     pid: child.pid,
                     started_at: child.start_time,
                 });
@@ -86,7 +86,7 @@ pub fn find_agents(root: u32, procs: &[ProcInfo]) -> Vec<RunningAgent> {
 
 /// Agentes corriendo bajo el proceso `pid` (el shell de la sesión). `sys` debe tener los procesos
 /// actualizados con su línea de comando (`ProcessRefreshKind::nothing().with_cmd(UpdateKind::Always)`).
-pub fn agents_under(pid: u32, sys: &System) -> Vec<RunningAgent> {
+pub fn agents_under(catalog: &Catalog, pid: u32, sys: &System) -> Vec<RunningAgent> {
     let procs: Vec<ProcInfo> = sys
         .processes()
         .values()
@@ -98,7 +98,7 @@ pub fn agents_under(pid: u32, sys: &System) -> Vec<RunningAgent> {
             start_time: p.start_time(),
         })
         .collect();
-    find_agents(pid, &procs)
+    find_agents(catalog, pid, &procs)
 }
 
 #[cfg(test)]
@@ -137,34 +137,35 @@ mod tests {
             // Un agente dentro de otro de distinto tipo sí cuenta.
             p(8, 5, "gemini.exe", &["gemini.exe"], 125),
         ];
-        let found = find_agents(1, &procs);
+        let c = Catalog::builtin();
+        let found = find_agents(&c, 1, &procs);
         assert_eq!(
             found,
             vec![
                 RunningAgent {
-                    kind: AgentKind::Codex,
+                    agent: "codex".into(),
                     pid: 3,
                     started_at: 111
                 },
                 RunningAgent {
-                    kind: AgentKind::ClaudeCode,
+                    agent: "claude".into(),
                     pid: 5,
                     started_at: 120
                 },
                 RunningAgent {
-                    kind: AgentKind::Gemini,
+                    agent: "gemini".into(),
                     pid: 8,
                     started_at: 125
                 },
             ]
         );
-        assert!(find_agents(42, &procs).is_empty());
+        assert!(find_agents(&c, 42, &procs).is_empty());
     }
 
     #[test]
     fn el_shell_mismo_no_cuenta_y_los_ciclos_no_cuelgan() {
         let procs = vec![p(1, 2, "claude.exe", &[], 100), p(2, 1, "node.exe", &[], 100)];
-        assert!(find_agents(1, &procs).is_empty());
+        assert!(find_agents(&Catalog::builtin(), 1, &procs).is_empty());
     }
 
     #[test]
@@ -183,6 +184,6 @@ mod tests {
             sysinfo::ProcessRefreshKind::nothing().with_cmd(sysinfo::UpdateKind::Always),
         );
         // El proceso de pruebas no tiene agentes como hijos.
-        assert!(agents_under(std::process::id(), &sys).is_empty());
+        assert!(agents_under(&Catalog::builtin(), std::process::id(), &sys).is_empty());
     }
 }

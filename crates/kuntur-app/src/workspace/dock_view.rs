@@ -69,6 +69,7 @@ impl Workspace {
             return;
         };
         self.usage.open = false;
+        self.audit.open = false;
         let focused = self.focused_slot(id, window, cx);
         let outcome = match self.sessions.get_mut(id) {
             Some(e) => e.value.dock_state.toggle(focused),
@@ -148,6 +149,13 @@ impl Workspace {
             (Slot::Dock, Some(dock)) => Some(dock.clone()),
             _ => Some(e.value.view.clone()),
         }
+    }
+
+    /// ¿El teclado de la sesión va a su acoplada (visible y viva)?
+    pub(super) fn dock_has_focus(&self, id: u64) -> bool {
+        self.sessions
+            .get(id)
+            .is_some_and(|e| e.value.dock_state.focus() == Slot::Dock && e.value.dock.is_some())
     }
 
     /// Carpeta del panel con foco de la sesión activa (para la línea inferior).

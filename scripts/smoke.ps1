@@ -15,6 +15,8 @@
 .EXAMPLE
   .\scripts\smoke.ps1 -Sessions 1 -Usage 30 -Theme dark -Out target\smoke-usage.png
 .EXAMPLE
+  .\scripts\smoke.ps1 -Sessions 2 -Audit -AuditQuery 'cargo' -Badges -Out target\smoke-audit.png
+.EXAMPLE
   .\scripts\smoke.ps1 -Sessions 2 -Commands 'cd C:\Windows' -Dock reopen -DockCommands 'Get-Location' -Out target\smoke-dock.png
 #>
 param(
@@ -40,6 +42,15 @@ param(
     [ValidateSet('', 'open', 'reopen')][string]$Dock = '',
     # Comandos que se escriben en la terminal acoplada (desde dentro de la app, como -Commands).
     [string[]]$DockCommands = @(),
+    # Abre "Auditoría" con datos SINTÉTICOS (nunca los registros reales), con búsqueda inicial opcional.
+    [switch]$Audit,
+    [string]$AuditQuery = '',
+    # Insignias de alerta de prueba en las pestañas no activas (nunca muestra notificaciones de Windows).
+    [switch]$Badges,
+    # "Clic" en el agente instalado con ese id (p. ej. 'extra:ping' definido en -Config) a los 4 s.
+    [string]$Launch = '',
+    # Configuración de prueba alternativa (por defecto target\smoke-config.toml). Nunca la real.
+    [string]$Config = '',
     # Pantalla donde se abre la ventana, contando de izquierda a derecha desde 0. Por defecto, la de
     # más a la derecha que NO sea la principal (en la PC del usuario: el monitor Teros), para no
     # interrumpir lo que pasa en la principal. La ventana se abre sin tomar el foco.
@@ -97,6 +108,10 @@ if ($Palette -or $PaletteQuery -or $PaletteRename) { $smokeEnv.KUNTUR_SMOKE_PALE
 if ($PaletteQuery) { $smokeEnv.KUNTUR_SMOKE_PALETTE_QUERY = $PaletteQuery }
 if ($Panel) { $smokeEnv.KUNTUR_SMOKE_PANEL = $Panel }
 if ($Usage) { $smokeEnv.KUNTUR_SMOKE_USAGE = $Usage }
+if ($Audit -or $AuditQuery) { $smokeEnv.KUNTUR_SMOKE_AUDIT = $(if ($AuditQuery) { $AuditQuery } else { ' ' }) }
+if ($Badges) { $smokeEnv.KUNTUR_SMOKE_BADGES = '1' }
+if ($Launch) { $smokeEnv.KUNTUR_SMOKE_LAUNCH = $Launch }
+if ($Config) { $smokeEnv.KUNTUR_CONFIG = (Resolve-Path $Config).Path }
 if ($Dock) { $smokeEnv.KUNTUR_SMOKE_DOCK = $Dock }
 if ($Dock -and $DockCommands.Count -gt 0) { $smokeEnv.KUNTUR_SMOKE_DOCK_INPUT = ($DockCommands -join '\n') }
 foreach ($k in $smokeEnv.Keys) { Set-Item "Env:$k" $smokeEnv[$k] }

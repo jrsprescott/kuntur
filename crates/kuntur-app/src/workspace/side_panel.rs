@@ -20,8 +20,7 @@ pub(super) fn brand(color: u32) -> Hsla {
 }
 
 /// Insignia de un agente: letra en su color sobre un fondo tenue de ese color.
-pub(super) fn badge(kind: AgentKind, size: f32, radius: f32) -> Div {
-    let (letter, color) = kuntur_agents::info(kind).map_or(('?', 0x888888), |i| (i.letter, i.color));
+pub(super) fn badge(letter: char, color: u32, size: f32, radius: f32) -> Div {
     let color = brand(color);
     div()
         .size(px(size))
@@ -75,6 +74,21 @@ fn ring(pct: f32, color: Hsla, track: Hsla) -> impl IntoElement {
 }
 
 impl Workspace {
+    /// Insignia del agente `id` del catálogo (gris con "?" si ya no está).
+    pub(super) fn agent_badge(&self, id: &str, size: f32, radius: f32) -> Div {
+        let (letter, color) = self.catalog.get(id).map_or(('?', 0x888888), |a| (a.letter, a.color));
+        badge(letter, color, size, radius)
+    }
+
+    /// Insignia de un agente de los historiales de uso / auditoría.
+    pub(super) fn usage_badge(&self, kind: AgentKind, size: f32, radius: f32) -> Div {
+        let (letter, color) = self
+            .catalog
+            .by_usage(kind)
+            .map_or(('?', 0x888888), |a| (a.letter, a.color));
+        badge(letter, color, size, radius)
+    }
+
     pub(super) fn render_side_panel(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let c = &self.colors;
         let panel = v_flex()
@@ -308,7 +322,7 @@ impl Workspace {
             })
             .on_click(cx.listener(move |this, _, window, cx| this.activate(sid, window, cx)))
             .when(in_active, |this| this.child(accent_bar(c.accent, 20.)))
-            .child(badge(r.kind, 26., 7.))
+            .child(self.agent_badge(&r.agent, 26., 7.))
             .child(
                 v_flex()
                     .flex_1()
@@ -321,7 +335,7 @@ impl Workspace {
                             .whitespace_nowrap()
                             .overflow_hidden()
                             .text_ellipsis()
-                            .child(r.name()),
+                            .child(r.name().to_string()),
                     )
                     .child(
                         h_flex()
@@ -339,11 +353,18 @@ impl Workspace {
                                     .child(r.session_name.clone()),
                             )
                             .child(div().flex_shrink_0().child("·"))
+                            // En la acoplada no cabe todo: "acoplada" (que distingue la fila) reemplaza
+                            // la palabra del estado, que sigue en el punto de color, los filtros y el
+                            // tooltip del modo compacto. "esperando" sí se muestra (se colorea en ámbar).
                             .child(
                                 div()
                                     .flex_shrink_0()
                                     .when(r.state == AgentState::Waiting, |this| this.text_color(c.warn))
-                                    .child(state_text),
+                                    .child(match (r.docked, r.state) {
+                                        (true, AgentState::Working) => "acoplada",
+                                        (true, AgentState::Waiting) => "acoplada, esperando",
+                                        _ => state_text,
+                                    }),
                             ),
                     ),
             )
@@ -366,7 +387,7 @@ impl Workspace {
         let c = &self.colors;
         let files_on = self.panel == PanelView::Files;
         let hover = c.hover;
-        let tiles: Vec<AnyElement> = self.installed.iter().map(|&k| self.installed_tile(k)).collect();
+        let tiles: Vec<AnyElement> = self.installed.iter().map(|id| self.installed_tile(id, cx)).collect();
         v_flex()
             .flex_shrink_0()
             .border_t_1()
@@ -421,15 +442,24 @@ impl Workspace {
     }
 
     /// Agente instalado: insignia de 24 px dentro de un anillo cuando hay porcentaje real de su
-    /// límite (hoy solo Codex); sin dato, sin anillo.
-    fn installed_tile(&self, kind: AgentKind) -> AnyElement {
+    /// límite (hoy solo Codex); sin dato, sin anillo. Clic = abrirlo en la sesión activa (§3).
+    fn installed_tile(&self, id: &str, cx: &mut Context<Self>) -> AnyElement {
         let c = &self.colors;
-        let name = kuntur_agents::info(kind).map_or("Agente", |i| i.name);
-        let limits = (kind == AgentKind::Codex)
+        let Some(agent) = self.catalog.get(id) else {
+            return Empty.into_any_element();
+        };
+        let limits = (agent.usage == Some(AgentKind::Codex))
             .then_some(self.codex_limits.as_ref())
             .flatten();
         let pct = ring_pct(limits);
-        let tip: SharedString = ring_tooltip(name, limits).into();
+        let action = if agent.ide {
+            "IDE · clic: abrir en la carpeta de la sesión"
+        } else {
+            "clic: abrir en la sesión activa"
+        };
+        let tip: SharedString = format!("{} · {action}", ring_tooltip(&agent.name, limits)).into();
+        let hover = c.hover;
+        let launch_id = agent.id.clone();
         let color = match pct.map(RingLevel::from_pct) {
             Some(RingLevel::Critical) => c.error,
             Some(RingLevel::High) => c.warn,
@@ -437,16 +467,20 @@ impl Workspace {
         };
         let track = c.muted.opacity(0.25);
         div()
-            .id(SharedString::from(format!("installed-{name}")))
+            .id(SharedString::from(format!("installed-{}", agent.id)))
             .relative()
             .size(px(INSTALLED_TILE))
             .flex_shrink_0()
             .flex()
             .items_center()
             .justify_center()
+            .rounded_full()
+            .cursor_pointer()
+            .hover(move |s| s.bg(hover))
             .tooltip(move |window, cx| Tooltip::new(tip.clone()).build(window, cx))
+            .on_click(cx.listener(move |this, _, window, cx| this.launch_agent(&launch_id, window, cx)))
             .when_some(pct, |this, p| this.child(ring(p, color, track)))
-            .child(badge(kind, INSTALLED_BADGE, INSTALLED_BADGE / 2.))
+            .child(badge(agent.letter, agent.color, INSTALLED_BADGE, INSTALLED_BADGE / 2.))
             .into_any_element()
     }
 
@@ -465,7 +499,7 @@ impl Workspace {
                 let tip: SharedString = format!(
                     "{} · {} · {}",
                     r.name(),
-                    r.session_name,
+                    r.place(),
                     match r.state {
                         AgentState::Working => "trabajando",
                         AgentState::Waiting => "esperando",
@@ -499,7 +533,7 @@ impl Workspace {
                                     this.hover(move |s| s.bg(hover))
                                 }
                             })
-                            .child(badge(r.kind, 26., 7.))
+                            .child(self.agent_badge(&r.agent, 26., 7.))
                             .child(
                                 div()
                                     .absolute()
@@ -514,7 +548,7 @@ impl Workspace {
                     .into_any_element()
             })
             .collect();
-        let tiles: Vec<AnyElement> = self.installed.iter().map(|&k| self.installed_tile(k)).collect();
+        let tiles: Vec<AnyElement> = self.installed.iter().map(|id| self.installed_tile(id, cx)).collect();
         let files_on = self.panel == PanelView::Files;
 
         v_flex()

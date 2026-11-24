@@ -4,20 +4,26 @@
 //! arriba, jerarquía por peso y color de texto, íconos de un solo color, color solo para estado y lo
 //! secundario al pasar el mouse.
 
+mod audit_view;
 mod dock_view;
 mod files_panel;
 mod side_panel;
 mod title_bar;
 mod usage_view;
 
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{Icon, TITLE_BAR_HEIGHT, h_flex, tooltip::Tooltip, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
-use kuntur_agents::{AgentKind, RunningAgent, state_for};
+use kuntur_agents::{
+    AgentKey, AgentKind, AlertKind, AlertTracker, Catalog, ExtraAgent, Observation, RunningAgent, ShellFlavor,
+    launch_line, state_for,
+};
 use kuntur_config::{SessionConfig, Settings, SidebarMode, Theme, ThemeId, builtin};
 use kuntur_term::{GridSize, PaneOptions};
 use kuntur_usage::codex::Limits;
@@ -25,10 +31,11 @@ use kuntur_usage::codex::Limits;
 use crate::agents_panel::{AgentFilter, AgentRow};
 use crate::command_palette::{PaletteAction, PaletteItem, PaletteMode, PaletteState};
 use crate::dock::{DockState, is_toggle_key};
-use crate::monitor::{Sample, Sampler, SlowSample, home_dir, slow_sample};
+use crate::monitor::{Sample, Sampler, ShellRef, SlowSample, home_dir, slow_sample};
 use crate::sessions::{SessionList, next_default_name, short_title};
 use crate::terminal_view::{TerminalEvent, TerminalView};
 use crate::theme_bridge::{FALLBACK_MONO, FALLBACK_UI, UiColors, apply_to_kit, palette_from, pick_font};
+use audit_view::AuditState;
 use dock_view::DockDrag;
 use files_panel::FilesState;
 use usage_view::UsageState;
@@ -82,17 +89,30 @@ pub struct Workspace {
     agent_query: String,
     /// Foco del buscador de agentes.
     search_focus: FocusHandle,
-    /// Última lectura: (sesión, agente) en el orden de las sesiones.
-    running: Vec<(u64, RunningAgent)>,
-    installed: Vec<AgentKind>,
+    /// Agentes conocidos: los del catálogo y los de `config.toml`.
+    catalog: Arc<Catalog>,
+    /// Última lectura: (sesión, ¿acoplada?, agente) en el orden de las sesiones.
+    running: Vec<(u64, bool, RunningAgent)>,
+    /// Terminales (sesión, ¿acoplada?) con otro programa corriendo: no se les escribe un comando.
+    busy: HashSet<(u64, bool)>,
+    /// Ids de los agentes instalados.
+    installed: Vec<String>,
+    /// Alertas (§12): transiciones de los agentes y el contador de la insignia de cada pestaña.
+    alerts: AlertTracker,
+    badges: HashMap<u64, u32>,
+    /// La ventana tiene el foco (si no, ninguna pestaña se está viendo).
+    window_active: bool,
     codex_limits: Option<Limits>,
     /// Memoria de trabajo de Kuntur (bytes).
     ram: Option<u64>,
     files: FilesState,
     /// Vista "Uso de agentes" (ocupa el área central mientras está abierta).
     usage: UsageState,
+    /// Vista "Auditoría" (también ocupa el área central).
+    audit: AuditState,
     home: Option<PathBuf>,
     _monitor: Task<()>,
+    _activation: Subscription,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -106,11 +126,28 @@ fn now_secs() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs())
 }
 
+/// Catálogo con los agentes extra de la configuración.
+fn catalog_from(settings: &Settings) -> Catalog {
+    let extra: Vec<ExtraAgent> = settings
+        .agents
+        .iter()
+        .map(|a| ExtraAgent {
+            name: a.name.clone(),
+            command: a.command.clone(),
+            args: a.args.clone(),
+            letter: a.letter,
+            color: a.color.clone(),
+        })
+        .collect();
+    Catalog::with_extra(&extra)
+}
+
 impl Workspace {
     pub fn new(window: &mut Window, cx: &mut Context<Self>, settings: Settings, config_path: Option<PathBuf>) -> Self {
         let theme_id = ThemeId::from_key(&settings.theme).unwrap_or(ThemeId::Dark);
         let theme = builtin(theme_id);
         let installed = window.text_system().all_font_names();
+        let catalog = Arc::new(catalog_from(&settings));
         let mut this = Self {
             sessions: SessionList::new(),
             config_path,
@@ -126,14 +163,25 @@ impl Workspace {
             agent_filter: AgentFilter::All,
             agent_query: String::new(),
             search_focus: cx.focus_handle(),
+            catalog,
             running: Vec::new(),
+            busy: HashSet::new(),
             installed: Vec::new(),
+            alerts: AlertTracker::default(),
+            badges: HashMap::new(),
+            window_active: window.is_window_active(),
             codex_limits: None,
             ram: None,
             files: FilesState::default(),
             usage: UsageState::default(),
+            audit: AuditState::new(cx),
             home: home_dir(),
             _monitor: Self::spawn_monitor(cx),
+            _activation: cx.observe_window_activation(window, |this, window, cx| {
+                this.window_active = window.is_window_active();
+                this.clear_visible_badge();
+                cx.notify();
+            }),
         };
         apply_to_kit(&this.theme, cx);
 
@@ -209,6 +257,32 @@ impl Workspace {
             this.open_usage(window, cx);
         }
 
+        // Prueba de humo: vista de auditoría con datos SINTÉTICOS (nunca el historial real); el valor
+        // es el texto de búsqueda inicial (vacío = sin búsqueda).
+        if let Ok(query) = std::env::var("KUNTUR_SMOKE_AUDIT") {
+            this.config_path = None;
+            this.audit.set_initial_query(&query);
+            this.open_audit(window, cx);
+        }
+
+        // Prueba de humo: "clic" en el agente instalado con ese id (como el usuario), a los 4 s.
+        if let Ok(id) = std::env::var("KUNTUR_SMOKE_LAUNCH") {
+            this.config_path = None;
+            cx.spawn_in(window, async move |this, cx| {
+                cx.background_executor().timer(Duration::from_secs(4)).await;
+                let _ = this.update_in(cx, |w, window, cx| w.launch_agent(&id, window, cx));
+            })
+            .detach();
+        }
+
+        // Prueba de humo: insignias de alerta en las pestañas no activas (sin notificación).
+        if std::env::var_os("KUNTUR_SMOKE_BADGES").is_some() {
+            let ids: Vec<u64> = this.sessions.iter().skip(1).map(|e| e.id).collect();
+            for (i, id) in ids.into_iter().enumerate() {
+                this.badges.insert(id, i as u32 + 1);
+            }
+        }
+
         // Prueba de humo: terminal acoplada ("open") de la primera sesión, abierta después de los
         // comandos de la principal; "reopen" además la oculta y la vuelve a mostrar.
         if let Ok(mode) = std::env::var("KUNTUR_SMOKE_DOCK") {
@@ -229,15 +303,15 @@ impl Workspace {
             let mut sampler = Sampler::new();
             let mut tick: u32 = 0;
             loop {
-                let Ok(shells) = this.update(cx, |w, cx| w.shell_pids(cx)) else {
+                let Ok((shells, catalog)) = this.update(cx, |w, cx| (w.shell_pids(cx), w.catalog.clone())) else {
                     break;
                 };
                 let slow = tick.is_multiple_of(SLOW_EVERY);
                 let (back, sample, slow) = cx
                     .background_executor()
                     .spawn(async move {
-                        let sample = sampler.sample(&shells);
-                        (sampler, sample, slow.then(slow_sample))
+                        let sample = sampler.sample(&shells, &catalog);
+                        (sampler, sample, slow.then(|| slow_sample(&catalog)))
                     })
                     .await;
                 sampler = back;
@@ -250,41 +324,192 @@ impl Workspace {
         })
     }
 
-    /// (sesión, PID del shell) de las sesiones abiertas.
-    fn shell_pids(&self, cx: &App) -> Vec<(u64, u32)> {
-        self.sessions
-            .iter()
-            .filter_map(|e| e.value.view.read(cx).pid().map(|pid| (e.id, pid)))
-            .collect()
+    /// Shells de las terminales abiertas: la principal de cada sesión y su acoplada (aunque esté
+    /// oculta: sus agentes siguen corriendo).
+    fn shell_pids(&self, cx: &App) -> Vec<ShellRef> {
+        let mut out = Vec::new();
+        for e in self.sessions.iter() {
+            if let Some(pid) = e.value.view.read(cx).pid() {
+                out.push(ShellRef {
+                    session: e.id,
+                    docked: false,
+                    pid,
+                });
+            }
+            if let Some(pid) = e.value.dock.as_ref().and_then(|d| d.read(cx).pid()) {
+                out.push(ShellRef {
+                    session: e.id,
+                    docked: true,
+                    pid,
+                });
+            }
+        }
+        out
     }
 
     fn apply_sample(&mut self, sample: Sample, slow: Option<SlowSample>, cx: &mut Context<Self>) {
         self.running = sample.agents;
+        self.busy = sample.busy;
         self.ram = sample.ram;
         if let Some(slow) = slow {
             self.installed = slow.installed;
             self.codex_limits = slow.codex_limits;
         }
+        self.check_alerts(cx);
         self.sync_files(false, cx);
         cx.notify();
     }
 
-    /// Agentes corriendo, con el nombre de su sesión y el estado por actividad de la sesión.
+    /// La terminal (principal o acoplada) de una sesión.
+    fn terminal(&self, session: u64, docked: bool) -> Option<&Entity<TerminalView>> {
+        let e = self.sessions.get(session)?;
+        if docked {
+            e.value.dock.as_ref()
+        } else {
+            Some(&e.value.view)
+        }
+    }
+
+    /// Agentes corriendo, con el nombre de su sesión y el estado por actividad de su terminal.
     fn agent_rows(&self, cx: &App) -> Vec<AgentRow> {
         self.running
             .iter()
-            .filter_map(|(sid, agent)| {
-                let entry = self.sessions.iter().find(|e| e.id == *sid)?;
+            .filter_map(|(sid, docked, agent)| {
+                let entry = self.sessions.get(*sid)?;
+                let view = self.terminal(*sid, *docked)?;
                 Some(AgentRow {
                     session_id: *sid,
                     session_name: entry.name.clone(),
-                    kind: agent.kind,
+                    docked: *docked,
+                    agent: agent.agent.clone(),
+                    name: self.agent_name(&agent.agent),
                     pid: agent.pid,
-                    state: state_for(entry.value.view.read(cx).last_output_age()),
+                    state: state_for(view.read(cx).last_output_age()),
                     started_at: agent.started_at,
                 })
             })
             .collect()
+    }
+
+    fn agent_name(&self, id: &str) -> String {
+        self.catalog
+            .get(id)
+            .map_or_else(|| "Agente".to_string(), |a| a.name.clone())
+    }
+
+    // ── Alertas (§12) ───────────────────────────────────────────────────────
+
+    /// ¿Se está viendo la pestaña? Activa, sin otra vista encima y con la ventana enfocada.
+    fn session_visible(&self, id: u64) -> bool {
+        self.window_active && !self.usage.open && !self.audit.open && self.sessions.active_id() == Some(id)
+    }
+
+    /// Compara la lectura nueva con la anterior: insignia en la pestaña y notificación de Windows
+    /// para cada agente que quedó esperando o terminó en una pestaña que no se ve.
+    fn check_alerts(&mut self, cx: &App) {
+        let seen: Vec<Observation> = self
+            .agent_rows(cx)
+            .into_iter()
+            .map(|r| Observation {
+                key: AgentKey {
+                    session: r.session_id,
+                    docked: r.docked,
+                    pid: r.pid,
+                },
+                agent: r.agent,
+                state: r.state,
+            })
+            .collect();
+        let open: HashSet<u64> = self.sessions.iter().map(|e| e.id).collect();
+        let visible: Vec<u64> = open.iter().copied().filter(|&id| self.session_visible(id)).collect();
+        let alerts = self
+            .alerts
+            .update(&seen, |id| visible.contains(&id), |id| open.contains(&id));
+        if alerts.is_empty() {
+            return;
+        }
+        let toasts = crate::notify::toasts_allowed_now(self.settings.alerts);
+        for alert in alerts {
+            *self.badges.entry(alert.key.session).or_default() += 1;
+            if toasts {
+                let session = self
+                    .sessions
+                    .get(alert.key.session)
+                    .map(|e| e.name.clone())
+                    .unwrap_or_default();
+                let place = crate::agents_panel::place(&session, alert.key.docked);
+                let name = self.agent_name(&alert.agent);
+                let title = match alert.kind {
+                    AlertKind::Waiting => format!("{name} espera tu respuesta"),
+                    AlertKind::Finished => format!("{name} terminó"),
+                };
+                crate::notify::show_toast(title, format!("Sesión «{place}»"));
+            }
+        }
+    }
+
+    /// Al ver una pestaña, su insignia se limpia.
+    fn clear_visible_badge(&mut self) {
+        if let Some(id) = self.sessions.active_id().filter(|&id| self.session_visible(id)) {
+            self.badges.remove(&id);
+        }
+    }
+
+    // ── Abrir agentes (§3) ──────────────────────────────────────────────────
+
+    /// Clic en un agente instalado (o "Agentes: abrir …" en la paleta): escribe su comando y Enter en
+    /// la terminal con foco de la sesión activa. Si esa terminal tiene otro programa corriendo (por
+    /// ejemplo, otro agente), se abre una sesión nueva: nunca se le manda texto a algo que no es el
+    /// shell.
+    fn launch_agent(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(agent) = self.catalog.get(id).cloned() else {
+            return;
+        };
+        let target = self.sessions.active_id().map(|sid| (sid, self.dock_has_focus(sid)));
+        let free = target.filter(|t| !self.busy.contains(t));
+        let (session, docked, delay) = match free {
+            Some((sid, docked)) => (sid, docked, Duration::ZERO),
+            None => {
+                self.new_session(window, cx);
+                let Some(sid) = self.sessions.active_id() else { return };
+                (sid, false, Duration::from_millis(1_500))
+            }
+        };
+        let shell = self.sessions.get(session).and_then(|e| e.value.shell.clone());
+        let line = launch_line(&agent.command, &agent.args, ShellFlavor::from_program(shell.as_deref()));
+        if let Some(view) = self.terminal(session, docked) {
+            view.read(cx).send_line(line, delay);
+        }
+        // Hasta la próxima lectura, la terminal cuenta como ocupada (un segundo clic no escribe encima).
+        self.busy.insert((session, docked));
+        self.usage.open = false;
+        self.audit.open = false;
+        self.sessions.activate(session);
+        self.focus_active(window, cx);
+        cx.notify();
+    }
+
+    /// Vuelve a leer los agentes extra de `config.toml` y busca los instalados (en segundo plano).
+    fn refresh_agents(&mut self, cx: &mut Context<Self>) {
+        if let Some(path) = &self.config_path {
+            let saved = Settings::load(path);
+            self.settings.agents = saved.agents;
+            self.settings.alerts = saved.alerts;
+        }
+        self.catalog = Arc::new(catalog_from(&self.settings));
+        let catalog = self.catalog.clone();
+        cx.spawn(async move |this, cx| {
+            let slow = cx
+                .background_executor()
+                .spawn(async move { slow_sample(&catalog) })
+                .await;
+            let _ = this.update(cx, |w, cx| {
+                w.installed = slow.installed;
+                w.codex_limits = slow.codex_limits;
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     /// Carpeta actual de la sesión activa (OSC 7 / OSC 9;9).
@@ -335,6 +560,7 @@ impl Workspace {
         self.add_session(None, None, None, window, cx);
         self.persist();
         self.usage.open = false;
+        self.audit.open = false;
         self.focus_active(window, cx);
     }
 
@@ -349,6 +575,7 @@ impl Workspace {
         if self.sessions.close(id).is_none() {
             return;
         }
+        self.badges.remove(&id);
         self.persist();
         if self.sessions.is_empty() {
             window.remove_window();
@@ -358,22 +585,29 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Activa una sesión y la muestra: si la vista de uso estaba abierta, vuelve a la terminal
-    /// (también al hacer clic en la pestaña que ya estaba activa).
+    /// Activa una sesión y la muestra: si la vista de uso o de auditoría estaba abierta, vuelve a la
+    /// terminal (también al hacer clic en la pestaña que ya estaba activa).
     fn activate(&mut self, id: u64, window: &mut Window, cx: &mut Context<Self>) {
         let was_usage = std::mem::take(&mut self.usage.open);
-        if self.sessions.activate(id) || was_usage {
+        let was_audit = std::mem::take(&mut self.audit.open);
+        if self.sessions.activate(id) || was_usage || was_audit {
             self.focus_active(window, cx);
             cx.notify();
         }
     }
 
     /// Lleva el teclado a la terminal activa —la principal o la acoplada, la que lo tuvo por última
-    /// vez— (y el panel Archivos a su carpeta). Con la vista de uso abierta, el teclado queda en la
-    /// ventana (Esc la cierra) y no en la terminal oculta.
+    /// vez— (y el panel Archivos a su carpeta). Con la vista de uso o de auditoría abierta, el teclado
+    /// queda en la ventana (Esc la cierra) y no en la terminal oculta. Ver la pestaña limpia su
+    /// insignia.
     fn focus_active(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.clear_visible_badge();
         if self.usage.open {
             window.focus(&self.focus, cx);
+            return;
+        }
+        if self.audit.open {
+            window.focus(&self.audit.search_focus, cx);
             return;
         }
         if let Some(view) = self.sessions.active_id().and_then(|id| self.focus_target(id)) {
@@ -554,7 +788,12 @@ impl Workspace {
     // ── Paleta de comandos ──────────────────────────────────────────────────
 
     fn open_palette(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.palette = Some(PaletteState::new());
+        let agents = self
+            .installed
+            .iter()
+            .filter_map(|id| self.catalog.get(id).map(|a| (a.id.clone(), a.name.clone())))
+            .collect();
+        self.palette = Some(PaletteState::with_agents(agents));
         window.focus(&self.focus, cx);
         cx.notify();
     }
@@ -582,6 +821,10 @@ impl Workspace {
             cx.notify();
             return;
         }
+        let launch = match action {
+            PaletteAction::LaunchAgent(i) => self.palette.as_ref().and_then(|p| p.agents.get(i).cloned()),
+            _ => None,
+        };
         self.close_palette(window, cx);
         match action {
             PaletteAction::NewSession => self.new_session(window, cx),
@@ -615,6 +858,17 @@ impl Workspace {
                 self.open_usage(window, cx);
                 self.edit_prices(cx);
             }
+            PaletteAction::Audit => self.toggle_audit(window, cx),
+            PaletteAction::ExportAudit => {
+                self.open_audit(window, cx);
+                self.export_audit(cx);
+            }
+            PaletteAction::RefreshAgents => self.refresh_agents(cx),
+            PaletteAction::LaunchAgent(_) => {
+                if let Some(id) = launch {
+                    self.launch_agent(&id, window, cx);
+                }
+            }
             PaletteAction::RenameSession => {}
         }
     }
@@ -642,6 +896,7 @@ impl Workspace {
             PaletteAction::PanelAgents => self.panel == PanelView::Agents,
             PaletteAction::PanelFiles => self.panel == PanelView::Files,
             PaletteAction::Usage => self.usage.open,
+            PaletteAction::Audit => self.audit.open,
             PaletteAction::ToggleDock => self.dock_open(),
             _ => false,
         }
@@ -694,6 +949,7 @@ impl Workspace {
 
     fn cycle(&mut self, forward: bool, window: &mut Window, cx: &mut Context<Self>) {
         self.usage.open = false;
+        self.audit.open = false;
         if forward {
             self.sessions.next();
         } else {
@@ -713,6 +969,10 @@ impl Workspace {
             return;
         }
         if self.search_focus.is_focused(window) && self.on_search_key(ev, window, cx) {
+            cx.stop_propagation();
+            return;
+        }
+        if self.audit.open && self.on_audit_key(ev, window, cx) {
             cx.stop_propagation();
             return;
         }
@@ -744,6 +1004,7 @@ impl Workspace {
             (true, "e") => self.toggle_files(cx),
             (true, "p") => self.toggle_palette(window, cx),
             (true, "u") => self.toggle_usage(window, cx),
+            (true, "a") => self.toggle_audit(window, cx),
             (_, "=" | "+") => self.set_font_size(self.settings.font_size + FONT_STEP, cx),
             (false, "-") => self.set_font_size(self.settings.font_size - FONT_STEP, cx),
             (false, "0") => self.set_font_size(Settings::default().font_size, cx),
@@ -751,6 +1012,7 @@ impl Workspace {
                 let n = d.parse::<usize>().unwrap_or(1);
                 if self.sessions.activate_index(n - 1) {
                     self.usage.open = false;
+                    self.audit.open = false;
                     self.focus_active(window, cx);
                     cx.notify();
                 }
@@ -946,8 +1208,8 @@ impl Workspace {
         let c = &self.colors;
         let action = item.action;
         let (group, label) = match item.label.split_once(": ") {
-            Some((g, l)) => (Some(format!("{g}:")), l),
-            None => (None, item.label),
+            Some((g, l)) => (Some(format!("{g}:")), l.to_string()),
+            None => (None, item.label.to_string()),
         };
         let hover = c.hover;
         h_flex()
@@ -1072,6 +1334,8 @@ impl Render for Workspace {
                             .child(div().flex_1().min_h_0().map(|this| {
                                 if self.usage.open {
                                     this.child(self.render_usage(cx))
+                                } else if self.audit.open {
+                                    this.child(self.render_audit(window, cx))
                                 } else {
                                     this.child(self.render_terminals(cx))
                                 }
