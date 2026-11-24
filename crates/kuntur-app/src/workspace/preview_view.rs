@@ -589,6 +589,7 @@ impl Workspace {
         let want = !self.usage.open
             && !self.audit.open
             && !self.connections.open
+            && !self.mcp.open
             && !self.exact.installer_open()
             && self.palette.is_none()
             && self.preview.link_menu.is_none()

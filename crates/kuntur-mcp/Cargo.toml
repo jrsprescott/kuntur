@@ -1,0 +1,28 @@
+[package]
+name = "kuntur-mcp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+kuntur-config = { path = "../kuntur-config" }
+kuntur-agents = { path = "../kuntur-agents" }
+anyhow = { workspace = true }
+serde_json = { workspace = true }
+# "Probar" en servidores http(s): rustls con `ring` (ya en el árbol por russh) y los certificados de Windows.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+rustls-native-certs = "0.8"
+
+[target.'cfg(windows)'.dependencies]
+keyring-core = "1"
+windows-native-keyring-store = { version = "1", default-features = false }
+
+[dev-dependencies]
+toml = { workspace = true }
+
+# Servidor MCP falso: pruebas de integración y pruebas de humo (nunca un servidor real).
+[[bin]]
+name = "kuntur-mcp-falso"
+path = "src/bin/kuntur-mcp-falso.rs"
+test = false

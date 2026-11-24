@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::connections::ConnectionConfig;
+use crate::mcp::{McpProfileConfig, McpServerConfig, ShortcutCommand};
 
 /// Vista del riel de sesiones. No existe "oculta": el mínimo son los íconos.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -30,6 +31,12 @@ pub struct SessionConfig {
     /// Última carpeta conocida (OSC 7 / OSC 9;9): una sesión remota se reconecta ahí.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cwd: Option<String>,
+    /// Servidores MCP activos en esta sesión (F10, §11).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mcp: Vec<String>,
+    /// Perfil cuyas opciones (modelo, esfuerzo, permisos) se usan al lanzar agentes aquí.
+    #[serde(rename = "perfil", default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
 }
 
 impl SessionConfig {
@@ -72,12 +79,28 @@ pub struct Settings {
     pub alerts: bool,
     /// Sugerencias en gris mientras se escribe en el prompt (Tab o → aceptan).
     pub autocompletado: bool,
+    /// Claude Code: además de `--mcp-config`, `--strict-mcp-config` (ignora los MCP del usuario y del
+    /// proyecto; solo los de la sesión).
+    pub mcp_exclusivo: bool,
+    /// OpenCode: formato V2 de la configuración (`mcp.servers`) en vez del V1 (`mcp.<nombre>`).
+    pub mcp_opencode_v2: bool,
+    /// Perfil que se aplica a las sesiones nuevas (`None` = sin MCP).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mcp_perfil_inicial: Option<String>,
     pub sessions: Vec<SessionConfig>,
     /// Agentes extra (§5).
     #[serde(rename = "agentes", skip_serializing_if = "Vec::is_empty")]
     pub agents: Vec<AgentConfig>,
     /// Conexiones SSH guardadas (gestor de conexiones, F6).
     pub connections: Vec<ConnectionConfig>,
+    /// Catálogo de servidores MCP (F10).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub mcp: Vec<McpServerConfig>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub mcp_perfiles: Vec<McpProfileConfig>,
+    /// Comandos con atajo (F10).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub comandos: Vec<ShortcutCommand>,
 }
 
 impl Default for Settings {
@@ -88,9 +111,15 @@ impl Default for Settings {
             font_size: 14.0,
             alerts: true,
             autocompletado: true,
+            mcp_exclusivo: false,
+            mcp_opencode_v2: false,
+            mcp_perfil_inicial: None,
             sessions: Vec::new(),
             agents: Vec::new(),
             connections: Vec::new(),
+            mcp: Vec::new(),
+            mcp_perfiles: Vec::new(),
+            comandos: Vec::new(),
         }
     }
 }
@@ -192,6 +221,7 @@ mod tests {
                 key: Some("C:\\llaves\\id_ed25519".into()),
                 remember: true,
             }],
+            ..Default::default()
         };
         s.save(&path).unwrap();
         assert_eq!(Settings::load(&path), s);
@@ -291,6 +321,62 @@ letra = \"M\"
         assert!(Settings::load(&path).autocompletado);
         std::fs::write(&path, "autocompletado = false\n").unwrap();
         assert!(!Settings::load(&path).autocompletado);
+    }
+
+    #[test]
+    fn mcp_perfiles_comandos_y_sesiones_guardan_su_lista() {
+        use crate::mcp::{CommandTarget, McpTransport, PermissionMode};
+        let path = tmp("mcp");
+        let mut s = Settings {
+            mcp_perfil_inicial: Some("web".into()),
+            ..Default::default()
+        };
+        s.sessions = vec![SessionConfig {
+            name: "api".into(),
+            mcp: vec!["db".into(), "docs".into()],
+            profile: Some("web".into()),
+            ..Default::default()
+        }];
+        s.mcp = vec![
+            McpServerConfig {
+                name: "db".into(),
+                command: "npx".into(),
+                args: vec!["-y".into(), "srv".into()],
+                secrets: vec!["DB_PASSWORD".into()],
+                env: [("LOG".to_string(), "info".to_string())].into(),
+                ..Default::default()
+            },
+            McpServerConfig {
+                name: "docs".into(),
+                transport: McpTransport::Http,
+                url: "https://mcp.ejemplo.test/mcp".into(),
+                token: true,
+                ..Default::default()
+            },
+        ];
+        s.mcp_perfiles = vec![McpProfileConfig {
+            name: "web".into(),
+            servers: vec!["docs".into()],
+            model: Some("sonnet".into()),
+            effort: Some("high".into()),
+            permissions: Some(PermissionMode::Ediciones),
+        }];
+        s.comandos = vec![ShortcutCommand {
+            name: "Pruebas".into(),
+            text: "cargo test".into(),
+            shortcut: "Ctrl+Alt+T".into(),
+            target: CommandTarget::Acoplada,
+            enter: false,
+            session: Some("api".into()),
+        }];
+        s.save(&path).unwrap();
+        assert_eq!(Settings::load(&path), s);
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("[[mcp]]") && text.contains("[[mcp_perfiles]]") && text.contains("[[comandos]]"));
+        assert!(
+            !text.to_lowercase().contains("password ="),
+            "los secretos nunca van al archivo"
+        );
     }
 
     #[test]

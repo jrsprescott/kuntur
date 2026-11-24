@@ -9,6 +9,7 @@ mod audit_view;
 mod connections_view;
 mod dock_view;
 mod files_panel;
+mod mcp_view;
 mod preview_view;
 mod side_panel;
 mod title_bar;
@@ -44,6 +45,7 @@ use audit_view::AuditState;
 use connections_view::{ConnectionsState, RemoteTab};
 use dock_view::DockDrag;
 use files_panel::FilesState;
+use mcp_view::McpState;
 use preview_view::PreviewState;
 use usage_view::UsageState;
 
@@ -123,6 +125,8 @@ pub struct Workspace {
     connections: ConnectionsState,
     /// Vista previa de archivos (F8): divide la zona central cuando tiene pestañas.
     preview: PreviewState,
+    /// Gestor de MCP por sesión y comandos con atajo (F10).
+    mcp: McpState,
     home: Option<PathBuf>,
     /// F5b: estado exacto por hooks / OSC 7501, worktrees, instalador de ganchos.
     exact: ExactAgents,
@@ -192,6 +196,7 @@ impl Workspace {
             audit: AuditState::new(cx),
             connections: ConnectionsState::default(),
             preview: PreviewState::default(),
+            mcp: McpState::default(),
             home: home_dir(),
             exact: ExactAgents::default(),
             _monitor: Self::spawn_monitor(cx),
@@ -221,9 +226,11 @@ impl Workspace {
                 if let Some(conn) = &s.connection
                     && this.open_remote(conn, s.cwd.clone(), Some(s.name.clone()), s.dock_ratio, window, cx)
                 {
+                    this.mcp_restore_last(&s);
                     continue;
                 }
-                this.add_session(Some(s.name), s.shell, s.dock_ratio, window, cx);
+                this.add_session(Some(s.name.clone()), s.shell.clone(), s.dock_ratio, window, cx);
+                this.mcp_restore_last(&s);
             }
             if this.sessions.is_empty() {
                 this.add_session(None, None, None, window, cx);
@@ -324,6 +331,9 @@ impl Workspace {
 
         // Prueba de humo del árbol remoto y la cola de transferencias (datos sintéticos, F7).
         this.smoke_files(cx);
+
+        // F10: MCP por sesión (limpieza de temporales, capturas → vista previa, prueba de humo).
+        this.start_mcp(window, cx);
         this
     }
 
@@ -515,7 +525,8 @@ impl Workspace {
             }
         };
         let shell = self.sessions.get(session).and_then(|e| e.value.shell.clone());
-        let line = launch_line(&agent.command, &agent.args, ShellFlavor::from_program(shell.as_deref()));
+        // F10: con la configuración MCP y las opciones del perfil de la sesión.
+        let line = self.agent_launch_line(session, &agent, ShellFlavor::from_program(shell.as_deref()), cx);
         if let Some(view) = self.terminal(session, docked) {
             view.read(cx).send_line(line, delay);
         }
@@ -585,7 +596,7 @@ impl Workspace {
                 }
             }
         });
-        self.sessions.push(
+        let id = self.sessions.push(
             name,
             Session {
                 view,
@@ -597,6 +608,7 @@ impl Workspace {
                 _dock_events: None,
             },
         );
+        self.mcp_new_session(id);
         cx.notify();
     }
 
@@ -620,6 +632,7 @@ impl Workspace {
             return;
         }
         self.badges.remove(&id);
+        self.mcp_close_session(id);
         self.persist();
         if self.sessions.is_empty() {
             window.remove_window();
@@ -818,12 +831,17 @@ impl Workspace {
         self.settings.sessions = self
             .sessions
             .iter()
-            .map(|e| SessionConfig {
-                name: e.name.clone(),
-                shell: e.value.shell.clone(),
-                dock_ratio: e.value.dock_state.saved_ratio(),
-                connection: e.value.remote.as_ref().map(|r| r.connection.clone()),
-                cwd: e.value.remote.as_ref().and_then(|r| r.main.cwd()),
+            .map(|e| {
+                let (mcp, profile) = self.mcp_saved(e.id);
+                SessionConfig {
+                    name: e.name.clone(),
+                    shell: e.value.shell.clone(),
+                    dock_ratio: e.value.dock_state.saved_ratio(),
+                    connection: e.value.remote.as_ref().map(|r| r.connection.clone()),
+                    cwd: e.value.remote.as_ref().and_then(|r| r.main.cwd()),
+                    mcp,
+                    profile,
+                }
             })
             .collect();
         if let Some(path) = &self.config_path {
@@ -840,6 +858,7 @@ impl Workspace {
             .filter_map(|id| self.catalog.get(id).map(|a| (a.id.clone(), a.name.clone())))
             .collect();
         self.connections.open = false;
+        self.mcp.open = false;
         self.palette = Some(PaletteState::with_agents(agents));
         window.focus(&self.focus, cx);
         cx.notify();
@@ -929,6 +948,7 @@ impl Workspace {
             PaletteAction::SendSuggestion => self.send_suggestion(window, cx),
             PaletteAction::InstallClaudeHooks => self.open_installer(cx),
             PaletteAction::Connections => self.open_connections(window, cx),
+            PaletteAction::Mcp => self.open_mcp(window, cx),
             PaletteAction::NewConnection => self.new_connection_form(window, cx),
             PaletteAction::Reconnect => self.reconnect_active(cx),
             PaletteAction::RenameSession => {}
@@ -1035,6 +1055,11 @@ impl Workspace {
             cx.stop_propagation();
             return;
         }
+        if self.mcp.open {
+            self.on_mcp_key(ev, window, cx);
+            cx.stop_propagation();
+            return;
+        }
         if self.search_focus.is_focused(window) && self.on_search_key(ev, window, cx) {
             cx.stop_propagation();
             return;
@@ -1059,6 +1084,11 @@ impl Workspace {
             cx.stop_propagation();
             return;
         }
+        // F10: comandos con atajo (de la sesión o globales).
+        if !m.platform && self.run_shortcut_command(ev, window, cx) {
+            cx.stop_propagation();
+            return;
+        }
         if !m.control || m.alt || m.platform {
             return;
         }
@@ -1078,6 +1108,7 @@ impl Workspace {
             (true, "u") => self.toggle_usage(window, cx),
             (true, "a") => self.toggle_audit(window, cx),
             (true, "o") => self.toggle_connections(window, cx),
+            (true, "m") => self.toggle_mcp(window, cx),
             (true, "r") => self.reconnect_active(cx),
             (_, "=" | "+") => self.set_font_size(self.settings.font_size + FONT_STEP, cx),
             (false, "-") => self.set_font_size(self.settings.font_size - FONT_STEP, cx),
@@ -1383,6 +1414,7 @@ impl Render for Workspace {
         let c = self.colors.clone();
         let palette = self.palette.as_ref().map(|p| self.render_palette(p, cx));
         let connections = self.connections.open.then(|| self.render_connections(cx));
+        let mcp = self.mcp.open.then(|| self.render_mcp(cx));
         let link_menu = self.render_link_menu(cx);
         self.sync_web_visibility();
         v_flex()
@@ -1426,6 +1458,7 @@ impl Render for Workspace {
             .children(palette)
             .children(self.render_exact_overlay(cx))
             .children(connections)
+            .children(mcp)
             .children(link_menu)
     }
 }

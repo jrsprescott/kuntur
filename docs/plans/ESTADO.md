@@ -4,6 +4,7 @@
 
 ## Dónde está cada cosa
 - **Rama principal `main`: Fases 1 a 9 integradas** (avanzada el 2026-11-23 a `integracion/f5-f9`, sin conflictos: *fast-forward*). 349 pruebas, clippy y fmt en verde, capturas de cada fase revisadas. Conflictos de la integración, atajos y pendientes en `docs/plans/integracion-f5-f9.md`. **Es la rama desde la que se sigue** (próximas: F10 · MCP y comandos, F11 · pulido y publicación).
+- Rama **`fase/f10-mcp`** (sale de `main`): Fase 10 · MCP y comandos **terminada** (`docs/plans/f10-resultados.md`): crate `kuntur-mcp`, gestor de MCP por pestaña (botón, Ctrl+Shift+M, paleta), perfiles con modelo/esfuerzo/permisos, configuración MCP generada por CLI al lanzar (Claude Code, Codex, OpenCode; nunca la global), «Probar», capturas → vista previa y comandos con atajo. 388 pruebas. Faltan las pruebas manuales ⏳ con MCP y agentes reales.
 - Las ramas `integracion/f5-f9` y `fase/*` quedan como historia de cada fase (no hace falta trabajar en ellas).
 - Rama **`fase/f3-v5`**: Fase 3 (diseño v5) **terminada** (`docs/plans/f3-resultados.md`).
 - Rama **`fase/f4-acoplada`** (sale de `fase/f3-v5`): Fase 4 · Terminal acoplada **terminada** (`docs/plans/f4-resultados.md`); faltan las pruebas manuales ⏳ del usuario.
@@ -16,6 +17,16 @@
 - **Especificación del usuario** (adoptada el 2026-11-23): `docs/ESPECIFICACION.md`, con las decisiones tomadas (se mantiene GPUI, costo estimado, spike de `wry`…). La hoja de ruta pasó a 11 fases (nueva F8 · Vista previa y diff).
 - Rama **`fase/f7-archivos`** (sale de `fase/f6-ssh`): Fase 7 · Archivos remotos y transferencias **terminada** (`docs/plans/f7-resultados.md`); faltan las pruebas manuales ⏳ contra un servidor real.
 - **Decisión pendiente (sigue abierta tras F7):** panel izquierdo con agentes arriba + árbol abajo a la vez (especificación §3) o el botón "Archivos" que alterna (actual, se mantuvo en F7 sin cambios).
+
+## Fase 10: MCP y comandos (rama `fase/f10-mcp`)
+| Parte | Estado |
+|---|---|
+| `kuntur-config`: `[[mcp]]`, `[[mcp_perfiles]]`, `[[comandos]]`, lista MCP y perfil por sesión; secretos en el Administrador de credenciales («Kuntur MCP») | ✅ con pruebas |
+| `kuntur-mcp`: catálogo, configuración por CLI (Claude `--mcp-config`, Codex `-c mcp_servers.…`, OpenCode `OPENCODE_CONFIG`), opciones, línea por shell, carpeta temporal por sesión, «Probar» stdio/http, capturas, atajos | ✅ con pruebas e integración contra servidores MCP **falsos** |
+| Gestor de MCP (`workspace/mcp_view.rs`), ganchos al lanzar agentes (clic, paleta, worktree), capturas → vista previa, comandos con atajo | ✅ capturas con servidores sintéticos |
+| Alta/edición de servidores desde la UI, comandos en la paleta, proxy MCP (estado en vivo) | ⏳ pendiente |
+
+Pruebas de humo: `.\scripts\smoke.ps1 -Sessions 2 -Mcp probar` (servidores **sintéticos**: `kuntur-mcp-falso`, uno que no existe, uno http a un puerto cerrado; secretos en memoria) y `-Mcp linea -Commands 'cls'` (pega **sin Enter** la línea de Claude Code generada; nunca la ejecuta).
 
 ## Fase 7: archivos remotos y transferencias
 | Parte | Estado |

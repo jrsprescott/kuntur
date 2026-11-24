@@ -44,6 +44,8 @@ pub enum PaletteAction {
     Connections,
     NewConnection,
     Reconnect,
+    /// Gestor de MCP de la sesión (F10).
+    Mcp,
 }
 
 #[derive(Clone, Debug)]
@@ -62,7 +64,7 @@ const fn item(action: PaletteAction, label: &'static str, shortcut: Option<&'sta
 }
 
 /// Las acciones fijas, en el orden en que se muestran (después van las de abrir cada agente instalado).
-pub static ITEMS: [PaletteItem; 28] = [
+pub static ITEMS: [PaletteItem; 29] = [
     item(PaletteAction::NewSession, "Nueva sesión", Some("Ctrl+Shift+T")),
     item(PaletteAction::RenameSession, "Renombrar sesión", None),
     item(PaletteAction::CloseSession, "Cerrar sesión", Some("Ctrl+Shift+W")),
@@ -110,6 +112,11 @@ pub static ITEMS: [PaletteItem; 28] = [
         PaletteAction::Reconnect,
         "Sesión remota: reconectar",
         Some("Ctrl+Shift+R"),
+    ),
+    item(
+        PaletteAction::Mcp,
+        "MCP: servidores, perfiles y comandos de la sesión",
+        Some("Ctrl+Shift+M"),
     ),
 ];
 
