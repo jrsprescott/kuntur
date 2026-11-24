@@ -45,6 +45,8 @@ valley from above, you see every session at a glance and what each agent is doin
   Bin, cut/copy/paste between local and remote, copy path, reveal in File Explorer, add to chat…).
 - **Settings** (Ctrl+,): themes, font size, language (Spanish / English), notifications that do not nag (per type,
   at most one per session every few minutes, only in the background) and update checks.
+- **Local AI:** detects LM Studio and Ollama (and Jan, llama.cpp), lists their models and opens **OpenCode with a
+  local model** in one click — an agent that runs 100 % on your machine, no cloud and no cost.
 - **Updates in one click:** a notice when a new version is out; Kuntur downloads the installer, verifies its SHA-256
   and signature, installs it and reopens.
 
@@ -61,6 +63,11 @@ valley from above, you see every session at a glance and what each agent is doin
 Download `kuntur-<version>-x86_64.msi` from the project's Releases page and run it. It installs `kuntur.exe` and
 `kuntur-hook.exe` in `C:\Program Files\Kuntur` and adds **Kuntur** to the Start menu and the desktop. Uninstall from *Settings →
 Apps*; your settings in `%APPDATA%\Kuntur` are kept.
+
+**Code signing:** Windows releases are signed through the SignPath Foundation — free code signing provided by
+[SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/). Until the
+first signed release, SmartScreen may show "Unknown publisher". See [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md)
+(signing and privacy policy).
 
 Requirements: Windows 11 x64 (tested; Windows 10 1809+ should work, since it has ConPTY), a GPU with DirectX 11/12. Recommended font: Cascadia Mono
 (ships with Windows 11). The PDF/HTML preview uses the WebView2 runtime that comes with Windows.
@@ -129,3 +136,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md). Changes a
 Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or [MIT license](LICENSE-MIT) at your option.
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in Kuntur by you, as
 defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
+
+The agent and AI provider logos come from [Lobe Icons](https://github.com/lobehub/lobe-icons) (MIT; see
+`crates/kuntur-app/assets/agents/LICENSE-lobe-icons.txt`). The logos are trademarks of their respective owners and
+are used only to identify each tool; this does not imply any affiliation or endorsement.

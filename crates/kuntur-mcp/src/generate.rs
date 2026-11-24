@@ -195,6 +195,17 @@ pub fn codex_overrides(servers: &[ResolvedServer]) -> CodexOverrides {
 
 /// OpenCode: contenido del archivo de `OPENCODE_CONFIG` (`None` si no hay nada que escribir).
 pub fn opencode_json(servers: &[ResolvedServer], v2: bool, permissions: Option<PermissionMode>) -> Option<String> {
+    opencode_json_with(servers, v2, permissions, None)
+}
+
+/// Igual que [`opencode_json`], más las claves de `extra` (ajustes v0.2.1: el proveedor y el modelo
+/// de una IA local) en el mismo archivo.
+pub fn opencode_json_with(
+    servers: &[ResolvedServer],
+    v2: bool,
+    permissions: Option<PermissionMode>,
+    extra: Option<&Value>,
+) -> Option<String> {
     let mut servers_map = Map::new();
     for s in servers {
         let mut entry = match &s.kind {
@@ -229,7 +240,8 @@ pub fn opencode_json(servers: &[ResolvedServer], v2: bool, permissions: Option<P
         servers_map.insert(s.name.clone(), entry);
     }
     let permission = if v2 { None } else { opencode_permission(permissions) };
-    if servers_map.is_empty() && permission.is_none() {
+    let extra = extra.and_then(Value::as_object).filter(|o| !o.is_empty());
+    if servers_map.is_empty() && permission.is_none() && extra.is_none() {
         return None;
     }
     let mut root = Map::new();
@@ -244,6 +256,9 @@ pub fn opencode_json(servers: &[ResolvedServer], v2: bool, permissions: Option<P
     }
     if let Some(p) = permission {
         root.insert("permission".into(), p);
+    }
+    for (k, v) in extra.into_iter().flatten() {
+        root.insert(k.clone(), v.clone());
     }
     serde_json::to_string_pretty(&Value::Object(root)).ok()
 }
@@ -380,6 +395,22 @@ mod tests {
                 ("KUNTUR_MCP_DOCS_TOKEN".to_string(), "tok".to_string())
             ]
         );
+    }
+
+    #[test]
+    fn opencode_con_un_modelo_local_en_el_mismo_archivo() {
+        let extra =
+            json!({ "model": "lmstudio/demo", "provider": { "lmstudio": { "npm": "@ai-sdk/openai-compatible" } } });
+        // Solo el modelo local: igual se escribe el archivo.
+        let v: Value = serde_json::from_str(&opencode_json_with(&[], false, None, Some(&extra)).unwrap()).unwrap();
+        assert_eq!(v["model"], "lmstudio/demo");
+        assert!(v.get("mcp").is_none());
+        // Con MCP: las dos cosas juntas.
+        let v: Value =
+            serde_json::from_str(&opencode_json_with(&[stdio()], false, None, Some(&extra)).unwrap()).unwrap();
+        assert_eq!(v["model"], "lmstudio/demo");
+        assert!(v["mcp"].is_object());
+        assert_eq!(opencode_json_with(&[], false, None, Some(&json!({}))), None);
     }
 
     #[test]

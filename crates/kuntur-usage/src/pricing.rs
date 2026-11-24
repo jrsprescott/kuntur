@@ -8,6 +8,31 @@ use crate::{Cost, UsageRecord};
 /// Tabla incluida en Kuntur (precios verificados en las páginas oficiales; ver el archivo).
 pub const BUILTIN: &str = include_str!("../pricing.toml");
 
+/// Proveedores que sirven modelos en la PC del usuario (ajustes v0.2.1): su uso cuesta cero.
+pub const LOCAL_PROVIDERS: [&str; 9] = [
+    "lmstudio",
+    "lm-studio",
+    "ollama",
+    "llama.cpp",
+    "llamacpp",
+    "llama-cpp",
+    "jan",
+    "localai",
+    "local",
+];
+
+/// ¿El modelo corre en la PC? Por su prefijo `proveedor/` (como los registra OpenCode) o por una
+/// dirección local (`localhost`, `127.0.0.1`).
+pub fn is_local_model(model: &str) -> bool {
+    let lower = model.trim().to_ascii_lowercase();
+    if lower.contains("localhost") || lower.contains("127.0.0.1") {
+        return true;
+    }
+    lower
+        .split_once('/')
+        .is_some_and(|(vendor, _)| LOCAL_PROVIDERS.contains(&vendor))
+}
+
 /// Precio de un modelo, en USD por millón de tokens.
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 pub struct Price {
@@ -84,8 +109,12 @@ impl PriceTable {
         })
     }
 
-    /// Costo estimado del registro en micro-dólares (`None` si el modelo no tiene precio).
+    /// Costo estimado del registro en micro-dólares (`None` si el modelo no tiene precio). Los
+    /// modelos locales cuestan cero.
     pub fn estimate(&self, r: &UsageRecord) -> Option<u64> {
+        if is_local_model(&r.model) {
+            return Some(0);
+        }
         let p = self.find(&r.model)?;
         // USD por millón de tokens = micro-dólares por token.
         let micros = r.input as f64 * p.input
@@ -164,6 +193,28 @@ mod tests {
         assert!(t.find("gpt-x-codex").is_none());
         assert!(t.find("gpt-x.5").is_none());
         assert!(t.find("demo-grande-free").is_none());
+    }
+
+    #[test]
+    fn modelos_locales_cuestan_cero_y_no_quedan_sin_precio() {
+        let t = PriceTable::parse(TABLA).unwrap();
+        for m in [
+            "lmstudio/qwen2.5-coder-7b",
+            "ollama/llama3.1:8b",
+            "LM-Studio/demo",
+            "llama.cpp/mi-modelo",
+        ] {
+            assert!(is_local_model(m), "{m} es local");
+            assert_eq!(t.estimate(&rec(m, 1_000_000, 500_000, 0, 0)), Some(0), "{m} cuesta 0");
+        }
+        assert!(is_local_model("http://localhost:1234/v1/qwen"));
+        // Un nombre parecido en la nube no es local.
+        assert!(!is_local_model("qwen-max"));
+        assert!(!is_local_model("anthropic/claude-sonnet-5-5"));
+        assert!(!is_local_model("openrouter/qwen2.5-coder"));
+        let mut records = vec![rec("ollama/llama3.1:8b", 10, 10, 0, 0)];
+        t.apply(&mut records);
+        assert_eq!(records[0].cost, Cost::Estimated(0));
     }
 
     #[test]

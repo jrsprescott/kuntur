@@ -51,6 +51,8 @@ valle desde lo alto, ves de un vistazo todas tus sesiones y lo que hace cada age
   agregar al chat…).
 - **Configuración** (Ctrl+,): temas, tamaño de letra, idioma (español / inglés), notificaciones que no molestan
   (por tipo, como mucho una por sesión cada pocos minutos y solo en segundo plano) y búsqueda de actualizaciones.
+- **IA local:** detecta LM Studio y Ollama (y Jan, llama.cpp), muestra sus modelos y abre **OpenCode con un modelo
+  local** con un clic: un agente que corre 100 % en tu PC, sin nube y sin costo.
 - **Actualizar con un clic:** un aviso cuando sale una versión nueva; Kuntur descarga el instalador, verifica su
   SHA-256 y su firma, lo instala y se vuelve a abrir.
 
@@ -67,6 +69,11 @@ valle desde lo alto, ves de un vistazo todas tus sesiones y lo que hace cada age
 Descarga `kuntur-<versión>-x86_64.msi` de la página de Releases del proyecto y ejecútalo. Instala `kuntur.exe` y
 `kuntur-hook.exe` en `C:\Program Files\Kuntur` y agrega **Kuntur** al menú Inicio y al escritorio. Se desinstala desde
 *Configuración → Aplicaciones*; tu configuración en `%APPDATA%\Kuntur` se conserva.
+
+**Firma de código:** las versiones para Windows se firman con SignPath Foundation — firma de código gratuita de
+[SignPath.io](https://about.signpath.io/), certificado de [SignPath Foundation](https://signpath.org/). Hasta la
+primera versión firmada, SmartScreen puede mostrar "Editor desconocido". Ver
+[CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md) (política de firma y de privacidad).
 
 Requisitos: Windows 11 x64 (probado; Windows 10 1809+ debería funcionar porque tiene ConPTY), GPU con DirectX 11/12.
 Fuente recomendada: Cascadia Mono (viene con Windows 11). La vista previa de PDF/HTML usa WebView2, que trae Windows.
@@ -155,3 +162,7 @@ La documentación del proyecto está en [`docs/`](docs/), empezando por [`docs/p
 Con licencia [Apache License, Version 2.0](LICENSE-APACHE) o [MIT](LICENSE-MIT), a tu elección. Salvo que indiques lo
 contrario, toda contribución que envíes para incluirla en Kuntur, según la define la licencia Apache-2.0, tendrá esa
 misma doble licencia, sin términos ni condiciones adicionales.
+
+Los logos de los agentes y de los proveedores de IA vienen de [Lobe Icons](https://github.com/lobehub/lobe-icons)
+(MIT; ver `crates/kuntur-app/assets/agents/LICENSE-lobe-icons.txt`). Los logos son marcas de sus respectivos dueños y
+se usan solo para identificar cada herramienta; eso no implica relación ni respaldo de esas empresas.

@@ -41,6 +41,8 @@ pub struct Visible {
     pub ram_mb: Option<u64>,
     pub installed: Vec<String>,
     pub codex_limits: Option<Limits>,
+    /// IA local (ajustes v0.2.1).
+    pub local: Vec<kuntur_agents::ProviderStatus>,
     /// Insignias de alerta (sesión, cantidad), ordenadas.
     pub badges: Vec<(u64, u32)>,
     /// Textos sueltos que se dibujan y no avisan al cambiar: carpeta de la terminal con el foco,
@@ -101,9 +103,29 @@ mod tests {
             ram_mb: ram_mb(Some(64 * 1024 * 1024)),
             installed: vec!["claude".into(), "codex".into()],
             codex_limits: None,
+            local: Vec::new(),
             badges: Vec::new(),
             status: vec!["~\\proyectos".into()],
         }
+    }
+
+    #[test]
+    fn la_ia_local_redibuja_solo_si_cambia() {
+        use kuntur_agents::{LocalProvider, ProviderStatus};
+        let mut t = VisibleTracker::default();
+        assert!(t.changed(base()));
+        let with = |server| Visible {
+            local: vec![ProviderStatus {
+                provider: LocalProvider::LmStudio,
+                installed: true,
+                server,
+                models: Vec::new(),
+            }],
+            ..base()
+        };
+        assert!(t.changed(with(false)), "apareció un proveedor");
+        assert!(!t.changed(with(false)), "la misma lectura no redibuja");
+        assert!(t.changed(with(true)), "se encendió el servidor");
     }
 
     #[test]

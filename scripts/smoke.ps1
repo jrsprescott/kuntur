@@ -117,6 +117,9 @@ param(
     [ValidateSet('', 'list', 'probar', 'linea')][string]$Mcp = '',
     # Panel "Configuración" (ajustes v0.2) abierto; 'es' / 'en' además fijan el idioma (sin guardar).
     [ValidateSet('', 'open', 'es', 'en')][string]$Settings = '',
+    # IA local (ajustes v0.2.1) con proveedores y modelos SINTÉTICOS: 'list' la sección del panel,
+    # 'menu' además el menú del primer modelo. Nunca lee los modelos reales del usuario.
+    [ValidateSet('', 'list', 'menu')][string]$LocalAi = '',
     # Imágenes como Warp (ajustes v0.2): genera una imagen SINTÉTICA (target\smoke-imagen-sintetica.png,
     # nunca una captura real) y la app la entrega en la primera terminal a los 5 s como si se eligiera
     # con "Imagen…" (sin agente: se guarda y se pega su ruta, sin Enter). No toca el portapapeles.
@@ -200,6 +203,7 @@ if ($HooksInstall) {
 if ($Dock -and $DockCommands.Count -gt 0) { $smokeEnv.KUNTUR_SMOKE_DOCK_INPUT = ($DockCommands -join '\n') }
 if ($Connections) { $smokeEnv.KUNTUR_SMOKE_CONNECTIONS = $Connections }
 if ($Settings) { $smokeEnv.KUNTUR_SMOKE_SETTINGS = $Settings }
+if ($LocalAi) { $smokeEnv.KUNTUR_SMOKE_LOCAL_AI = $LocalAi }
 if ($PasteImage) {
     # Degradado con un rectángulo y un texto: claramente sintético.
     $synthetic = Join-Path $root 'target\smoke-imagen-sintetica.png'

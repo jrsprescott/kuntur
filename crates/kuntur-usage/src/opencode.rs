@@ -136,6 +136,10 @@ fn model_name(raw: Option<&str>) -> String {
         };
     }
     let qualified = format!("{provider}/{id}");
+    // Un modelo local conserva su proveedor (si no, `qwen…` en LM Studio parecería de la nube).
+    if crate::pricing::is_local_model(&qualified) {
+        return qualified;
+    }
     if crate::provider_of(&id) == "Otros" && !provider.is_empty() && crate::provider_of(&qualified) != "Otros" {
         qualified
     } else {
@@ -177,6 +181,24 @@ mod tests {
             rusqlite::params![id, title, model, tokens[0], tokens[1], tokens[2], tokens[3], created, updated],
         )
         .unwrap();
+    }
+
+    #[test]
+    fn modelos_locales_conservan_su_proveedor() {
+        // Un modelo con nombre de marca servido por LM Studio u Ollama no debe confundirse con la nube.
+        assert_eq!(
+            model_name(Some(r#"{"id":"qwen2.5-coder-7b","providerID":"lmstudio"}"#)),
+            "lmstudio/qwen2.5-coder-7b"
+        );
+        assert_eq!(
+            model_name(Some(r#"{"id":"llama3.1:8b","providerID":"ollama"}"#)),
+            "ollama/llama3.1:8b"
+        );
+        // En la nube sigue como antes: solo el nombre.
+        assert_eq!(
+            model_name(Some(r#"{"id":"claude-test-4","providerID":"anthropic"}"#)),
+            "claude-test-4"
+        );
     }
 
     #[test]
