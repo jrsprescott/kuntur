@@ -30,6 +30,69 @@ pub struct AgentDef {
     pub ide: bool,
     /// Viene de `config.toml`.
     pub extra: bool,
+    /// Cómo recibe una imagen pegada (ajustes v0.2, "imágenes como Warp").
+    pub image_paste: ImagePaste,
+}
+
+/// Cómo recibe un agente una imagen que el usuario pega con Ctrl+V (ajustes v0.2).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ImagePaste {
+    /// Kuntur guarda la imagen como PNG y pega su ruta (sin Enter).
+    #[default]
+    Path,
+    /// El agente lee el portapapeles con su propia tecla: Kuntur se la envía.
+    Key(PasteKey),
+}
+
+/// Tecla que un agente usa para pegar una imagen del portapapeles.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PasteKey {
+    /// Ctrl + letra (por ejemplo Ctrl+V = 0x16).
+    Ctrl(char),
+    /// Alt + letra (ESC + letra), por ejemplo Alt+V de Claude Code en Windows.
+    Alt(char),
+}
+
+impl PasteKey {
+    /// La de Claude Code (`chat:imagePaste`): Alt+V en Windows (la terminal se queda con Ctrl+V),
+    /// Ctrl+V en Linux y Mac.
+    pub fn claude_default() -> Self {
+        if cfg!(windows) {
+            PasteKey::Alt('v')
+        } else {
+            PasteKey::Ctrl('v')
+        }
+    }
+
+    /// Bytes que se escriben en la terminal.
+    pub fn bytes(self) -> Vec<u8> {
+        match self {
+            PasteKey::Ctrl(c) => vec![(c.to_ascii_lowercase() as u8) & 0x1f],
+            PasteKey::Alt(c) => vec![0x1b, c as u8],
+        }
+    }
+}
+
+impl ImagePaste {
+    /// Lee `pegar_imagen` de la configuración: `"ctrl+v"`, `"alt+v"` o `"ruta"` / `"path"`.
+    /// Cualquier otra cosa: `None` (se queda lo que trae el agente).
+    pub fn parse(text: &str) -> Option<Self> {
+        let t = text.trim().to_ascii_lowercase().replace(' ', "");
+        if t == "ruta" || t == "path" {
+            return Some(ImagePaste::Path);
+        }
+        let (modifier, key) = t.split_once('+')?;
+        let mut chars = key.chars();
+        let c = chars.next().filter(|c| c.is_ascii_alphabetic())?;
+        if chars.next().is_some() {
+            return None;
+        }
+        match modifier {
+            "ctrl" | "control" => Some(ImagePaste::Key(PasteKey::Ctrl(c))),
+            "alt" => Some(ImagePaste::Key(PasteKey::Alt(c))),
+            _ => None,
+        }
+    }
 }
 
 /// Agente que el usuario agrega en `config.toml` (`[[agentes]]`).
@@ -42,6 +105,8 @@ pub struct ExtraAgent {
     pub letter: Option<char>,
     /// `#RRGGBB` (o `RRGGBB`).
     pub color: Option<String>,
+    /// Cómo pega imágenes (`pegar_imagen`: "ctrl+v", "alt+v" o "ruta").
+    pub image_paste: Option<String>,
 }
 
 struct Builtin {
@@ -54,6 +119,8 @@ struct Builtin {
     letter: char,
     usage: Option<AgentKind>,
     ide: bool,
+    /// Lee imágenes del portapapeles con su propia tecla (solo Claude Code, documentado).
+    native_image_paste: bool,
 }
 
 const BUILTINS: &[Builtin] = &[
@@ -67,6 +134,7 @@ const BUILTINS: &[Builtin] = &[
         letter: 'C',
         usage: Some(AgentKind::ClaudeCode),
         ide: false,
+        native_image_paste: true,
     },
     Builtin {
         id: "codex",
@@ -78,6 +146,7 @@ const BUILTINS: &[Builtin] = &[
         letter: 'X',
         usage: Some(AgentKind::Codex),
         ide: false,
+        native_image_paste: false,
     },
     Builtin {
         id: "opencode",
@@ -89,6 +158,7 @@ const BUILTINS: &[Builtin] = &[
         letter: 'O',
         usage: Some(AgentKind::OpenCode),
         ide: false,
+        native_image_paste: false,
     },
     Builtin {
         id: "qwen",
@@ -100,6 +170,7 @@ const BUILTINS: &[Builtin] = &[
         letter: 'Q',
         usage: Some(AgentKind::Qwen),
         ide: false,
+        native_image_paste: false,
     },
     Builtin {
         id: "gemini",
@@ -111,6 +182,7 @@ const BUILTINS: &[Builtin] = &[
         letter: 'G',
         usage: Some(AgentKind::Gemini),
         ide: false,
+        native_image_paste: false,
     },
     // Kimi CLI (Moonshot AI): se instala como herramienta de Python (`kimi.exe`).
     Builtin {
@@ -123,6 +195,7 @@ const BUILTINS: &[Builtin] = &[
         letter: 'K',
         usage: None,
         ide: false,
+        native_image_paste: false,
     },
     // DeepSeek no publica un CLI oficial: se detecta el comando `deepseek` de los CLIs de terceros.
     Builtin {
@@ -135,6 +208,7 @@ const BUILTINS: &[Builtin] = &[
         letter: 'D',
         usage: None,
         ide: false,
+        native_image_paste: false,
     },
     // Antigravity es un IDE (derivado de VS Code): `antigravity .` lo abre en la carpeta actual.
     Builtin {
@@ -147,6 +221,7 @@ const BUILTINS: &[Builtin] = &[
         letter: 'A',
         usage: None,
         ide: true,
+        native_image_paste: false,
     },
 ];
 
@@ -164,6 +239,11 @@ impl Builtin {
             usage: self.usage,
             ide: self.ide,
             extra: false,
+            image_paste: if self.native_image_paste {
+                ImagePaste::Key(PasteKey::claude_default())
+            } else {
+                ImagePaste::Path
+            },
         }
     }
 }
@@ -210,6 +290,7 @@ impl Catalog {
                 .filter(|c| c.is_alphanumeric())
                 .map(|c| c.to_uppercase().next().unwrap_or(c));
             let color = e.color.as_deref().and_then(parse_color);
+            let image_paste = e.image_paste.as_deref().and_then(ImagePaste::parse);
             if let Some(known) = catalog.agents.iter_mut().find(|a| a.exe_names.contains(&base)) {
                 if known.extra {
                     continue;
@@ -221,6 +302,7 @@ impl Catalog {
                 }
                 known.letter = letter.unwrap_or(known.letter);
                 known.color = color.unwrap_or(known.color);
+                known.image_paste = image_paste.unwrap_or(known.image_paste);
                 continue;
             }
             catalog.agents.push(AgentDef {
@@ -238,6 +320,7 @@ impl Catalog {
                 usage: None,
                 ide: false,
                 extra: true,
+                image_paste: image_paste.unwrap_or_default(),
             });
         }
         catalog
@@ -336,6 +419,83 @@ pub fn parse_color(text: &str) -> Option<u32> {
 const SCRIPT_HOSTS: [&str; 3] = ["node", "bun", "deno"];
 
 #[cfg(test)]
+mod image_paste_tests {
+    use super::*;
+
+    #[test]
+    fn claude_pega_imagenes_con_su_tecla_y_los_demas_por_ruta() {
+        let c = Catalog::builtin();
+        assert_eq!(
+            c.get("claude").unwrap().image_paste,
+            ImagePaste::Key(PasteKey::claude_default())
+        );
+        for id in ["codex", "opencode", "gemini", "qwen", "kimi"] {
+            assert_eq!(c.get(id).unwrap().image_paste, ImagePaste::Path, "{id}");
+        }
+    }
+
+    #[test]
+    fn tecla_de_claude_segun_el_sistema_y_sus_bytes() {
+        if cfg!(windows) {
+            assert_eq!(PasteKey::claude_default(), PasteKey::Alt('v'));
+        } else {
+            assert_eq!(PasteKey::claude_default(), PasteKey::Ctrl('v'));
+        }
+        assert_eq!(PasteKey::Alt('v').bytes(), b"\x1bv");
+        assert_eq!(PasteKey::Ctrl('v').bytes(), [0x16]);
+        assert_eq!(PasteKey::Ctrl('V').bytes(), [0x16]);
+    }
+
+    #[test]
+    fn pegar_imagen_de_la_configuracion() {
+        assert_eq!(ImagePaste::parse("Ctrl+V"), Some(ImagePaste::Key(PasteKey::Ctrl('v'))));
+        assert_eq!(
+            ImagePaste::parse(" alt + v "),
+            Some(ImagePaste::Key(PasteKey::Alt('v')))
+        );
+        assert_eq!(ImagePaste::parse("ruta"), Some(ImagePaste::Path));
+        assert_eq!(ImagePaste::parse("path"), Some(ImagePaste::Path));
+        assert_eq!(ImagePaste::parse("shift+v"), None);
+        assert_eq!(ImagePaste::parse("ctrl+vv"), None);
+        assert_eq!(ImagePaste::parse("ctrl+1"), None);
+        assert_eq!(ImagePaste::parse(""), None);
+    }
+
+    #[test]
+    fn la_configuracion_ajusta_la_tecla_de_un_agente() {
+        let c = Catalog::with_extra(&[
+            ExtraAgent {
+                name: "Codex".into(),
+                command: "codex".into(),
+                image_paste: Some("ctrl+v".into()),
+                ..ExtraAgent::default()
+            },
+            ExtraAgent {
+                name: "Claude".into(),
+                command: "claude".into(),
+                image_paste: Some("ruta".into()),
+                ..ExtraAgent::default()
+            },
+            ExtraAgent {
+                name: "Propio".into(),
+                command: "propio".into(),
+                image_paste: Some("alt+i".into()),
+                ..ExtraAgent::default()
+            },
+        ]);
+        assert_eq!(
+            c.get("codex").unwrap().image_paste,
+            ImagePaste::Key(PasteKey::Ctrl('v'))
+        );
+        assert_eq!(c.get("claude").unwrap().image_paste, ImagePaste::Path);
+        assert_eq!(
+            c.get("extra:propio").unwrap().image_paste,
+            ImagePaste::Key(PasteKey::Alt('i'))
+        );
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -432,6 +592,7 @@ mod tests {
                 args: vec!["--no-auto-commits".into()],
                 letter: Some('r'),
                 color: Some("#112233".into()),
+                image_paste: None,
             },
             // Ajusta uno conocido en vez de duplicarlo.
             ExtraAgent {
@@ -440,6 +601,7 @@ mod tests {
                 args: vec!["--model".into(), "opus".into()],
                 letter: None,
                 color: Some("zzz".into()),
+                image_paste: None,
             },
             // Con ruta completa, sin letra ni color.
             ExtraAgent {

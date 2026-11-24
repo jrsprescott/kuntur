@@ -117,7 +117,13 @@ mod tests {
         assert_eq!(plan.repo, repo);
         assert_eq!(slug("extra:Mi Agente"), "mi-agente");
         assert_eq!(slug("::"), "agente");
-        assert!(plan_worktree(Path::new("C:\\"), "claude", |_| false, |_| false).is_none());
+        // Una raíz no tiene carpeta madre (la raíz depende del sistema).
+        let root = if cfg!(windows) {
+            Path::new("C:\\")
+        } else {
+            Path::new("/")
+        };
+        assert!(plan_worktree(root, "claude", |_| false, |_| false).is_none());
     }
 
     /// Prueba real con un repositorio temporal (necesita git en el PATH).

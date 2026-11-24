@@ -29,6 +29,52 @@ impl PathStyle {
         }
     }
 
+    /// Separadores que se aceptan al comparar rutas.
+    fn separators(self) -> &'static [char] {
+        match self {
+            PathStyle::Native if cfg!(windows) => &['\\', '/'],
+            _ => &['/'],
+        }
+    }
+
+    /// ¿`path` es `dir` o está dentro de ella? (`/p/srcx` no está dentro de `/p/src`). En Windows
+    /// no distingue mayúsculas y acepta `\` o `/`.
+    pub fn is_within(self, dir: &str, path: &str) -> bool {
+        let (dir, path) = match self {
+            PathStyle::Native if cfg!(windows) => (
+                dir.to_lowercase().replace('/', "\\"),
+                path.to_lowercase().replace('/', "\\"),
+            ),
+            _ => (dir.to_string(), path.to_string()),
+        };
+        let seps = self.separators();
+        let dir = dir.trim_end_matches(seps);
+        if path.trim_end_matches(seps) == dir {
+            return true;
+        }
+        if dir.is_empty() {
+            // La raíz POSIX (`/`): todo lo absoluto está dentro.
+            return path.starts_with(seps);
+        }
+        path.strip_prefix(dir).is_some_and(|rest| rest.starts_with(seps))
+    }
+
+    /// `path` relativa a `root` ("src/main.rs"; "." si son la misma), con el separador del estilo.
+    /// `None` si `path` no está dentro de `root`.
+    pub fn relative(self, root: &str, path: &str) -> Option<String> {
+        if !self.is_within(root, path) {
+            return None;
+        }
+        let seps = self.separators();
+        let root = root.trim_end_matches(seps);
+        let rest = path
+            .get(root.len()..)
+            .unwrap_or("")
+            .trim_start_matches(seps)
+            .trim_end_matches(seps);
+        Some(if rest.is_empty() { ".".into() } else { rest.to_string() })
+    }
+
     /// Último componente (`None` en la raíz).
     pub fn file_name(self, path: &str) -> Option<String> {
         match self {
@@ -145,6 +191,30 @@ pub fn location_label(remote: Option<&str>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dentro_de_una_carpeta_y_ruta_relativa() {
+        let p = PathStyle::Posix;
+        assert!(p.is_within("/p/src", "/p/src"));
+        assert!(p.is_within("/p/src/", "/p/src/main.rs"));
+        assert!(!p.is_within("/p/src", "/p/srcx/main.rs"));
+        assert!(!p.is_within("/p/src/main.rs", "/p/src"));
+        assert!(p.is_within("/", "/home/demo"));
+        assert_eq!(p.relative("/p", "/p/src/main.rs").as_deref(), Some("src/main.rs"));
+        assert_eq!(p.relative("/p/", "/p").as_deref(), Some("."));
+        assert_eq!(p.relative("/p", "/q/a"), None);
+        #[cfg(windows)]
+        {
+            let w = PathStyle::Native;
+            assert!(w.is_within(r"C:\Proy", r"c:\proy\Src\uno.rs"));
+            assert!(w.is_within(r"C:\Proy", "C:/Proy/src"));
+            assert!(!w.is_within(r"C:\Proy", r"C:\Proyecto"));
+            assert_eq!(
+                w.relative(r"C:\Proy", r"C:\Proy\src\uno.rs").as_deref(),
+                Some(r"src\uno.rs")
+            );
+        }
+    }
 
     #[test]
     fn rutas_posix() {

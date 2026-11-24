@@ -155,6 +155,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        not(windows),
+        ignore = "rutas de Windows y comillas de PowerShell (autocompletado en bash/zsh pendiente)"
+    )]
     fn nada_con_entrada_vacia_o_con_espacio_final() {
         let dir = tmp("vacio");
         std::fs::create_dir(dir.join("docs")).unwrap();

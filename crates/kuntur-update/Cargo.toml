@@ -1,0 +1,27 @@
+[package]
+name = "kuntur-update"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+description = "Aviso de actualización de Kuntur: busca la última versión en GitHub, descarga y verifica el instalador"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+semver = "1"
+sha2 = "0.10"
+# HTTP liviano con rustls (ring) y raíces de webpki: sin OpenSSL ni dependencias del sistema.
+ureq = { version = "3", default-features = false, features = ["rustls"] }
+
+[target.'cfg(windows)'.dependencies]
+# Firma Authenticode del instalador descargado (WinVerifyTrust) y su firmante.
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Cryptography",
+    "Win32_Security_Cryptography_Catalog",
+    "Win32_Security_Cryptography_Sip",
+    "Win32_Security_WinTrust",
+] }

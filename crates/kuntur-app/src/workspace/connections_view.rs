@@ -46,9 +46,9 @@ pub(super) struct ConnectionsState {
     ctx: Option<SshContext>,
 }
 
-/// Carpeta de datos de Kuntur (`%APPDATA%\Kuntur`).
+/// Carpeta de datos de Kuntur (`%APPDATA%\Kuntur` en Windows; ver `kuntur_config::dirs`).
 fn app_dir() -> Option<PathBuf> {
-    std::env::var_os("APPDATA").map(|a| PathBuf::from(a).join("Kuntur"))
+    kuntur_config::dirs::config_dir()
 }
 
 /// ¿Prueba de humo del gestor? (conexiones sintéticas, secretos en memoria, nada del usuario).
@@ -108,6 +108,8 @@ impl Workspace {
             v.set_remote();
             v
         });
+        // Ajustes v0.2: imágenes como Warp (en remoto se suben por SFTP).
+        self.watch_paste(&view, window, cx);
         (view, term)
     }
 
@@ -143,6 +145,7 @@ impl Workspace {
         self.sessions.push(
             name,
             Session {
+                manual_name: false,
                 view,
                 shell: None,
                 dock: None,
@@ -206,6 +209,7 @@ impl Workspace {
         // Integración F10-F11: Conexiones y el gestor de MCP no se abren a la vez (cada uno se
         // queda con todo el teclado).
         self.mcp.open = false;
+        self.settings_panel.open = false;
         self.connections.open = true;
         self.connections.confirm_delete = None;
         window.focus(&self.focus, cx);

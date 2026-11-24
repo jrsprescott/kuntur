@@ -16,6 +16,56 @@ pub enum SidebarMode {
     Icons,
 }
 
+/// Idioma de la interfaz. `Auto` = el del sistema (español si empieza con "es"; si no, inglés).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Language {
+    Es,
+    En,
+    /// Va al final: serde exige que `#[serde(other)]` sea la última variante.
+    #[default]
+    #[serde(other)]
+    Auto,
+}
+
+/// Notificaciones del sistema de las alertas (§12). La insignia de la pestaña sale siempre; esto
+/// solo decide cuándo además aparece la notificación.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NotificationSettings {
+    /// El agente espera tu respuesta.
+    #[serde(rename = "espera")]
+    pub waiting: bool,
+    /// El agente pide permiso para usar una herramienta.
+    #[serde(rename = "permiso")]
+    pub permission: bool,
+    /// El agente terminó.
+    #[serde(rename = "termino")]
+    pub finished: bool,
+    /// Minutos mínimos entre dos notificaciones de la misma sesión (0 = sin límite).
+    #[serde(rename = "intervalo_minutos")]
+    pub interval_min: u32,
+    /// Solo si Kuntur no está en primer plano.
+    #[serde(rename = "solo_en_segundo_plano")]
+    pub only_background: bool,
+}
+
+impl NotificationSettings {
+    pub const MAX_INTERVAL_MIN: u32 = 24 * 60;
+}
+
+impl Default for NotificationSettings {
+    fn default() -> Self {
+        Self {
+            waiting: true,
+            permission: true,
+            finished: true,
+            interval_min: 5,
+            only_background: true,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct SessionConfig {
     pub name: String,
@@ -37,6 +87,9 @@ pub struct SessionConfig {
     /// Perfil cuyas opciones (modelo, esfuerzo, permisos) se usan al lanzar agentes aquí.
     #[serde(rename = "perfil", default, skip_serializing_if = "Option::is_none")]
     pub profile: Option<String>,
+    /// El usuario la renombró: su nombre gana sobre el título del agente (ajustes v0.2).
+    #[serde(rename = "nombre_manual", default, skip_serializing_if = "std::ops::Not::not")]
+    pub manual_name: bool,
 }
 
 impl SessionConfig {
@@ -65,6 +118,10 @@ pub struct AgentConfig {
     /// Carpeta de sus registros (reservado: la auditoría solo tiene lectores para Claude Code y Codex).
     #[serde(rename = "registros", default, skip_serializing_if = "Option::is_none")]
     pub logs: Option<String>,
+    /// Cómo pega imágenes (ajustes v0.2): "ctrl+v" / "alt+v" (el agente lee el portapapeles con esa
+    /// tecla) o "ruta" (Kuntur guarda un PNG y pega su ruta).
+    #[serde(rename = "pegar_imagen", default, skip_serializing_if = "Option::is_none")]
+    pub image_paste: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -79,6 +136,8 @@ pub struct Settings {
     pub alerts: bool,
     /// Sugerencias en gris mientras se escribe en el prompt (Tab o → aceptan).
     pub autocompletado: bool,
+    /// El título de la pestaña activa se desplaza si no entra (ajustes v0.2).
+    pub marquesina: bool,
     /// Claude Code: además de `--mcp-config`, `--strict-mcp-config` (ignora los MCP del usuario y del
     /// proyecto; solo los de la sesión).
     pub mcp_exclusivo: bool,
@@ -87,6 +146,16 @@ pub struct Settings {
     /// Perfil que se aplica a las sesiones nuevas (`None` = sin MCP).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mcp_perfil_inicial: Option<String>,
+    /// Idioma de la interfaz (`auto`, `es`, `en`).
+    /// Buscar versiones nuevas en GitHub al arrancar y cada 24 h (la única conexión de red propia
+    /// de Kuntur; ajustes v0.2).
+    #[serde(rename = "buscar_actualizaciones")]
+    pub check_updates: bool,
+    #[serde(rename = "idioma")]
+    pub language: Language,
+    /// Cuándo se muestran las notificaciones (con `alertas = true`).
+    #[serde(rename = "notificaciones")]
+    pub notifications: NotificationSettings,
     pub sessions: Vec<SessionConfig>,
     /// Agentes extra (§5).
     #[serde(rename = "agentes", skip_serializing_if = "Vec::is_empty")]
@@ -111,9 +180,13 @@ impl Default for Settings {
             font_size: 14.0,
             alerts: true,
             autocompletado: true,
+            marquesina: true,
             mcp_exclusivo: false,
             mcp_opencode_v2: false,
             mcp_perfil_inicial: None,
+            check_updates: true,
+            language: Language::Auto,
+            notifications: NotificationSettings::default(),
             sessions: Vec::new(),
             agents: Vec::new(),
             connections: Vec::new(),
@@ -125,9 +198,9 @@ impl Default for Settings {
 }
 
 impl Settings {
-    /// `%APPDATA%\Kuntur\config.toml`
+    /// `config.toml` en la carpeta de configuración (`%APPDATA%\Kuntur` en Windows; ver `dirs`).
     pub fn default_path() -> Option<PathBuf> {
-        std::env::var_os("APPDATA").map(|d| PathBuf::from(d).join("Kuntur").join("config.toml"))
+        crate::dirs::config_dir().map(|d| d.join("config.toml"))
     }
 
     /// Nunca falla: si no hay archivo o está roto, devuelve los valores por defecto.
@@ -137,6 +210,7 @@ impl Settings {
             .and_then(|t| toml::from_str::<Settings>(&t).ok())
             .map(|mut s| {
                 s.font_size = Self::clamp_font(s.font_size);
+                s.notifications.interval_min = s.notifications.interval_min.min(NotificationSettings::MAX_INTERVAL_MIN);
                 s
             })
             .unwrap_or_default()
@@ -191,6 +265,7 @@ mod tests {
                 letter: Some('R'),
                 color: Some("#112233".into()),
                 logs: None,
+                image_paste: Some("ctrl+v".into()),
             }],
             autocompletado: false,
             sessions: vec![
@@ -377,6 +452,90 @@ letra = \"M\"
             !text.to_lowercase().contains("password ="),
             "los secretos nunca van al archivo"
         );
+    }
+
+    #[test]
+    fn idioma_y_notificaciones_por_defecto_en_archivos_viejos() {
+        let path = tmp("notificaciones-viejo");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, "theme = \"blue\"\nalertas = true\n").unwrap();
+        let s = Settings::load(&path);
+        assert_eq!(s.language, Language::Auto);
+        assert_eq!(s.notifications, NotificationSettings::default());
+        let n = &s.notifications;
+        assert!(n.waiting && n.permission && n.finished && n.only_background);
+        assert_eq!(n.interval_min, 5);
+    }
+
+    #[test]
+    fn buscar_actualizaciones_encendido_por_defecto_y_se_puede_apagar() {
+        let path = tmp("actualizaciones");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, "theme = \"blue\"\n").unwrap();
+        assert!(Settings::load(&path).check_updates);
+        std::fs::write(&path, "buscar_actualizaciones = false\n").unwrap();
+        assert!(!Settings::load(&path).check_updates);
+    }
+
+    #[test]
+    fn idioma_y_notificaciones_se_guardan() {
+        let path = tmp("notificaciones");
+        let s = Settings {
+            language: Language::En,
+            notifications: NotificationSettings {
+                waiting: false,
+                permission: true,
+                finished: false,
+                interval_min: 15,
+                only_background: false,
+            },
+            ..Default::default()
+        };
+        s.save(&path).unwrap();
+        assert_eq!(Settings::load(&path), s);
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("idioma = \"en\""));
+        assert!(text.contains("[notificaciones]") && text.contains("intervalo_minutos = 15"));
+    }
+
+    #[test]
+    fn idioma_desconocido_vuelve_a_automatico_y_el_intervalo_se_limita() {
+        let path = tmp("idioma-raro");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &path,
+            "idioma = \"klingon\"\n[notificaciones]\nintervalo_minutos = 100000\n",
+        )
+        .unwrap();
+        let s = Settings::load(&path);
+        assert_eq!(s.language, Language::Auto);
+        assert_eq!(s.notifications.interval_min, NotificationSettings::MAX_INTERVAL_MIN);
+    }
+
+    #[test]
+    fn marquesina_y_nombre_manual() {
+        let path = tmp("nombre-manual");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        // Archivo viejo: marquesina encendida y nombres sin la marca.
+        std::fs::write(
+            &path,
+            "[[sessions]]
+name = \"web\"
+",
+        )
+        .unwrap();
+        let s = Settings::load(&path);
+        assert!(s.marquesina);
+        assert!(!s.sessions[0].manual_name);
+        // La marca solo se escribe si es verdadera.
+        assert!(!toml::to_string_pretty(&s).unwrap().contains("nombre_manual"));
+        let mut s = s;
+        s.marquesina = false;
+        s.sessions[0].manual_name = true;
+        s.save(&path).unwrap();
+        assert_eq!(Settings::load(&path), s);
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("nombre_manual = true") && text.contains("marquesina = false"));
     }
 
     #[test]

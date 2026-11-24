@@ -18,13 +18,10 @@ impl SessionDirs {
         Self { root, pid }
     }
 
-    /// `%LOCALAPPDATA%\Kuntur\mcp` (o la carpeta temporal si no existe la variable).
+    /// `%LOCALAPPDATA%\Kuntur\mcp` en Windows (la carpeta local de `kuntur_config::dirs` en
+    /// Linux/Mac; si no se puede saber, la temporal del sistema).
     pub fn default_root() -> PathBuf {
-        std::env::var_os("LOCALAPPDATA")
-            .map(PathBuf::from)
-            .unwrap_or_else(std::env::temp_dir)
-            .join("Kuntur")
-            .join("mcp")
+        kuntur_config::dirs::local_dir().join("mcp")
     }
 
     pub fn root(&self) -> &Path {

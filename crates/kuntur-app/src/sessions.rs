@@ -123,6 +123,75 @@ impl<T> Default for SessionList<T> {
     }
 }
 
+/// Nombres de shell que Kuntur pone solo (ajustes v0.2): una pestaña con uno de estos nombres (o
+/// "nombre N") no fue renombrada a mano.
+const SHELL_LABELS: [&str; 9] = [
+    "PowerShell",
+    "cmd",
+    "bash",
+    "zsh",
+    "fish",
+    "nu",
+    "sh",
+    "WSL",
+    "Terminal",
+];
+
+/// Nombre de la pestaña según el shell (`None` = el predeterminado): "PowerShell", "cmd", "bash"…
+/// En Linux/Mac el predeterminado sale de `$SHELL`; si no se reconoce, "Terminal".
+pub fn shell_label(shell: Option<&str>) -> String {
+    let Some(program) = shell.map(str::trim).filter(|s| !s.is_empty()) else {
+        if cfg!(windows) {
+            return "PowerShell".into();
+        }
+        return match std::env::var("SHELL") {
+            Ok(s) if !s.trim().is_empty() => shell_label(Some(&s)),
+            _ => "Terminal".into(),
+        };
+    };
+    let file = program.trim_matches('"').rsplit(['\\', '/']).next().unwrap_or(program);
+    let first = file.split_whitespace().next().unwrap_or(file);
+    let stem = match first.len().checked_sub(4) {
+        Some(i) if first.is_char_boundary(i) && first[i..].eq_ignore_ascii_case(".exe") => &first[..i],
+        _ => first,
+    };
+    match stem.to_ascii_lowercase().as_str() {
+        "pwsh" | "powershell" => "PowerShell".into(),
+        "wsl" => "WSL".into(),
+        "" => "Terminal".into(),
+        "cmd" | "bash" | "zsh" | "fish" | "nu" | "sh" => stem.to_ascii_lowercase(),
+        _ => stem.to_string(),
+    }
+}
+
+/// ¿El nombre es uno de los que Kuntur pone solo? ("PowerShell", "bash 2"…). Sirve para los
+/// `config.toml` anteriores a v0.2, que no guardaban si el nombre se puso a mano.
+pub fn is_default_name(name: &str) -> bool {
+    let base = match name.rsplit_once(' ') {
+        Some((base, n)) if !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()) => base,
+        _ => name,
+    };
+    SHELL_LABELS.contains(&base)
+}
+
+/// Título que puso un agente (OSC 0/2) para mostrar en la pestaña: sin los adornos del principio
+/// (spinners como ✳ ⠂ ⠐ ·) ni espacios de más, y con un tope de largo. `None` si no queda nada o si
+/// es solo la ruta de un ejecutable (lo que pone el shell, no el agente).
+pub fn agent_title(raw: &str) -> Option<String> {
+    let raw = raw.trim();
+    let is_path = (raw.contains('\\') || raw.contains('/')) && raw.to_ascii_lowercase().ends_with(".exe");
+    if is_path {
+        return None;
+    }
+    let start = raw
+        .char_indices()
+        .find(|&(_, c)| c.is_alphanumeric() || "\"'¿¡([«".contains(c))
+        .map(|(i, _)| i)?;
+    let text: String = raw[start..].split_whitespace().collect::<Vec<_>>().join(" ");
+    let text: String = text.chars().take(120).collect();
+    (!text.is_empty()).then_some(text)
+}
+
 /// Nombre para una sesión nueva: "PowerShell", "PowerShell 2", … (el primero libre).
 pub fn next_default_name(base: &str, existing: &[&str]) -> String {
     if !existing.contains(&base) {
@@ -148,6 +217,49 @@ pub fn short_title(raw: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn nombre_de_la_pestana_segun_el_shell() {
+        assert_eq!(
+            shell_label(Some(r"C:\Program Files\PowerShell\7\pwsh.exe")),
+            "PowerShell"
+        );
+        assert_eq!(shell_label(Some("powershell.exe")), "PowerShell");
+        assert_eq!(shell_label(Some("CMD.EXE")), "cmd");
+        assert_eq!(shell_label(Some("/bin/zsh")), "zsh");
+        assert_eq!(shell_label(Some("/usr/bin/fish -l")), "fish");
+        assert_eq!(shell_label(Some("wsl.exe")), "WSL");
+        assert_eq!(shell_label(Some("nushell-raro")), "nushell-raro");
+        if cfg!(windows) {
+            assert_eq!(shell_label(None), "PowerShell");
+        }
+    }
+
+    #[test]
+    fn nombres_puestos_por_kuntur_o_a_mano() {
+        assert!(is_default_name("PowerShell"));
+        assert!(is_default_name("PowerShell 12"));
+        assert!(is_default_name("bash 2"));
+        assert!(is_default_name("Terminal"));
+        assert!(!is_default_name("web"));
+        assert!(!is_default_name("PowerShell de pruebas"));
+        assert!(!is_default_name("api 2"));
+    }
+
+    #[test]
+    fn titulo_del_agente_sin_adornos() {
+        assert_eq!(agent_title("✳ Arreglar el login").as_deref(), Some("Arreglar el login"));
+        assert_eq!(
+            agent_title("⠐ Revisando   pruebas  ").as_deref(),
+            Some("Revisando pruebas")
+        );
+        assert_eq!(agent_title("· «Plan» de la API").as_deref(), Some("«Plan» de la API"));
+        assert_eq!(agent_title("✳ Claude Code").as_deref(), Some("Claude Code"));
+        assert_eq!(agent_title(r"C:\Program Files\PowerShell\7\pwsh.exe"), None);
+        assert_eq!(agent_title("✳ ⠂ "), None);
+        assert_eq!(agent_title(""), None);
+        assert_eq!(agent_title(&"x".repeat(300)).map(|t| t.chars().count()), Some(120));
+    }
 
     #[test]
     fn agregar_activa_la_nueva() {

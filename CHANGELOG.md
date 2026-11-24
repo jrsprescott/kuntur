@@ -6,6 +6,42 @@ Spanish, are in [`docs/plans/`](docs/plans/).
 
 ## [Unreleased]
 
+## [0.2.0] — ajustes v0.2
+
+### Added
+- **Settings panel** (gear button, Ctrl+, or the palette): themes as color circles with their name below, font size,
+  side panel, **language (automatic / Spanish / English)**, notifications and updates. Changes are saved at once.
+- **Notifications that do not nag:** per type (waiting for you, asks for permission, finished), at most one per
+  session every N minutes (5 by default) and only when Kuntur is in the background; the rest only adds to the badge.
+- **File tree like VS Code's Explorer** (chevrons, indent guides, lazy loading, keyboard) and its **right-click
+  menu** in Spanish and English: new file/folder, rename (F2), delete to the Recycle Bin, copy path / relative path,
+  cut/copy/paste (local and remote through the transfer queue), reveal in File Explorer, open in integrated
+  terminal, add to chat / Claude Code: add to chat, share (GitHub link), images preview, add as Python project.
+- **Update notice:** checks GitHub when Kuntur opens and every 24 h (can be turned off); "Update" downloads the MSI,
+  verifies its SHA-256 and Authenticode signature, installs it and reopens Kuntur (`crates/kuntur-update`).
+- **Desktop shortcut** from the installer.
+- Code signing ready: `scripts\msi.ps1 -Sign` (own certificate) and an optional SignPath step in CI
+  (see `docs/FIRMA.md`).
+- Linux and macOS groundwork: data folders per OS (XDG / Library), `$SHELL` as the default shell, and CI jobs that
+  build there (Windows is still the only released platform).
+- **AI title in the session tab:** while an agent runs, the tab shows the title it sets (in Claude Code, the topic of
+  the conversation) instead of "PowerShell"; when it does not fit, the active tab scrolls it back and forth and stops
+  on hover. A name given by hand always wins. Default tab names follow the shell (PowerShell, cmd, bash, zsh…).
+- **Warp-style image paste:** Ctrl+V with a screenshot in the clipboard attaches it instead of pasting nothing.
+  Claude Code gets its own image-paste key and shows `[Image #N]`; other agents and the plain shell get the saved
+  PNG path; SSH tabs upload it by SFTP first. Dragging an image onto the terminal works the same. An agent bar shows
+  the thumbnails (click to preview).
+- Title bar tooltips in Spanish and English.
+
+### Changed
+- Release binaries no longer contain paths of the build machine (`--remap-path-prefix`), and `msi.ps1` refuses to
+  build an installer that does.
+- The theme button opens Settings at the themes.
+
+## [0.1.0] — 2026-11-24 (preview)
+
+First preview release (phases F1–F11).
+
 ### Added (F10 · MCP and commands)
 - New `kuntur-mcp` crate: MCP server catalog (`[[mcp]]`, stdio or http) and profiles (`[[mcp_perfiles]]`) in
   `config.toml`; secrets only by name, values in the Windows Credential Manager ("Kuntur MCP").

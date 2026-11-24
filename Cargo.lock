@@ -4697,7 +4697,7 @@ dependencies = [
 
 [[package]]
 name = "kuntur-agents"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kuntur-hook",
  "kuntur-usage",
@@ -4706,10 +4706,11 @@ dependencies = [
 
 [[package]]
 name = "kuntur-app"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "embed-resource",
  "gpui-kit",
+ "image",
  "jiff",
  "kuntur-agents",
  "kuntur-audit",
@@ -4721,18 +4722,21 @@ dependencies = [
  "kuntur-preview",
  "kuntur-ssh",
  "kuntur-term",
+ "kuntur-update",
  "kuntur-usage",
  "serde_json",
  "smol",
+ "sys-locale",
  "sysinfo 0.40.4",
  "tauri-winrt-notification",
+ "trash",
  "windows-sys 0.61.2",
  "wry",
 ]
 
 [[package]]
 name = "kuntur-audit"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "jiff",
  "kuntur-usage",
@@ -4743,14 +4747,15 @@ dependencies = [
 
 [[package]]
 name = "kuntur-complete"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
+ "kuntur-config",
  "nucleo-matcher",
 ]
 
 [[package]]
 name = "kuntur-config"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "toml 1.2.2+spec-1.1.0",
@@ -4758,14 +4763,14 @@ dependencies = [
 
 [[package]]
 name = "kuntur-files"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "jiff",
 ]
 
 [[package]]
 name = "kuntur-hook"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -4774,7 +4779,7 @@ dependencies = [
 
 [[package]]
 name = "kuntur-mcp"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "keyring-core",
@@ -4789,7 +4794,7 @@ dependencies = [
 
 [[package]]
 name = "kuntur-preview"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "notify 9.0.0",
  "similar",
@@ -4798,7 +4803,7 @@ dependencies = [
 
 [[package]]
 name = "kuntur-ssh"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "keyring-core",
@@ -4813,7 +4818,7 @@ dependencies = [
 
 [[package]]
 name = "kuntur-term"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "alacritty_terminal",
  "anyhow",
@@ -4821,8 +4826,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "kuntur-update"
+version = "0.2.0"
+dependencies = [
+ "semver",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "ureq",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "kuntur-usage"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "jiff",
  "rusqlite",
@@ -9136,6 +9153,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "trash"
+version = "5.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7363f9516b65bd2e855f4e6c3338b1a98efc2773c25349c958908897e1170ded"
+dependencies = [
+ "jiff",
+ "libc",
+ "log",
+ "objc2 0.6.5",
+ "objc2-foundation 0.3.2",
+ "once_cell",
+ "percent-encoding",
+ "scopeguard",
+ "urlencoding",
+ "windows 0.62.2",
+ "windows-core 0.62.2",
+]
+
+[[package]]
 name = "triomphe"
 version = "0.1.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9267,6 +9303,34 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
+name = "ureq"
+version = "3.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3ac5cecf619ca81f66a96482db09687c9f7465af65f4300a8c30cca05bd5a59d"
+dependencies = [
+ "base64 0.23.1",
+ "log",
+ "percent-encoding",
+ "rustls",
+ "rustls-pki-types",
+ "ureq-proto",
+ "utf8-zero",
+ "webpki-roots",
+]
+
+[[package]]
+name = "ureq-proto"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "622dce33c252115466d83f63e9744a18f12b4406aae51a01c15ad8fcf1185eb3"
+dependencies = [
+ "base64 0.23.1",
+ "http",
+ "httparse",
+ "log",
+]
+
+[[package]]
 name = "url"
 version = "2.5.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9277,6 +9341,12 @@ dependencies = [
  "percent-encoding",
  "serde",
 ]
+
+[[package]]
+name = "urlencoding"
+version = "2.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "daf8dba3b7eb870caf1ddeed7bc9d2a049f3cfdfae7cb521b087cc33ae4c49da"
 
 [[package]]
 name = "usvg"
@@ -9337,6 +9407,12 @@ name = "utf-8"
 version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09cc8ee72d2a9becf2f2febe0205bbed8fc6615b7cb429ad062dc7b7ddd036a9"
+
+[[package]]
+name = "utf8-zero"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8c0a043c9540bae7c578c88f91dda8bd82e59ae27c21baca69c8b191aaf5a6e"
 
 [[package]]
 name = "utf8_iter"
@@ -9722,6 +9798,15 @@ dependencies = [
  "pkg-config",
  "soup3-sys",
  "system-deps",
+]
+
+[[package]]
+name = "webpki-roots"
+version = "1.0.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7265c9301c16a8711c992c2d8da90ee77ef54b1ed51482d6dfeb00dc756b1297"
+dependencies = [
+ "rustls-pki-types",
 ]
 
 [[package]]

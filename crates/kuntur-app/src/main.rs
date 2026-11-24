@@ -3,11 +3,16 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod agents_panel;
+mod clipboard_image;
 mod command_palette;
 mod connections;
 mod dock;
+mod file_menu;
+mod i18n;
 mod idle;
+mod image_paste;
 mod keynav;
+mod marquee;
 mod monitor;
 mod notify;
 mod sessions;
@@ -27,7 +32,19 @@ use workspace::Workspace;
 // Íconos que no vienen en el paquete por defecto de gpui-kit.
 gpui_kit::assets::icon_assets!(
     ExtraIcons,
-    [Command, ChartColumn, ScrollText, Server, Pencil, Trash, Download, Plug]
+    [
+        Command,
+        ChartColumn,
+        ScrollText,
+        Server,
+        Pencil,
+        Trash,
+        Download,
+        Plug,
+        FileCode,
+        FileImage,
+        FileArchive
+    ]
 );
 
 /// Íconos por defecto de gpui-kit + los que agrega Kuntur.

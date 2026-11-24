@@ -2,7 +2,7 @@
 
 **English** · [Español](README.es.md)
 
-> **Status: early preview (0.1).** Usable day to day on Windows 11, but expect rough edges. Feedback is welcome.
+> **Status: early preview (0.2).** Usable day to day on Windows 11, but expect rough edges. Feedback is welcome.
 
 **Kuntur Terminal IA Agente** — *Kuntur* means *condor* in Quechua — is a lightweight terminal for Windows, written in Rust, built for working with
 AI coding agents on the command line (Claude Code, Codex, OpenCode, Qwen, Gemini…). Like a condor seeing the whole
@@ -12,7 +12,8 @@ valley from above, you see every session at a glance and what each agent is doin
 
 - **Light:** about **60–80 MB of RAM** with one window, under **120 MB** with five sessions and several agents
   (Warp uses ~900 MB on the same machine). Native GPU rendering through [GPUI](https://www.gpui.rs/).
-- **Private by design:** everything runs locally. No account, no telemetry, no network calls of its own.
+- **Private by design:** everything runs locally. No account, no telemetry; its only network call of its own is an
+  optional update check against GitHub (can be turned off).
 
 ## Features
 
@@ -36,15 +37,29 @@ valley from above, you see every session at a glance and what each agent is doin
   HTML (WebView2) in a split view that reloads on change.
 - **Shell integration:** OSC 133 blocks (a thin mark per command, red on error) and **ghost-text completion** for
   paths, folder memory and per-folder history (Tab or → accepts).
+- **Screenshots for your agent, like Warp:** Ctrl+V with an image in the clipboard attaches it — Claude Code shows
+  `[Image #N]`, other agents get the saved PNG path, SSH tabs upload it first — and an agent bar shows thumbnails.
+- **The tab shows what the agent is doing:** the title the agent sets (in Claude Code, the topic of the
+  conversation) replaces "PowerShell"; long titles scroll on the active tab and stop on hover.
+- **File tree like VS Code's Explorer** with its right-click menu (new file/folder, rename, delete to the Recycle
+  Bin, cut/copy/paste between local and remote, copy path, reveal in File Explorer, add to chat…).
+- **Settings** (Ctrl+,): themes, font size, language (Spanish / English), notifications that do not nag (per type,
+  at most one per session every few minutes, only in the background) and update checks.
+- **Updates in one click:** a notice when a new version is out; Kuntur downloads the installer, verifies its SHA-256
+  and signature, installs it and reopens.
 
-| Usage (Blue) | Preview and diff (White) |
+| Settings (Blue) | Files and right-click menu (Dark) |
 |---|---|
-| ![Agent usage view with synthetic data](docs/images/kuntur-usage.png) | ![Markdown preview and colored diff](docs/images/kuntur-preview.png) |
+| ![Settings panel with themes as color circles](docs/images/kuntur-settings.png) | ![File tree with the VS Code-like context menu](docs/images/kuntur-files.png) |
+
+| Usage (Blue) | Preview (White) |
+|---|---|
+| ![Agent usage view with synthetic data](docs/images/kuntur-usage.png) | ![Markdown preview](docs/images/kuntur-preview.png) |
 
 ## Install
 
 Download `kuntur-<version>-x86_64.msi` from the project's Releases page and run it. It installs `kuntur.exe` and
-`kuntur-hook.exe` in `C:\Program Files\Kuntur` and adds **Kuntur** to the Start menu. Uninstall from *Settings →
+`kuntur-hook.exe` in `C:\Program Files\Kuntur` and adds **Kuntur** to the Start menu and the desktop. Uninstall from *Settings →
 Apps*; your settings in `%APPDATA%\Kuntur` are kept.
 
 Requirements: Windows 11 x64 (tested; Windows 10 1809+ should work, since it has ConPTY), a GPU with DirectX 11/12. Recommended font: Cascadia Mono
@@ -70,6 +85,7 @@ The first build takes several minutes (GPUI and SQLite). To build the MSI you al
 | Shortcut | Action |
 |---|---|
 | Ctrl+Shift+P | Command palette (themes, sessions, actions) |
+| Ctrl+, | Settings (themes, language, notifications, updates) |
 | Ctrl+Shift+T / Ctrl+Shift+W | New session / close session |
 | Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+1…9 | Switch sessions |
 | Ctrl+Shift+B | Side panel: full ↔ icons |
@@ -86,7 +102,10 @@ The first build takes several minutes (GPUI and SQLite). To build the MSI you al
 
 ## Privacy
 
-- Kuntur makes **no network connections of its own** and has **no telemetry**. The only connections are the SSH
+- Kuntur has **no telemetry**. Its **only network connection of its own** is the update check: when it opens and
+  every 24 h it asks the public GitHub API for the latest release (User-Agent `Kuntur/<version>`, no user data) and,
+  only when you click "Update", downloads the installer and checks its SHA-256 and signature. Turn it off in
+  Settings → Updates (`buscar_actualizaciones = false`). The other connections are the SSH
   sessions you open and whatever the programs you run inside the terminal do (an HTML file you preview may load
   what it references, as in any browser; links open in your default browser).
 - Usage, costs and audit are computed **locally** from the agents' log files on your disk; nothing leaves your PC.

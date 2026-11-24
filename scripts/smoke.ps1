@@ -40,6 +40,10 @@
   .\scripts\smoke.ps1 -Sessions 2 -Mcp probar -Out target\smoke-mcp.png
 .EXAMPLE
   .\scripts\smoke.ps1 -Sessions 1 -Mcp linea -Commands 'cls' -Out target\smoke-mcp-linea.png
+.EXAMPLE
+  .\scripts\smoke.ps1 -Sessions 2 -Settings en -Theme white -Out target\smoke-settings.png
+.EXAMPLE
+  .\scripts\smoke.ps1 -Sessions 1 -Commands 'cls' -PasteImage -Out target\smoke-imagen.png
 #>
 param(
     [string[]]$Commands = @('Write-Host rojo -ForegroundColor Red; Write-Host verde -ForegroundColor Green', 'Get-ChildItem | Select-Object -First 5'),
@@ -104,11 +108,19 @@ param(
     # Panel "Archivos" (F7). 'remote' (con -Connections remote) muestra un árbol remoto SINTÉTICO en
     # memoria y una cola de transferencias sintética; nunca un servidor real. 'local' = el árbol local.
     [ValidateSet('', 'local', 'remote')][string]$Files = '',
+    # Con -Files: abre el menú contextual sobre la primera carpeta del árbol (ajustes v0.2).
+    [switch]$FileMenu,
     # Gestor de MCP (F10) con servidores SINTÉTICOS (el servidor falso kuntur-mcp-falso, uno que no
     # existe y uno http a un puerto cerrado) y secretos en memoria: 'list' abre el panel, 'probar'
     # además prueba todos (el falso deja una captura que se abre en la vista previa) y 'linea' pega
     # SIN Enter la línea que se usaría para abrir Claude Code con el MCP de la sesión (nunca lo ejecuta).
     [ValidateSet('', 'list', 'probar', 'linea')][string]$Mcp = '',
+    # Panel "Configuración" (ajustes v0.2) abierto; 'es' / 'en' además fijan el idioma (sin guardar).
+    [ValidateSet('', 'open', 'es', 'en')][string]$Settings = '',
+    # Imágenes como Warp (ajustes v0.2): genera una imagen SINTÉTICA (target\smoke-imagen-sintetica.png,
+    # nunca una captura real) y la app la entrega en la primera terminal a los 5 s como si se eligiera
+    # con "Imagen…" (sin agente: se guarda y se pega su ruta, sin Enter). No toca el portapapeles.
+    [switch]$PasteImage,
     # Pantalla donde se abre la ventana, contando de izquierda a derecha desde 0. Por defecto, la de
     # más a la derecha que NO sea la principal (en la PC del usuario: el monitor secundario), para no
     # interrumpir lo que pasa en la principal. La ventana se abre sin tomar el foco.
@@ -187,6 +199,22 @@ if ($HooksInstall) {
 }
 if ($Dock -and $DockCommands.Count -gt 0) { $smokeEnv.KUNTUR_SMOKE_DOCK_INPUT = ($DockCommands -join '\n') }
 if ($Connections) { $smokeEnv.KUNTUR_SMOKE_CONNECTIONS = $Connections }
+if ($Settings) { $smokeEnv.KUNTUR_SMOKE_SETTINGS = $Settings }
+if ($PasteImage) {
+    # Degradado con un rectángulo y un texto: claramente sintético.
+    $synthetic = Join-Path $root 'target\smoke-imagen-sintetica.png'
+    $bmp = New-Object System.Drawing.Bitmap 640, 360
+    $g = [System.Drawing.Graphics]::FromImage($bmp)
+    $brush = New-Object System.Drawing.Drawing2D.LinearGradientBrush (New-Object System.Drawing.Point 0, 0), (New-Object System.Drawing.Point 640, 360), ([System.Drawing.Color]::FromArgb(31, 79, 194)), ([System.Drawing.Color]::FromArgb(94, 234, 253))
+    $g.FillRectangle($brush, 0, 0, 640, 360)
+    $g.FillRectangle([System.Drawing.Brushes]::White, 60, 60, 220, 120)
+    $font = New-Object System.Drawing.Font 'Segoe UI', 28
+    $g.DrawString('Kuntur · imagen de prueba', $font, [System.Drawing.Brushes]::White, 60, 240)
+    $g.Dispose()
+    $bmp.Save($synthetic, [System.Drawing.Imaging.ImageFormat]::Png)
+    $bmp.Dispose()
+    $smokeEnv.KUNTUR_SMOKE_PASTE_IMAGE = $synthetic
+}
 $editFile = $null
 if ($PreviewEdit -and $Preview) {
     # Copia de trabajo fuera del repo (target\ no se sube), para poder modificarla.
@@ -206,6 +234,11 @@ if ($Links) { $smokeEnv.KUNTUR_SMOKE_LINKS = '1' }
 if ($Type) { $smokeEnv.KUNTUR_SMOKE_TYPE = $Type }
 if ($History.Count -gt 0) { $smokeEnv.KUNTUR_SMOKE_HISTORY = ($History -join '\n') }
 if ($Files) { $smokeEnv.KUNTUR_SMOKE_FILES = $Files }
+if ($FileMenu) {
+    $smokeEnv.KUNTUR_SMOKE_FILE_MENU = '1'
+    # Después de los comandos de la sesión (2,5 s + 0,6 s por comando) y de leer la carpeta.
+    $smokeEnv.KUNTUR_SMOKE_FILE_MENU_MS = "$(2500 + 600 * $Commands.Count + 2000)"
+}
 if ($Mcp) {
     $smokeEnv.KUNTUR_SMOKE_MCP = $Mcp
     $smokeEnv.KUNTUR_SMOKE_MCP_FAKE = (Join-Path $root 'target\release\kuntur-mcp-falso.exe')

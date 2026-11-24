@@ -1,8 +1,10 @@
 name: CI
 
+# Una sola ejecución por commit: `push` solo en main y en las etiquetas; las ramas de trabajo pasan
+# por su pull request (antes corrían dos veces y el trabajo de macOS se quedaba sin máquina).
 on:
   push:
-    branches: [main, "fase/**", "integracion/**"]
+    branches: [main]
     tags: ["v*"]
   pull_request:
 
@@ -31,6 +33,9 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: windows
     runs-on: windows-latest
+    env:
+      # Vacío si el repositorio no tiene el secreto: los pasos de SignPath se saltan.
+      SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
@@ -51,7 +56,63 @@ jobs:
         shell: pwsh
         run: ./scripts/msi.ps1 -Check
       - uses: actions/upload-artifact@v4
+        id: msi-artifact
         with:
           name: kuntur-msi
           path: target/wix/*.msi
           if-no-files-found: error
+      # Firma con SignPath (docs/FIRMA.md): solo si el repositorio tiene los secretos de SignPath.
+      # Sin ellos los dos pasos se saltan y el MSI queda sin firmar (como hasta ahora).
+      - name: Firmar con SignPath
+        if: env.SIGNPATH_API_TOKEN != ''
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: kuntur
+          signing-policy-slug: release-signing
+          artifact-configuration-slug: msi
+          github-artifact-id: ${{ steps.msi-artifact.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: target/firmado
+      - name: Subir el MSI firmado
+        if: env.SIGNPATH_API_TOKEN != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: kuntur-msi-firmado
+          path: target/firmado/*.msi
+          if-no-files-found: error
+
+  # Linux y Mac (ajustes v0.2, §10): Kuntur todavía se publica solo para Windows; estos trabajos
+  # comprueban que todo compile y que pasen las pruebas de los crates sin interfaz. No frenan la CI
+  # (continue-on-error) hasta que haya instaladores para esos sistemas.
+  linux:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Dependencias del sistema (GPUI y WebKitGTK de wry)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libvulkan-dev libx11-xcb-dev \
+            libxcb1-dev libfontconfig-dev libfreetype-dev libssl-dev \
+            libgtk-3-dev libwebkit2gtk-4.1-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev
+      - name: Compilar todo (check)
+        run: cargo check --workspace --all-targets
+      - name: Pruebas de los crates sin interfaz
+        run: cargo test --no-fail-fast -p kuntur-config -p kuntur-files -p kuntur-complete -p kuntur-update -p kuntur-usage -p kuntur-audit -p kuntur-agents -p kuntur-preview
+
+  macos:
+    runs-on: macos-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Compilar todo (check)
+        run: cargo check --workspace --all-targets
+      - name: Pruebas de los crates sin interfaz
+        run: cargo test --no-fail-fast -p kuntur-config -p kuntur-files -p kuntur-complete -p kuntur-update -p kuntur-usage -p kuntur-audit -p kuntur-agents -p kuntur-preview

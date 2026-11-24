@@ -3,10 +3,10 @@
 > Última actualización: 2026-11-24. Léela primero al retomar en otra PC (o pídele a Claude Code que la lea).
 
 ## Dónde está cada cosa
-- **Rama `integracion/f10-f11` (pendiente de revisión para avanzar `main`): Fases 1 a 11 integradas** (2026-11-24, merge de `fase/f10-mcp` y luego `fase/f11-publicacion` sobre `main`). Pruebas, clippy y fmt en verde; capturas revisadas; MSI generado desde esta rama (no instalado). Conflictos, corrección de CPU en reposo (antes/después), capturas y pendientes en `docs/plans/integracion-f10-f11.md`. Cuando el usuario avance `main` a esta rama, **`main` tendrá F1–F11**.
-- Rama **`main`**: Fases 1 a 9 (hasta que se avance a `integracion/f10-f11`). Integración anterior: `docs/plans/integracion-f5-f9.md`.
+- **Versión 0.2.0 — Ajustes v0.2** (rama `ajustes/v0.2`, que se integra en `main`): Configuración (Ctrl+,) con temas en círculos, idioma es/en y notificaciones configurables; árbol de archivos y menú contextual tipo VS Code; título del agente en la pestaña con marquesina; imágenes como Warp (Ctrl+V); aviso de actualización con descarga verificada; firma preparada (`docs/FIRMA.md`); acceso directo en el escritorio; binarios sin rutas de la PC. Resultados y pendientes: `docs/plans/ajustes-v0.2-resultados.md`.
+- Rama **`main`**: Fases 1 a 11 (versión 0.1.0, etiqueta `v0.1.0`). El repositorio `jrsprescott/kuntur` es **público** desde el 2026-11-24.
 - Rama **`fase/f10-mcp`**: Fase 10 · MCP y comandos (`docs/plans/f10-resultados.md`): crate `kuntur-mcp`, gestor de MCP por pestaña (botón, Ctrl+Shift+M, paleta), perfiles con modelo/esfuerzo/permisos, configuración MCP generada por CLI al lanzar (Claude Code, Codex, OpenCode; nunca la global), «Probar», capturas → vista previa y comandos con atajo. Faltan las pruebas manuales ⏳ con MCP y agentes reales.
-- Rama **`fase/f11-publicacion`**: Fase 11 · Pulido y publicación (`docs/plans/f11-resultados.md`): licencia MIT OR Apache-2.0, ícono, instalador MSI (`scripts\msi.ps1 -Check`, WiX v3 + cargo-wix; AUMID `Kuntur.Kuntur`), contraste WCAG (Blue corregido), teclado en Uso/Auditoría/Conexiones, medición final, README en inglés + `README.es.md`, CONTRIBUTING, SECURITY, CHANGELOG y revisión de privacidad del historial. El repositorio **sigue privado** hasta que el usuario decida. Falta instalar el MSI en una PC de prueba ⏳.
+- Rama **`fase/f11-publicacion`**: Fase 11 · Pulido y publicación (`docs/plans/f11-resultados.md`): licencia MIT OR Apache-2.0, ícono, instalador MSI (`scripts\msi.ps1 -Check`, WiX v3 + cargo-wix; AUMID `Kuntur.Kuntur`), contraste WCAG (Blue corregido), teclado en Uso/Auditoría/Conexiones, medición final, README en inglés + `README.es.md`, CONTRIBUTING, SECURITY, CHANGELOG y revisión de privacidad del historial. El repositorio es **público** desde el 2026-11-24 (revisión de privacidad del historial y del instalador 0.1.0, que se regeneró sin rutas de la PC). Falta instalar el MSI en una PC de prueba ⏳.
 - Las ramas `integracion/*` y `fase/*` quedan como historia de cada fase (no hace falta trabajar en ellas).
 - Rama **`fase/f3-v5`**: Fase 3 (diseño v5) **terminada** (`docs/plans/f3-resultados.md`).
 - Rama **`fase/f4-acoplada`** (sale de `fase/f3-v5`): Fase 4 · Terminal acoplada **terminada** (`docs/plans/f4-resultados.md`); faltan las pruebas manuales ⏳ del usuario.
@@ -19,6 +19,37 @@
 - **Especificación del usuario** (adoptada el 2026-11-23): `docs/ESPECIFICACION.md`, con las decisiones tomadas (se mantiene GPUI, costo estimado, spike de `wry`…). La hoja de ruta pasó a 11 fases (nueva F8 · Vista previa y diff).
 - Rama **`fase/f7-archivos`** (sale de `fase/f6-ssh`): Fase 7 · Archivos remotos y transferencias **terminada** (`docs/plans/f7-resultados.md`); faltan las pruebas manuales ⏳ contra un servidor real.
 - **Decisión pendiente (sigue abierta tras F7):** panel izquierdo con agentes arriba + árbol abajo a la vez (especificación §3) o el botón "Archivos" que alterna (actual, se mantuvo en F7 sin cambios).
+
+## Ajustes v0.2 · paso 4: imágenes como Warp (rama `ajustes/v0.2-imagenes`)
+Plan: `docs/plans/2026-11-24-ajustes-v0.2.md` (sección 1, con su "Estado").
+| Parte | Estado |
+|---|---|
+| `image_paste.rs` (entrega según agente / SSH, comillas, nombre `captura-AAAAMMDD-HHMMSS.png`, PNG ≤ 2000 px, limpieza > 7 días), `clipboard_image.rs` (`CF_DIB`), `ImagePaste`/`PasteKey` en el catálogo y `pegar_imagen` en `[[agentes]]` | ✅ con pruebas |
+| Ctrl+V sin texto, arrastrar archivos, "Imagen…" → Claude Code con su tecla (Alt+V en Windows) / ruta local / subida SFTP | ✅ compila; sin probar con `claude` real |
+| Barra del agente con miniaturas `#n`, "Imagen…", ×, aviso; clic → vista previa | ✅ compila; sin captura (un solo monitor) |
+| Humo `-PasteImage` (imagen sintética, sin portapapeles) | ✅ agregado, no ejecutado |
+| Tab/Backspace/Esc en la barra, agentes remotos en la barra | ⏳ ver el plan |
+
+## Ajustes v0.2 · actualizador, firma y Linux/Mac (rama `ajustes/v0.2-update`)
+| Parte | Estado |
+|---|---|
+| Versión del workspace **0.2.0**; CHANGELOG 0.2.0 (faltan títulos de pestaña e imágenes) | ✅ |
+| `kuntur-update`: versión más nueva (incluidas preliminares), MSI + SHA-256, descarga verificada, firma (WinVerifyTrust, mismo firmante si el exe en uso está firmado) | ✅ con pruebas; prueba manual contra GitHub real ✅ |
+| Aviso en la línea inferior, Configuración → Actualizaciones, instalar con `msiexec /passive` y reabrir Kuntur | ✅ compila y con pruebas; de punta a punta ⏳ (hace falta una 0.2.x publicada) |
+| README/SECURITY: la única conexión de red propia es buscar actualizaciones (desactivable) | ✅ |
+| Firma: `msi.ps1 -Sign`, SignPath opcional en la CI, `docs/FIRMA.md` | ✅; certificado ⏳ (usuario) |
+| Linux/Mac: carpetas por sistema (`kuntur_config::dirs`), `$SHELL`, trabajos `linux`/`macos` en la CI | ✅ (crates de Rust puro verificados con `cargo check --target`); la app completa ⏳ en la CI |
+
+## Ajustes v0.2 · paso 2: árbol de archivos y menú tipo VS Code (rama `ajustes/v0.2-arbol`)
+Plan: `docs/plans/2026-11-24-ajustes-v0.2.md` (secciones 5 y 6).
+| Parte | Estado |
+|---|---|
+| `kuntur-files`: `tree.rs` (raíz, desplegadas, filas aplanadas con profundidad, carga perezosa, relectura de lo visible, fila madre), `path.rs` (`is_within`, `relative`), `share.rs` (enlace de GitHub, `usuario@host:ruta`) | ✅ con pruebas (`MemoryFs`) |
+| Árbol en el panel: chevron que gira, sangría con guías, ícono por tipo, clic despliega, ←/→/↑/↓/Enter, Esc vuelve a la terminal, plegar todo | ✅ compila; sin captura (esta PC tiene un solo monitor) |
+| Menú (`file_menu.rs`, es/en, sin "Diff This"): Nuevo archivo/carpeta y Cambiar nombre en línea, Eliminar (local a la Papelera con `trash`; remoto "ADVERTENCIA: Eliminar esto"), Copiar ruta / relativa, Cortar/Copiar/Pegar (mismo sistema = renombrar; local↔remoto por la cola), Mostrar en el gestor de archivos, Abrir en la terminal integrada, Agregar al chat / Claude Code: Agregar al chat, Descargar/Subir esto, Compartir ▸ (GitHub / `usuario@host:ruta`), Abrir en vista previa de imágenes (hasta 12 imágenes en la vista previa), Agregar como proyecto Python | ✅ con pruebas de la lógica |
+| Buscar en la carpeta…, Abrir línea de tiempo | ⏳ en gris "(próximamente)" |
+| Portapapeles del sistema (copiar en Kuntur y pegar en el Explorador, y al revés), selección múltiple, arrastrar dentro del árbol | ⏳ pendiente |
+| Pruebas manuales | ⏳ lista en el plan (§ Pruebas manuales) |
 
 ## Fase 10: MCP y comandos (rama `fase/f10-mcp`)
 | Parte | Estado |

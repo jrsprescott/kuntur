@@ -97,9 +97,10 @@ fn agent_color(kind: AgentKind, c: &UiColors) -> Hsla {
     kuntur_agents::brand_color(kind).map_or(c.muted, brand)
 }
 
-/// Carpeta de datos de Kuntur (`%APPDATA%\Kuntur`): ahí van `usage.db` y `pricing.toml`.
+/// Carpeta de datos de Kuntur (`%APPDATA%\Kuntur` en Windows; ver `kuntur_config::dirs`): ahí van
+/// `usage.db` y `pricing.toml`.
 fn data_dir() -> Option<PathBuf> {
-    std::env::var_os("APPDATA").map(|a| PathBuf::from(a).join("Kuntur"))
+    kuntur_config::dirs::config_dir()
 }
 
 /// Tabla incluida + la del usuario encima. Si la del usuario tiene un error, se usan los precios
@@ -205,7 +206,7 @@ impl Workspace {
     /// existe y lo abre con el editor de Windows. Los cambios se ven al volver a abrir la vista.
     pub(super) fn edit_prices(&mut self, cx: &mut Context<Self>) {
         let Some(path) = data_dir().map(|d| d.join("pricing.toml")) else {
-            self.usage.notice = Some("No se encontró la carpeta de datos de Kuntur (%APPDATA%)".into());
+            self.usage.notice = Some("No se encontró la carpeta de datos de Kuntur".into());
             cx.notify();
             return;
         };

@@ -2,7 +2,7 @@
 
 [English](README.md) · **Español**
 
-> **Estado: versión preliminar (0.1).** Se puede usar a diario en Windows 11, pero todavía tiene asperezas.
+> **Estado: versión preliminar (0.2).** Se puede usar a diario en Windows 11, pero todavía tiene asperezas.
 > Los comentarios son bienvenidos.
 
 **Kuntur Terminal IA Agente** — *Kuntur* significa cóndor en quechua — es una terminal liviana para Windows, escrita en Rust, pensada para trabajar con
@@ -13,7 +13,8 @@ valle desde lo alto, ves de un vistazo todas tus sesiones y lo que hace cada age
 
 - **Liviana:** unos **60–80 MB de RAM** con una ventana y menos de **120 MB** con cinco sesiones y varios agentes
   (Warp usa ~900 MB en el mismo equipo). Dibujo nativo por GPU con [GPUI](https://www.gpui.rs/).
-- **Privada por diseño:** todo corre en tu PC. Sin cuenta, sin telemetría, sin conexiones de red propias.
+- **Privada por diseño:** todo corre en tu PC. Sin cuenta, sin telemetría; su única conexión de red propia es buscar
+  actualizaciones en GitHub (se puede apagar).
 
 ## Funciones
 
@@ -40,15 +41,31 @@ valle desde lo alto, ves de un vistazo todas tus sesiones y lo que hace cada age
   PDF y HTML (WebView2) en una vista dividida que se recarga sola.
 - **Integración con el shell:** bloques OSC 133 (una marca fina por comando, roja si falló) y **autocompletado en
   gris** de rutas, memoria de carpetas e historial por carpeta (Tab o → aceptan).
+- **Capturas para tu agente, como en Warp:** Ctrl+V con una imagen en el portapapeles la adjunta — Claude Code
+  muestra `[Image #N]`, los demás agentes reciben la ruta del PNG guardado y las pestañas SSH primero la suben —, y
+  una barra del agente muestra las miniaturas.
+- **La pestaña dice qué hace el agente:** el título que pone el agente (en Claude Code, el tema de la conversación)
+  reemplaza a "PowerShell"; si es largo, en la pestaña activa se desplaza y se detiene con el mouse.
+- **Árbol de archivos como el Explorer de VS Code**, con su menú de clic derecho (nuevo archivo/carpeta, cambiar
+  nombre, eliminar a la Papelera, cortar/copiar/pegar entre local y remoto, copiar ruta, mostrar en el Explorador,
+  agregar al chat…).
+- **Configuración** (Ctrl+,): temas, tamaño de letra, idioma (español / inglés), notificaciones que no molestan
+  (por tipo, como mucho una por sesión cada pocos minutos y solo en segundo plano) y búsqueda de actualizaciones.
+- **Actualizar con un clic:** un aviso cuando sale una versión nueva; Kuntur descarga el instalador, verifica su
+  SHA-256 y su firma, lo instala y se vuelve a abrir.
 
-| Uso (Blue) | Vista previa y diff (White) |
+| Configuración (Blue) | Archivos y menú contextual (Dark) |
 |---|---|
-| ![Vista de uso de agentes con datos sintéticos](docs/images/kuntur-usage.png) | ![Vista previa de Markdown y diff a colores](docs/images/kuntur-preview.png) |
+| ![Panel de Configuración con los temas como círculos de color](docs/images/kuntur-settings.png) | ![Árbol de archivos con el menú contextual tipo VS Code](docs/images/kuntur-files.png) |
+
+| Uso (Blue) | Vista previa (White) |
+|---|---|
+| ![Vista de uso de agentes con datos sintéticos](docs/images/kuntur-usage.png) | ![Vista previa de Markdown](docs/images/kuntur-preview.png) |
 
 ## Instalar
 
 Descarga `kuntur-<versión>-x86_64.msi` de la página de Releases del proyecto y ejecútalo. Instala `kuntur.exe` y
-`kuntur-hook.exe` en `C:\Program Files\Kuntur` y agrega **Kuntur** al menú Inicio. Se desinstala desde
+`kuntur-hook.exe` en `C:\Program Files\Kuntur` y agrega **Kuntur** al menú Inicio y al escritorio. Se desinstala desde
 *Configuración → Aplicaciones*; tu configuración en `%APPDATA%\Kuntur` se conserva.
 
 Requisitos: Windows 11 x64 (probado; Windows 10 1809+ debería funcionar porque tiene ConPTY), GPU con DirectX 11/12.
@@ -94,6 +111,7 @@ kuntur/
 | Atajo | Acción |
 |---|---|
 | Ctrl+Shift+P | Paleta de comandos (temas, sesiones, acciones) |
+| Ctrl+, | Configuración (temas, idioma, notificaciones, actualizaciones) |
 | Ctrl+Shift+T / Ctrl+Shift+W | Nueva sesión / cerrar sesión |
 | Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+1…9 | Cambiar de sesión |
 | Ctrl+Shift+B | Panel lateral: completo ↔ íconos |
@@ -110,7 +128,10 @@ kuntur/
 
 ## Privacidad
 
-- Kuntur **no abre conexiones de red propias** y **no tiene telemetría**. Las únicas conexiones son las sesiones SSH
+- Kuntur **no tiene telemetría**. Su **única conexión de red propia** es buscar actualizaciones: al abrirse y cada
+  24 h consulta la API pública de GitHub (User-Agent `Kuntur/<versión>`, sin datos tuyos) y, solo si pulsas
+  "Actualizar", descarga el instalador y verifica su SHA-256 y su firma. Se apaga en Configuración → Actualizaciones
+  (`buscar_actualizaciones = false`). Las demás conexiones son las sesiones SSH
   que abras y lo que hagan los programas que ejecutes dentro de la terminal (un HTML en la vista previa puede cargar
   lo que referencia, como en cualquier navegador; los enlaces se abren en tu navegador).
 - El uso, los costos y la auditoría se calculan **en tu PC** a partir de los registros de los agentes; nada sale de ella.

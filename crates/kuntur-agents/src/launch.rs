@@ -49,6 +49,11 @@ fn is_plain(text: &str, extra: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || "-_./\\:".contains(c) || extra.contains(c))
 }
 
+/// Un argumento listo para el shell: tal cual si es un "token simple"; si no, entre comillas.
+pub fn quote_arg(text: &str, shell: ShellFlavor) -> String {
+    quote(text, shell)
+}
+
 fn quote(text: &str, shell: ShellFlavor) -> String {
     match shell {
         ShellFlavor::PowerShell if is_plain(text, "=") => text.to_string(),

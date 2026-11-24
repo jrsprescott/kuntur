@@ -1,6 +1,7 @@
 //! Configuración de Kuntur: temas (`themes/*.toml`) y ajustes persistentes.
 
 pub mod connections;
+pub mod dirs;
 pub mod mcp;
 pub mod settings;
 
@@ -9,5 +10,5 @@ pub mod theme;
 
 pub use mcp::{CommandTarget, McpProfileConfig, McpServerConfig, McpTransport, PermissionMode, ShortcutCommand};
 
-pub use settings::{AgentConfig, SessionConfig, Settings, SidebarMode};
+pub use settings::{AgentConfig, Language, NotificationSettings, SessionConfig, Settings, SidebarMode};
 pub use theme::{Rgba8, Theme, ThemeId, builtin};

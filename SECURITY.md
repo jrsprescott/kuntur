@@ -22,4 +22,6 @@ Areas where a bug would matter most:
 - **Terminal escape sequences** (OSC 7/9;9/52/133/7501) coming from untrusted program output, and clickable links.
 - **Preview** of local files (Markdown, SVG, HTML/PDF in WebView2).
 
-Kuntur has no telemetry and makes no network connections of its own (see the README).
+Kuntur has no telemetry. Its only network connection of its own is the optional update check against the public
+GitHub API and the download of the installer, verified by SHA-256 and Authenticode signature
+(`crates/kuntur-update`; see the README). Bugs there are in scope.
