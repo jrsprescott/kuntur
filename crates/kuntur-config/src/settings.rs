@@ -115,6 +115,10 @@ pub struct AgentConfig {
     /// Carpeta de sus registros (reservado: la auditoría solo tiene lectores para Claude Code y Codex).
     #[serde(rename = "registros", default, skip_serializing_if = "Option::is_none")]
     pub logs: Option<String>,
+    /// Cómo pega imágenes (ajustes v0.2): "ctrl+v" / "alt+v" (el agente lee el portapapeles con esa
+    /// tecla) o "ruta" (Kuntur guarda un PNG y pega su ruta).
+    #[serde(rename = "pegar_imagen", default, skip_serializing_if = "Option::is_none")]
+    pub image_paste: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -250,6 +254,7 @@ mod tests {
                 letter: Some('R'),
                 color: Some("#112233".into()),
                 logs: None,
+                image_paste: Some("ctrl+v".into()),
             }],
             autocompletado: false,
             sessions: vec![

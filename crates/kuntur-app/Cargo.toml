@@ -41,6 +41,8 @@ kuntur-mcp = { path = "../kuntur-mcp" }
 wry = { workspace = true }
 # Ajustes v0.2: idioma del sistema (Windows, Linux y Mac).
 sys-locale = "0.3"
+# Ajustes v0.2 (imágenes como Warp): decodificar, achicar y guardar en PNG. Ya viene con GPUI.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp"] }
 # Ajustes v0.2: "Eliminar" del árbol de archivos va a la Papelera (Windows, Linux y Mac).
 trash = "5"
 
@@ -48,7 +50,8 @@ trash = "5"
 # Notificaciones de Windows (alertas, F5).
 tauri-winrt-notification = "0.8.1"
 # F11: ¿está registrado el AppUserModelID del instalador? (registro de Windows, solo lectura)
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Registry"] }
+# Ajustes v0.2: imagen en el portapapeles como CF_DIB para que Claude Code la lea (Alt+V).
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Registry", "Win32_System_DataExchange", "Win32_System_Memory"] }
 
 [build-dependencies]
 # F11: ícono de la app incrustado en kuntur.exe (recurso 1: GPUI lo usa para la ventana).
