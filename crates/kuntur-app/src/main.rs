@@ -25,7 +25,7 @@ use workspace::Workspace;
 // Íconos que no vienen en el paquete por defecto de gpui-kit.
 gpui_kit::assets::icon_assets!(
     ExtraIcons,
-    [Command, ChartColumn, ScrollText, Server, Pencil, Trash, Download]
+    [Command, ChartColumn, ScrollText, Server, Pencil, Trash, Download, Plug]
 );
 
 /// Íconos por defecto de gpui-kit + los que agrega Kuntur.

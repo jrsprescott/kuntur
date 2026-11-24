@@ -25,6 +25,7 @@ sysinfo = { workspace = true }
 jiff = { workspace = true }
 serde_json = { workspace = true }
 kuntur-audit = { path = "../kuntur-audit" }
+kuntur-mcp = { path = "../kuntur-mcp" }
 wry = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]

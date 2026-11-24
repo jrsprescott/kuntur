@@ -4716,6 +4716,7 @@ dependencies = [
  "kuntur-config",
  "kuntur-files",
  "kuntur-hook",
+ "kuntur-mcp",
  "kuntur-preview",
  "kuntur-ssh",
  "kuntur-term",
@@ -4767,6 +4768,21 @@ dependencies = [
  "serde",
  "serde_json",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "kuntur-mcp"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "keyring-core",
+ "kuntur-agents",
+ "kuntur-config",
+ "rustls",
+ "rustls-native-certs",
+ "serde_json",
+ "toml 1.2.2+spec-1.1.0",
+ "windows-native-keyring-store",
 ]
 
 [[package]]
@@ -7587,6 +7603,7 @@ version = "0.23.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "48e13bd8c0e9365c43cfa5c9e8f9ad49d3c8444926c9aac819e0e4dc503c8fdf"
 dependencies = [
+ "log",
  "once_cell",
  "ring",
  "rustls-pki-types",

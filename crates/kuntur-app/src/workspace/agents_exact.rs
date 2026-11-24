@@ -431,7 +431,8 @@ impl Workspace {
         self.sessions.rename(sid, name);
         self.exact.worktrees.insert(sid, plan.path.clone());
         self.persist();
-        let line = launch_line(&def.command, &def.args, ShellFlavor::from_program(None));
+        // F10: con el MCP y las opciones del perfil de la sesión (la nueva toma el perfil inicial).
+        let line = self.agent_launch_line(sid, &def, ShellFlavor::from_program(None), cx);
         if let Some(view) = self.terminal(sid, false) {
             view.read(cx).send_line(line, NEW_TERMINAL_DELAY);
         }
@@ -446,7 +447,7 @@ impl Workspace {
 
     // ── Avisos ──────────────────────────────────────────────────────────────
 
-    fn show_notice(&mut self, text: impl Into<String>, cx: &mut Context<Self>) {
+    pub(super) fn show_notice(&mut self, text: impl Into<String>, cx: &mut Context<Self>) {
         self.exact.notice = Some((text.into(), Instant::now()));
         cx.spawn(async move |this, cx| {
             cx.background_executor().timer(Duration::from_secs(NOTICE_SECS)).await;

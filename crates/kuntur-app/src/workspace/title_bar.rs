@@ -1,5 +1,5 @@
 //! Barra de título (34 px): botón del panel · pestañas de sesiones · `+` · espacio de arrastre ·
-//! botones de ícono (Terminal acoplada, Tema, Uso de agentes, Auditoría, Conexiones, Acciones) ·
+//! botones de ícono (Terminal acoplada, Tema, Uso de agentes, Auditoría, Conexiones, MCP, Acciones) ·
 //! botones de Windows.
 
 use gpui_kit::component::TitleBar;
@@ -108,6 +108,11 @@ impl Workspace {
                                 icon_button("connections", IconName::Server, c, "Conexiones SSH (Ctrl+Shift+O)")
                                     .when(self.connections.open, |this| this.bg(c.surface_2).text_color(c.text))
                                     .on_click(cx.listener(|this, _, window, cx| this.toggle_connections(window, cx))),
+                            )
+                            .child(
+                                icon_button("mcp", IconName::Plug, c, "MCP de la sesión (Ctrl+Shift+M)")
+                                    .when(self.mcp.open, |this| this.bg(c.surface_2).text_color(c.text))
+                                    .on_click(cx.listener(|this, _, window, cx| this.toggle_mcp(window, cx))),
                             )
                             .child(
                                 icon_button("command", IconName::Command, c, "Acciones (Ctrl+Shift+P)")
