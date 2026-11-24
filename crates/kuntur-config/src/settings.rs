@@ -16,6 +16,56 @@ pub enum SidebarMode {
     Icons,
 }
 
+/// Idioma de la interfaz. `Auto` = el del sistema (español si empieza con "es"; si no, inglés).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Language {
+    Es,
+    En,
+    /// Va al final: serde exige que `#[serde(other)]` sea la última variante.
+    #[default]
+    #[serde(other)]
+    Auto,
+}
+
+/// Notificaciones del sistema de las alertas (§12). La insignia de la pestaña sale siempre; esto
+/// solo decide cuándo además aparece la notificación.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NotificationSettings {
+    /// El agente espera tu respuesta.
+    #[serde(rename = "espera")]
+    pub waiting: bool,
+    /// El agente pide permiso para usar una herramienta.
+    #[serde(rename = "permiso")]
+    pub permission: bool,
+    /// El agente terminó.
+    #[serde(rename = "termino")]
+    pub finished: bool,
+    /// Minutos mínimos entre dos notificaciones de la misma sesión (0 = sin límite).
+    #[serde(rename = "intervalo_minutos")]
+    pub interval_min: u32,
+    /// Solo si Kuntur no está en primer plano.
+    #[serde(rename = "solo_en_segundo_plano")]
+    pub only_background: bool,
+}
+
+impl NotificationSettings {
+    pub const MAX_INTERVAL_MIN: u32 = 24 * 60;
+}
+
+impl Default for NotificationSettings {
+    fn default() -> Self {
+        Self {
+            waiting: true,
+            permission: true,
+            finished: true,
+            interval_min: 5,
+            only_background: true,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct SessionConfig {
     pub name: String,
@@ -87,6 +137,12 @@ pub struct Settings {
     /// Perfil que se aplica a las sesiones nuevas (`None` = sin MCP).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mcp_perfil_inicial: Option<String>,
+    /// Idioma de la interfaz (`auto`, `es`, `en`).
+    #[serde(rename = "idioma")]
+    pub language: Language,
+    /// Cuándo se muestran las notificaciones (con `alertas = true`).
+    #[serde(rename = "notificaciones")]
+    pub notifications: NotificationSettings,
     pub sessions: Vec<SessionConfig>,
     /// Agentes extra (§5).
     #[serde(rename = "agentes", skip_serializing_if = "Vec::is_empty")]
@@ -114,6 +170,8 @@ impl Default for Settings {
             mcp_exclusivo: false,
             mcp_opencode_v2: false,
             mcp_perfil_inicial: None,
+            language: Language::Auto,
+            notifications: NotificationSettings::default(),
             sessions: Vec::new(),
             agents: Vec::new(),
             connections: Vec::new(),
@@ -137,6 +195,7 @@ impl Settings {
             .and_then(|t| toml::from_str::<Settings>(&t).ok())
             .map(|mut s| {
                 s.font_size = Self::clamp_font(s.font_size);
+                s.notifications.interval_min = s.notifications.interval_min.min(NotificationSettings::MAX_INTERVAL_MIN);
                 s
             })
             .unwrap_or_default()
@@ -377,6 +436,54 @@ letra = \"M\"
             !text.to_lowercase().contains("password ="),
             "los secretos nunca van al archivo"
         );
+    }
+
+    #[test]
+    fn idioma_y_notificaciones_por_defecto_en_archivos_viejos() {
+        let path = tmp("notificaciones-viejo");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, "theme = \"blue\"\nalertas = true\n").unwrap();
+        let s = Settings::load(&path);
+        assert_eq!(s.language, Language::Auto);
+        assert_eq!(s.notifications, NotificationSettings::default());
+        let n = &s.notifications;
+        assert!(n.waiting && n.permission && n.finished && n.only_background);
+        assert_eq!(n.interval_min, 5);
+    }
+
+    #[test]
+    fn idioma_y_notificaciones_se_guardan() {
+        let path = tmp("notificaciones");
+        let s = Settings {
+            language: Language::En,
+            notifications: NotificationSettings {
+                waiting: false,
+                permission: true,
+                finished: false,
+                interval_min: 15,
+                only_background: false,
+            },
+            ..Default::default()
+        };
+        s.save(&path).unwrap();
+        assert_eq!(Settings::load(&path), s);
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("idioma = \"en\""));
+        assert!(text.contains("[notificaciones]") && text.contains("intervalo_minutos = 15"));
+    }
+
+    #[test]
+    fn idioma_desconocido_vuelve_a_automatico_y_el_intervalo_se_limita() {
+        let path = tmp("idioma-raro");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &path,
+            "idioma = \"klingon\"\n[notificaciones]\nintervalo_minutos = 100000\n",
+        )
+        .unwrap();
+        let s = Settings::load(&path);
+        assert_eq!(s.language, Language::Auto);
+        assert_eq!(s.notifications.interval_min, NotificationSettings::MAX_INTERVAL_MIN);
     }
 
     #[test]

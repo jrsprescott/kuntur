@@ -4724,6 +4724,7 @@ dependencies = [
  "kuntur-usage",
  "serde_json",
  "smol",
+ "sys-locale",
  "sysinfo 0.40.4",
  "tauri-winrt-notification",
  "windows-sys 0.61.2",

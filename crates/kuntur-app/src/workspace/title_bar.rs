@@ -91,7 +91,7 @@ impl Workspace {
                                     .on_click(cx.listener(|this, _, window, cx| this.toggle_dock(window, cx))),
                             )
                             .child(
-                                icon_button("theme", IconName::Palette, c, "Tema: Blue · Dark · White")
+                                icon_button("theme", IconName::Palette, c, crate::i18n::t(crate::i18n::T::ThemeTip))
                                     .on_click(cx.listener(|this, _, window, cx| this.toggle_theme_menu(window, cx))),
                             )
                             .child(
@@ -113,6 +113,16 @@ impl Workspace {
                                 icon_button("mcp", IconName::Plug, c, "MCP de la sesión (Ctrl+Shift+M)")
                                     .when(self.mcp.open, |this| this.bg(c.surface_2).text_color(c.text))
                                     .on_click(cx.listener(|this, _, window, cx| this.toggle_mcp(window, cx))),
+                            )
+                            .child(
+                                icon_button(
+                                    "settings",
+                                    IconName::Settings,
+                                    c,
+                                    crate::i18n::t(crate::i18n::T::SettingsTip),
+                                )
+                                .when(self.settings_panel.open, |this| this.bg(c.surface_2).text_color(c.text))
+                                .on_click(cx.listener(|this, _, window, cx| this.toggle_settings(None, window, cx))),
                             )
                             .child(
                                 icon_button("command", IconName::Command, c, "Acciones (Ctrl+Shift+P)")

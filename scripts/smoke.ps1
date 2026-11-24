@@ -40,6 +40,8 @@
   .\scripts\smoke.ps1 -Sessions 2 -Mcp probar -Out target\smoke-mcp.png
 .EXAMPLE
   .\scripts\smoke.ps1 -Sessions 1 -Mcp linea -Commands 'cls' -Out target\smoke-mcp-linea.png
+.EXAMPLE
+  .\scripts\smoke.ps1 -Sessions 2 -Settings en -Theme white -Out target\smoke-settings.png
 #>
 param(
     [string[]]$Commands = @('Write-Host rojo -ForegroundColor Red; Write-Host verde -ForegroundColor Green', 'Get-ChildItem | Select-Object -First 5'),
@@ -109,6 +111,8 @@ param(
     # además prueba todos (el falso deja una captura que se abre en la vista previa) y 'linea' pega
     # SIN Enter la línea que se usaría para abrir Claude Code con el MCP de la sesión (nunca lo ejecuta).
     [ValidateSet('', 'list', 'probar', 'linea')][string]$Mcp = '',
+    # Panel "Configuración" (ajustes v0.2) abierto; 'es' / 'en' además fijan el idioma (sin guardar).
+    [ValidateSet('', 'open', 'es', 'en')][string]$Settings = '',
     # Pantalla donde se abre la ventana, contando de izquierda a derecha desde 0. Por defecto, la de
     # más a la derecha que NO sea la principal (en la PC del usuario: el monitor secundario), para no
     # interrumpir lo que pasa en la principal. La ventana se abre sin tomar el foco.
@@ -187,6 +191,7 @@ if ($HooksInstall) {
 }
 if ($Dock -and $DockCommands.Count -gt 0) { $smokeEnv.KUNTUR_SMOKE_DOCK_INPUT = ($DockCommands -join '\n') }
 if ($Connections) { $smokeEnv.KUNTUR_SMOKE_CONNECTIONS = $Connections }
+if ($Settings) { $smokeEnv.KUNTUR_SMOKE_SETTINGS = $Settings }
 $editFile = $null
 if ($PreviewEdit -and $Preview) {
     # Copia de trabajo fuera del repo (target\ no se sube), para poder modificarla.

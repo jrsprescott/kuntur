@@ -11,6 +11,7 @@ mod dock_view;
 mod files_panel;
 mod mcp_view;
 mod preview_view;
+mod settings_view;
 mod side_panel;
 mod title_bar;
 mod transfers_view;
@@ -47,6 +48,7 @@ use dock_view::DockDrag;
 use files_panel::FilesState;
 use mcp_view::McpState;
 use preview_view::PreviewState;
+use settings_view::SettingsPanel;
 use usage_view::UsageState;
 
 /// Panel izquierdo compacto (solo íconos) y completo.
@@ -107,6 +109,10 @@ pub struct Workspace {
     /// Alertas (§12): transiciones de los agentes y el contador de la insignia de cada pestaña.
     alerts: AlertTracker,
     badges: HashMap<u64, u32>,
+    /// Qué alertas además muestran la notificación del sistema (ajustes v0.2).
+    toasts: crate::notify::ToastGate,
+    /// Panel "Configuración" (ajustes v0.2).
+    settings_panel: SettingsPanel,
     /// La ventana tiene el foco (si no, ninguna pestaña se está viendo).
     window_active: bool,
     codex_limits: Option<Limits>,
@@ -161,6 +167,10 @@ fn catalog_from(settings: &Settings) -> Catalog {
 
 impl Workspace {
     pub fn new(window: &mut Window, cx: &mut Context<Self>, settings: Settings, config_path: Option<PathBuf>) -> Self {
+        crate::i18n::set(crate::i18n::resolve(
+            settings.language,
+            crate::i18n::system_locale().as_deref(),
+        ));
         let theme_id = ThemeId::from_key(&settings.theme).unwrap_or(ThemeId::Dark);
         let theme = builtin(theme_id);
         let installed = window.text_system().all_font_names();
@@ -186,6 +196,8 @@ impl Workspace {
             installed: Vec::new(),
             alerts: AlertTracker::default(),
             badges: HashMap::new(),
+            toasts: crate::notify::ToastGate::default(),
+            settings_panel: SettingsPanel::default(),
             window_active: window.is_window_active(),
             codex_limits: None,
             ram: None,
@@ -333,6 +345,8 @@ impl Workspace {
 
         // F10: MCP por sesión (limpieza de temporales, capturas → vista previa, prueba de humo).
         this.start_mcp(window, cx);
+        // Ajustes v0.2: panel de Configuración abierto para las capturas.
+        this.smoke_settings(window, cx);
         this
     }
 
@@ -521,9 +535,20 @@ impl Workspace {
             return;
         }
         let toasts = crate::notify::toasts_allowed_now(self.settings.alerts);
+        self.toasts.retain(|id| open.contains(&id));
+        let now = std::time::Instant::now();
         for alert in alerts {
             *self.badges.entry(alert.key.session).or_default() += 1;
-            if toasts {
+            // Ajustes v0.2: por tipo, solo en segundo plano y como mucho una por sesión cada N min.
+            if toasts
+                && self.toasts.allow(
+                    alert.key.session,
+                    alert.kind,
+                    self.window_active,
+                    &self.settings.notifications,
+                    now,
+                )
+            {
                 let session = self
                     .sessions
                     .get(alert.key.session)
@@ -531,12 +556,13 @@ impl Workspace {
                     .unwrap_or_default();
                 let place = crate::agents_panel::place(&session, alert.key.docked);
                 let name = self.agent_name(&alert.agent);
-                let title = match alert.kind {
-                    AlertKind::Waiting => format!("{name} espera tu respuesta"),
-                    AlertKind::Permission => format!("{name} pide permiso"),
-                    AlertKind::Finished => format!("{name} terminó"),
+                use crate::i18n::{T, t};
+                let what = match alert.kind {
+                    AlertKind::Waiting => t(T::ToastWaiting),
+                    AlertKind::Permission => t(T::ToastPermission),
+                    AlertKind::Finished => t(T::ToastFinished),
                 };
-                crate::notify::show_toast(title, format!("Sesión «{place}»"));
+                crate::notify::show_toast(format!("{name} {what}"), format!("{} «{place}»", t(T::ToastSession)));
             }
         }
     }
@@ -903,6 +929,7 @@ impl Workspace {
             .collect();
         self.connections.open = false;
         self.mcp.open = false;
+        self.settings_panel.open = false;
         self.palette = Some(PaletteState::with_agents(agents));
         window.focus(&self.focus, cx);
         cx.notify();
@@ -993,6 +1020,7 @@ impl Workspace {
             PaletteAction::InstallClaudeHooks => self.open_installer(cx),
             PaletteAction::Connections => self.open_connections(window, cx),
             PaletteAction::Mcp => self.open_mcp(window, cx),
+            PaletteAction::Settings => self.open_settings(None, window, cx),
             PaletteAction::NewConnection => self.new_connection_form(window, cx),
             PaletteAction::Reconnect => self.reconnect_active(cx),
             PaletteAction::RenameSession => {}
@@ -1002,15 +1030,8 @@ impl Workspace {
     /// Botón de tema (§4 de la especificación): abre la paleta filtrada en los temas, con el actual
     /// marcado; volver a pulsarlo la cierra. Elegir uno lo aplica y lo guarda.
     fn toggle_theme_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.palette.is_some() {
-            self.close_palette(window, cx);
-            return;
-        }
-        self.open_palette(window, cx);
-        if let Some(p) = self.palette.as_mut() {
-            p.insert("Tema");
-        }
-        cx.notify();
+        // Ajustes v0.2: abre Configuración en los temas (círculos con sus colores).
+        self.toggle_settings(Some(settings_view::Row::Theme), window, cx);
     }
 
     /// ¿La acción describe el estado actual? (tema y panel en uso: se marcan con ✓).
@@ -1104,6 +1125,11 @@ impl Workspace {
             cx.stop_propagation();
             return;
         }
+        if self.settings_panel.open {
+            self.on_settings_key(ev, window, cx);
+            cx.stop_propagation();
+            return;
+        }
         if self.search_focus.is_focused(window) && self.on_search_key(ev, window, cx) {
             cx.stop_propagation();
             return;
@@ -1153,6 +1179,7 @@ impl Workspace {
             (true, "o") => self.toggle_connections(window, cx),
             (true, "m") => self.toggle_mcp(window, cx),
             (true, "r") => self.reconnect_active(cx),
+            (false, ",") => self.toggle_settings(None, window, cx),
             (_, "=" | "+") => self.set_font_size(self.settings.font_size + FONT_STEP, cx),
             (false, "-") => self.set_font_size(self.settings.font_size - FONT_STEP, cx),
             (false, "0") => self.set_font_size(Settings::default().font_size, cx),
@@ -1456,6 +1483,7 @@ impl Render for Workspace {
         let palette = self.palette.as_ref().map(|p| self.render_palette(p, cx));
         let connections = self.connections.open.then(|| self.render_connections(cx));
         let mcp = self.mcp.open.then(|| self.render_mcp(cx));
+        let settings = self.settings_panel.open.then(|| self.render_settings(cx));
         let link_menu = self.render_link_menu(cx);
         self.sync_web_visibility();
         v_flex()
@@ -1500,6 +1528,7 @@ impl Render for Workspace {
             .children(self.render_exact_overlay(cx))
             .children(connections)
             .children(mcp)
+            .children(settings)
             .children(link_menu)
     }
 }

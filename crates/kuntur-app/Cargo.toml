@@ -39,6 +39,8 @@ serde_json = { workspace = true }
 kuntur-audit = { path = "../kuntur-audit" }
 kuntur-mcp = { path = "../kuntur-mcp" }
 wry = { workspace = true }
+# Ajustes v0.2: idioma del sistema (Windows, Linux y Mac).
+sys-locale = "0.3"
 
 [target.'cfg(windows)'.dependencies]
 # Notificaciones de Windows (alertas, F5).

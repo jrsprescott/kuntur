@@ -206,6 +206,7 @@ impl Workspace {
         // Integración F10-F11: Conexiones y el gestor de MCP no se abren a la vez (cada uno se
         // queda con todo el teclado).
         self.mcp.open = false;
+        self.settings_panel.open = false;
         self.connections.open = true;
         self.connections.confirm_delete = None;
         window.focus(&self.focus, cx);

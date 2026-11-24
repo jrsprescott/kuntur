@@ -291,6 +291,7 @@ impl Workspace {
         self.reload_mcp_config();
         self.palette = None;
         self.connections.open = false;
+        self.settings_panel.open = false;
         self.mcp.open = true;
         self.mcp.input = None;
         window.focus(&self.focus, cx);
