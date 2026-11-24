@@ -30,6 +30,8 @@ pub struct Settings {
     pub theme: String,
     pub sidebar: SidebarMode,
     pub font_size: f32,
+    /// Sugerencias en gris mientras se escribe en el prompt (Tab o → aceptan).
+    pub autocompletado: bool,
     pub sessions: Vec<SessionConfig>,
 }
 
@@ -39,6 +41,7 @@ impl Default for Settings {
             theme: "dark".into(),
             sidebar: SidebarMode::Icons,
             font_size: 14.0,
+            autocompletado: true,
             sessions: Vec::new(),
         }
     }
@@ -103,6 +106,7 @@ mod tests {
             theme: "blue".into(),
             sidebar: SidebarMode::Full,
             font_size: 15.0,
+            autocompletado: false,
             sessions: vec![
                 SessionConfig {
                     name: "web".into(),
@@ -154,6 +158,16 @@ name = \"web\"
         // Y sin alto propio no se escribe el campo.
         let text = toml::to_string_pretty(&s).unwrap();
         assert!(!text.contains("dock_ratio"));
+    }
+
+    #[test]
+    fn autocompletado_encendido_por_defecto() {
+        let path = tmp("autocompletado");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, "theme = \"blue\"\n").unwrap();
+        assert!(Settings::load(&path).autocompletado);
+        std::fs::write(&path, "autocompletado = false\n").unwrap();
+        assert!(!Settings::load(&path).autocompletado);
     }
 
     #[test]

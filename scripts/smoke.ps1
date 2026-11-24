@@ -16,6 +16,10 @@
   .\scripts\smoke.ps1 -Sessions 1 -Usage 30 -Theme dark -Out target\smoke-usage.png
 .EXAMPLE
   .\scripts\smoke.ps1 -Sessions 2 -Commands 'cd C:\Windows' -Dock reopen -DockCommands 'Get-Location' -Out target\smoke-dock.png
+.EXAMPLE
+  .\scripts\smoke.ps1 -Sessions 1 -Commands 'cls' -Type 'cd C:\Win' -Out target\smoke-ghost.png
+.EXAMPLE
+  .\scripts\smoke.ps1 -Sessions 1 -Commands 'cls' -History 'git status --short','git log --oneline -5' -Type 'git l' -Out target\smoke-ghost-hist.png
 #>
 param(
     [string[]]$Commands = @('Write-Host rojo -ForegroundColor Red; Write-Host verde -ForegroundColor Green', 'Get-ChildItem | Select-Object -First 5'),
@@ -40,6 +44,11 @@ param(
     [ValidateSet('', 'open', 'reopen')][string]$Dock = '',
     # Comandos que se escriben en la terminal acoplada (desde dentro de la app, como -Commands).
     [string[]]$DockCommands = @(),
+    # Texto que se escribe en la primera sesión DESPUÉS de los comandos y SIN Enter, para capturar
+    # el autocompletado en gris (texto fantasma).
+    [string]$Type = '',
+    # Historial SINTÉTICO del autocompletado (en memoria; nunca se lee ni escribe el historial real).
+    [string[]]$History = @(),
     # Pantalla donde se abre la ventana, contando de izquierda a derecha desde 0. Por defecto, la de
     # más a la derecha que NO sea la principal (en la PC del usuario: el monitor Teros), para no
     # interrumpir lo que pasa en la principal. La ventana se abre sin tomar el foco.
@@ -99,6 +108,8 @@ if ($Panel) { $smokeEnv.KUNTUR_SMOKE_PANEL = $Panel }
 if ($Usage) { $smokeEnv.KUNTUR_SMOKE_USAGE = $Usage }
 if ($Dock) { $smokeEnv.KUNTUR_SMOKE_DOCK = $Dock }
 if ($Dock -and $DockCommands.Count -gt 0) { $smokeEnv.KUNTUR_SMOKE_DOCK_INPUT = ($DockCommands -join '\n') }
+if ($Type) { $smokeEnv.KUNTUR_SMOKE_TYPE = $Type }
+if ($History.Count -gt 0) { $smokeEnv.KUNTUR_SMOKE_HISTORY = ($History -join '\n') }
 foreach ($k in $smokeEnv.Keys) { Set-Item "Env:$k" $smokeEnv[$k] }
 $p = Start-Process $exe -PassThru
 foreach ($k in $smokeEnv.Keys) { Remove-Item "Env:$k" }
@@ -118,6 +129,7 @@ if (-not $enPantalla) { Stop-Process -Id $p.Id -Force; throw 'La ventana no se a
 $dockWait = 0
 if ($Dock) { $dockWait = 5 + $DockCommands.Count }
 if ($Dock -eq 'reopen') { $dockWait += 3 }
+if ($Type) { $dockWait += 2 }
 Start-Sleep -Seconds ($WaitSec + $Commands.Count + $dockWait)
 
 $r = New-Object KunturSmoke+RECT; [KunturSmoke]::GetClientRect($p.MainWindowHandle, [ref]$r) | Out-Null

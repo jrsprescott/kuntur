@@ -15,6 +15,7 @@ kuntur-config = { path = "../kuntur-config" }
 kuntur-agents = { path = "../kuntur-agents" }
 kuntur-usage = { path = "../kuntur-usage" }
 kuntur-files = { path = "../kuntur-files" }
+kuntur-complete = { path = "../kuntur-complete" }
 gpui-kit = { workspace = true }
 smol = { workspace = true }
 sysinfo = { workspace = true }

@@ -2,8 +2,22 @@
 //! - OSC 7: `ESC ] 7 ; file://host/C:/ruta` (estándar de facto; bash/zsh/fish, ruta en URL).
 //! - OSC 9;9: `ESC ] 9 ; 9 ; "C:\ruta"` (Windows Terminal / ConEmu; PowerShell, cmd con `prompt`).
 //!
+//! Y además las marcas de integración de shell OSC 133 (`A` prompt, `B` entrada, `C` comando,
+//! `D;código` fin), ver [`crate::shell`].
+//!
 //! Terminadas en BEL (`0x07`) o ST (`ESC \`). El escáner no altera los bytes: solo mira el flujo
 //! antes de que llegue al emulador, y guarda estado porque una secuencia puede partirse entre lecturas.
+
+use crate::shell::ShellMark;
+
+/// Algo que el shell informó por OSC.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum OscEvent {
+    /// Carpeta actual (OSC 7 / OSC 9;9).
+    Cwd(String),
+    /// Marca de integración de shell (OSC 133).
+    Mark(ShellMark),
+}
 
 /// Largo máximo de un OSC que se guarda; los más largos (p. ej. OSC 52 con un portapapeles grande)
 /// se ignoran sin acumular memoria.
@@ -38,8 +52,17 @@ impl CwdScanner {
 
     /// Procesa un trozo de salida y devuelve la última carpeta completa encontrada en él.
     pub fn feed(&mut self, bytes: &[u8]) -> Option<String> {
-        let mut found = None;
-        for &b in bytes {
+        self.feed_events(bytes).into_iter().rev().find_map(|(_, e)| match e {
+            OscEvent::Cwd(d) => Some(d),
+            OscEvent::Mark(_) => None,
+        })
+    }
+
+    /// Procesa un trozo de salida y devuelve cada aviso con la posición del trozo **justo después**
+    /// de su terminador (para alimentar el emulador hasta ahí y saber dónde quedó el cursor).
+    pub fn feed_events(&mut self, bytes: &[u8]) -> Vec<(usize, OscEvent)> {
+        let mut found = Vec::new();
+        for (i, &b) in bytes.iter().enumerate() {
             match self.state {
                 State::Ground => {
                     if b == ESC {
@@ -49,7 +72,7 @@ impl CwdScanner {
                 State::Esc => self.after_esc(b),
                 State::Osc => match b {
                     BEL => {
-                        found = self.finish().or(found);
+                        found.extend(self.finish().map(|e| (i + 1, e)));
                         self.state = State::Ground;
                     }
                     ESC => self.state = State::OscEsc,
@@ -58,7 +81,7 @@ impl CwdScanner {
                 },
                 State::OscEsc => {
                     if b == b'\\' {
-                        found = self.finish().or(found);
+                        found.extend(self.finish().map(|e| (i + 1, e)));
                         self.state = State::Ground;
                     } else {
                         // OSC interrumpido: ese ESC empieza otra secuencia.
@@ -82,11 +105,14 @@ impl CwdScanner {
         };
     }
 
-    fn finish(&mut self) -> Option<String> {
+    fn finish(&mut self) -> Option<OscEvent> {
         if self.overflow {
             return None;
         }
         let payload = String::from_utf8_lossy(&self.buf);
+        if let Some(mark) = payload.strip_prefix("133;").and_then(ShellMark::parse) {
+            return Some(OscEvent::Mark(mark));
+        }
         let path = if let Some(rest) = payload.strip_prefix("9;9;") {
             let rest = rest.trim();
             let unquoted = rest.strip_prefix('"').and_then(|r| r.strip_suffix('"')).unwrap_or(rest);
@@ -96,7 +122,7 @@ impl CwdScanner {
         } else {
             None
         };
-        path.filter(|p| !p.is_empty())
+        path.filter(|p| !p.is_empty()).map(OscEvent::Cwd)
     }
 }
 
@@ -213,5 +239,33 @@ mod tests {
         assert_eq!(s.feed(&grande), None);
         assert_eq!(s.feed(b"\x1b]9;9;C:\\despues\x07").as_deref(), Some(r"C:\despues"));
         assert_eq!(s.feed(b"\x1b]9;9;\x07"), None, "una ruta vacía no cuenta");
+    }
+
+    #[test]
+    fn marcas_osc_133_con_su_posicion() {
+        let (d, a, prompt, b) = (
+            &b"\x1b]133;D;1\x07"[..],
+            &b"\x1b]133;A\x1b\\"[..],
+            &b"PS C:\\> "[..],
+            &b"\x1b]133;B\x07"[..],
+        );
+        let chunk = [d, a, prompt, b].concat();
+        let mut s = CwdScanner::new();
+        assert_eq!(
+            s.feed_events(&chunk),
+            vec![
+                (d.len(), OscEvent::Mark(ShellMark::CommandEnd(Some(1)))),
+                (d.len() + a.len(), OscEvent::Mark(ShellMark::PromptStart)),
+                (chunk.len(), OscEvent::Mark(ShellMark::InputStart)),
+            ]
+        );
+        // `feed` sigue devolviendo solo carpetas.
+        assert_eq!(s.feed(b"\x1b]133;C\x07"), None);
+        // Partida entre lecturas: la posición es la del trozo donde termina.
+        assert!(s.feed_events(b"\x1b]13").is_empty());
+        assert_eq!(
+            s.feed_events(b"3;B\x07xy"),
+            vec![(4, OscEvent::Mark(ShellMark::InputStart))]
+        );
     }
 }

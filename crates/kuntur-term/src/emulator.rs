@@ -4,10 +4,12 @@ use alacritty_terminal::event::{Event, EventListener};
 use alacritty_terminal::grid::{Dimensions, Scroll};
 use alacritty_terminal::index::{Column, Line, Point, Side};
 use alacritty_terminal::selection::{Selection, SelectionType};
+use alacritty_terminal::term::cell::Flags;
 use alacritty_terminal::term::{Config, Osc52, Term, TermMode, viewport_to_point};
 use alacritty_terminal::vte::ansi::{Processor, StdSyncHandler};
 
 use crate::mouse::{MouseMode, MouseReporting};
+use crate::shell::AbsPoint;
 use crate::size::GridSize;
 
 /// Recibe los eventos que emite el emulador (respuestas a la terminal, portapapeles, título…).
@@ -160,6 +162,74 @@ impl Emulator {
     pub fn has_selection(&self) -> bool {
         self.term.selection.is_some()
     }
+
+    /// Posición del cursor en coordenadas absolutas (no cambian al desplazarse el historial).
+    pub fn cursor_abs(&self) -> AbsPoint {
+        let grid = self.term.grid();
+        let p = grid.cursor.point;
+        AbsPoint {
+            line: p.line.0 as i64 + grid.history_size() as i64,
+            col: p.column.0,
+        }
+    }
+
+    /// Fila de la pantalla visible para una línea absoluta (negativa o mayor que el alto si no se ve).
+    pub fn abs_to_row(&self, line: i64) -> i64 {
+        line - self.term.grid().history_size() as i64 + self.display_offset() as i64
+    }
+
+    /// Lo escrito desde `start` (marca `B` de OSC 133) hasta el cursor, si se puede leer con
+    /// seguridad: sin pantalla alterna, sin historial desplazado y en una sola línea lógica (las
+    /// filas intermedias deben estar cortadas solo por el ancho).
+    pub fn input_since(&self, start: AbsPoint) -> Option<InputLine> {
+        if self.mode().contains(TermMode::ALT_SCREEN) || self.display_offset() > 0 {
+            return None;
+        }
+        let grid = self.term.grid();
+        let cols = grid.columns();
+        let history = grid.history_size() as i64;
+        let cursor = self.cursor_abs();
+        if start > cursor || start.line < 0 || start.col > cols || cursor.line - start.line > 8 {
+            return None;
+        }
+        let row_of = |abs: i64| Line((abs - history) as i32);
+        let mut text = String::new();
+        for abs in start.line..=cursor.line {
+            let row = &grid[row_of(abs)];
+            let from = if abs == start.line { start.col } else { 0 };
+            let to = if abs == cursor.line { cursor.col.min(cols) } else { cols };
+            if abs != cursor.line && !row[Column(cols - 1)].flags.contains(Flags::WRAPLINE) {
+                return None;
+            }
+            for c in from..to {
+                let cell = &row[Column(c)];
+                if cell.flags.contains(Flags::WIDE_CHAR_SPACER) {
+                    continue;
+                }
+                text.push(if cell.c == '\0' { ' ' } else { cell.c });
+            }
+        }
+        let row = &grid[row_of(cursor.line)];
+        let at_end = !row[Column(cols - 1)].flags.contains(Flags::WRAPLINE)
+            && (cursor.col..cols).all(|c| matches!(row[Column(c)].c, ' ' | '\0'));
+        Some(InputLine {
+            text,
+            cursor_col: cursor.col,
+            cursor_row: (cursor.line - history) as usize,
+            at_end,
+        })
+    }
+}
+
+/// Lo que el usuario lleva escrito en el prompt.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InputLine {
+    pub text: String,
+    /// Posición del cursor en la pantalla visible.
+    pub cursor_col: usize,
+    pub cursor_row: usize,
+    /// No hay nada escrito a la derecha del cursor.
+    pub at_end: bool,
 }
 
 #[cfg(test)]
@@ -240,6 +310,43 @@ mod tests {
             })
             .collect();
         assert_eq!(copiado, vec!["hola".to_string()]);
+    }
+
+    #[test]
+    fn lee_lo_escrito_desde_la_marca() {
+        let mut emu = Emulator::new(GridSize::new(10, 3));
+        emu.feed(b"PS> ");
+        let start = emu.cursor_abs();
+        emu.feed(b"cd C:\\Win");
+        let l = emu.input_since(start).unwrap();
+        assert_eq!(l.text, "cd C:\\Win");
+        assert_eq!((l.cursor_col, l.cursor_row), (3, 1));
+        assert!(l.at_end);
+        // Cursor movido a la izquierda: ya no está al final.
+        emu.feed(b"\x1b[2D");
+        let l = emu.input_since(start).unwrap();
+        assert_eq!(l.text, "cd C:\\W");
+        assert!(!l.at_end);
+    }
+
+    #[test]
+    fn la_marca_sobrevive_al_desplazamiento() {
+        let mut emu = Emulator::new(GridSize::new(20, 2));
+        emu.feed(b"> ");
+        let start = emu.cursor_abs();
+        emu.feed(b"abc");
+        assert_eq!(emu.input_since(start).unwrap().text, "abc");
+        emu.feed(b"\r\nsalida\r\nmas");
+        assert_eq!(emu.input_since(start), None, "un salto real termina la entrada");
+        emu.feed(b"\r\n> ");
+        let start = emu.cursor_abs();
+        emu.feed(b"x");
+        assert_eq!(emu.input_since(start).unwrap().text, "x");
+        // Una entrada larga que se corta por el ancho y desplaza la pantalla.
+        emu.feed(b"123456789012345678901234");
+        assert_eq!(emu.input_since(start).unwrap().text, "x123456789012345678901234");
+        emu.feed(b"\x1b[?1049h");
+        assert_eq!(emu.input_since(start), None, "pantalla alterna: nada");
     }
 
     #[test]
