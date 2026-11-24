@@ -13,10 +13,10 @@ pub mod suggest;
 pub mod worktree;
 
 pub use alerts::{AgentKey, Alert, AlertKind, AlertTracker, Observation};
-pub use catalog::{AgentDef, Catalog, ExtraAgent, brand_color, parse_color};
+pub use catalog::{AgentDef, Catalog, ExtraAgent, ImagePaste, PasteKey, brand_color, parse_color};
 pub use exact::{ExactState, ExactTracker, PaneAgent, SubAgent};
 pub use kuntur_usage::AgentKind;
-pub use launch::{ShellFlavor, launch_line};
+pub use launch::{ShellFlavor, launch_line, quote_arg};
 pub use permission::{Answer, answer_keys, can_answer};
 pub use running::{AgentState, ProcInfo, RunningAgent, agents_under, find_agents, state_for};
 pub use suggest::{is_risky, one_line, suggested_commands};

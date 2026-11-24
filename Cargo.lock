@@ -4710,6 +4710,7 @@ version = "0.1.0"
 dependencies = [
  "embed-resource",
  "gpui-kit",
+ "image",
  "jiff",
  "kuntur-agents",
  "kuntur-audit",

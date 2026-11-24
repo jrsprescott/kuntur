@@ -207,6 +207,18 @@ texts! {
     ToastPermission => "pide permiso", "asks for permission";
     ToastFinished => "terminó", "finished";
     ToastSession => "Sesión", "Session";
+    // ── Imágenes como Warp (barra del agente) ──
+    ImagePick => "Imagen…", "Image…";
+    ImagePickTip => "Elegir una imagen para el agente", "Choose an image for the agent";
+    ImagePickPrompt => "Imagen para el agente", "Image for the agent";
+    ImageClearTip => "Quitar las miniaturas de la barra", "Remove the thumbnails from the bar";
+    ImageOpenPreview => "Abrir en la vista previa", "Open in the preview";
+    ImageSentTo => "Imagen enviada a", "Image sent to";
+    ImagePathPasted => "Imagen guardada; se pegó su ruta", "Image saved; its path was pasted";
+    ImageUploading => "Subiendo la imagen al servidor…", "Uploading the image to the server…";
+    ImageUploaded => "Imagen subida al servidor; se pegó su ruta", "Image uploaded to the server; its path was pasted";
+    ImageFailed => "No se pudo usar la imagen", "Could not use the image";
+    FilesPathsPasted => "Se pegaron las rutas", "The paths were pasted";
 }
 
 #[cfg(test)]

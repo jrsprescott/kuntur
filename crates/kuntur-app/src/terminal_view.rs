@@ -1,5 +1,6 @@
 mod blocks;
 pub(crate) mod ghost;
+mod image_bar;
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -12,6 +13,7 @@ use kuntur_term::{
 };
 
 mod links;
+pub use image_bar::PasteEvent;
 pub use links::LinkEvent;
 
 const LINE_HEIGHT_FACTOR: f32 = 1.3;
@@ -67,6 +69,8 @@ pub struct TerminalView {
     show_all_links: bool,
     /// Autocompletado en gris (ver `ghost.rs`).
     ghost: ghost::Ghost,
+    /// Barra del agente con las imágenes pegadas (ajustes v0.2, ver `image_bar.rs`).
+    image_bar: image_bar::ImageBar,
     _pump: Task<()>,
 }
 
@@ -75,6 +79,7 @@ fn to_color(c: Rgb8) -> Hsla {
 }
 
 impl EventEmitter<TerminalEvent> for TerminalView {}
+impl EventEmitter<PasteEvent> for TerminalView {}
 
 impl TerminalView {
     pub fn new(
@@ -140,6 +145,7 @@ impl TerminalView {
             last_mouse: None,
             show_all_links: false,
             ghost: ghost::Ghost::default(),
+            image_bar: image_bar::ImageBar::default(),
             _pump: pump,
         }
     }
@@ -301,10 +307,9 @@ impl TerminalView {
         }
     }
 
+    /// Ctrl+V: texto como siempre; una imagen o archivos copiados van al `Workspace` (ajustes v0.2).
     fn paste(&self, cx: &mut Context<Self>) {
-        if let Some(text) = cx.read_from_clipboard().and_then(|i| i.text()) {
-            let _ = self.pane.paste(&text);
-        }
+        self.paste_or_request(cx);
     }
 
     fn on_key(&mut self, ev: &KeyDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
@@ -319,6 +324,11 @@ impl TerminalView {
                 return;
             }
             (true, true, "v") | (true, false, "v") => {
+                self.paste(cx);
+                return;
+            }
+            // Mac: Cmd+V también pega (ajustes v0.2).
+            (false, _, "v") if cfg!(target_os = "macos") && m.platform => {
                 self.paste(cx);
                 return;
             }
@@ -564,9 +574,12 @@ impl Render for TerminalView {
             ok: to_color(self.palette.fg).opacity(0.25),
             error: to_color(self.palette.ansi[1]).opacity(0.85),
         };
+        let image_bar = self.render_image_bar(cx);
 
         div()
             .size_full()
+            .flex()
+            .flex_col()
             .bg(bg)
             // Aire alrededor del texto; la grilla se calcula con el tamaño real del lienzo.
             .pl(px(12.))
@@ -584,11 +597,17 @@ impl Render for TerminalView {
             .on_mouse_up_out(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_scroll(cx.listener(Self::on_wheel))
             .on_modifiers_changed(cx.listener(Self::on_modifiers))
+            // Ajustes v0.2: archivos soltados (una imagen con un agente abierto se le entrega como
+            // imagen, no como texto; ver `image_bar.rs`).
+            .on_drop(cx.listener(|_, paths: &ExternalPaths, _, cx| {
+                cx.emit(PasteEvent::Dropped(paths.paths().to_vec()));
+            }))
             .cursor(if self.hover_link.is_some() {
                 CursorStyle::PointingHand
             } else {
                 CursorStyle::Arrow
             })
+            .children(image_bar)
             .child(
                 canvas(
                     move |bounds, _window, _cx| {
@@ -624,7 +643,9 @@ impl Render for TerminalView {
                         }
                     },
                 )
-                .size_full(),
+                .w_full()
+                .flex_1()
+                .min_h_0(),
             )
     }
 }

@@ -3,12 +3,14 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod agents_panel;
+mod clipboard_image;
 mod command_palette;
 mod connections;
 mod dock;
 mod file_menu;
 mod i18n;
 mod idle;
+mod image_paste;
 mod keynav;
 mod marquee;
 mod monitor;
