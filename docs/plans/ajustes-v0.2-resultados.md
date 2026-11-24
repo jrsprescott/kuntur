@@ -31,10 +31,16 @@ MSI que las tenga) y los tooltips de la barra de título están en español e in
 - Para las capturas se agregaron `-Settings`, `-FileMenu` y `-PasteImage` a `smoke.ps1`. Ojo: `-AllowPrimary` solo
   funciona junto con `-Display <n>`.
 
+## Publicación
+- **0.2.0 publicada** el 2026-11-24 (versión preliminar): https://github.com/jrsprescott/kuntur/releases/tag/v0.2.0,
+  MSI generado desde `main` (4d2e3a2), sin rutas de la PC, SHA-256 `800DD4DB…F89A6A`.
+- Actualizador de punta a punta contra GitHub real ✅ (`kuntur-update/tests/github_real.rs`, manual): desde la 0.1.0
+  encuentra la 0.2.0, descarga el MSI completo y el SHA-256 coincide; firma "sin firmar" (se acepta mientras el
+  `kuntur.exe` en uso tampoco esté firmado). La 0.1.0 no trae actualizador: se pasa a la 0.2.0 a mano una vez.
+
 ## Pendiente
 - Pruebas manuales con agentes reales: Win+Shift+S → Ctrl+V dentro de `claude` (Windows lee `CF_DIB`), Codex,
   OpenCode y una pestaña SSH; título de Claude Code en la pestaña.
-- Actualizar de 0.2.0 a una 0.2.x publicada (prueba de punta a punta del actualizador).
 - Certificado de firma (SignPath Foundation o propio) — ver `docs/FIRMA.md`.
 - Árbol: portapapeles del sistema (copiar en Kuntur y pegar en el Explorador), selección múltiple, arrastrar dentro
   del árbol; "Buscar en la carpeta" y "Abrir línea de tiempo".
