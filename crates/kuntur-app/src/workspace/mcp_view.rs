@@ -213,6 +213,19 @@ impl Workspace {
         shell: ShellFlavor,
         cx: &mut Context<Self>,
     ) -> String {
+        self.agent_launch_line_with(session, def, shell, None, cx)
+    }
+
+    /// Igual que [`Self::agent_launch_line`], con claves extra para la configuración de OpenCode de
+    /// la sesión (ajustes v0.2.1: el proveedor y el modelo de una IA local).
+    pub(super) fn agent_launch_line_with(
+        &mut self,
+        session: u64,
+        def: &AgentDef,
+        shell: ShellFlavor,
+        opencode_extra: Option<serde_json::Value>,
+        cx: &mut Context<Self>,
+    ) -> String {
         let plain = || launch_line(&def.command, &def.args, shell);
         // Remota: el agente corre en el servidor y no vería los archivos de esta PC.
         if self.sessions.get(session).is_some_and(|e| e.value.remote.is_some()) {
@@ -228,7 +241,7 @@ impl Workspace {
             .unwrap_or_default();
         let catalog = self.settings.mcp.clone();
         let active = active_servers(&catalog, &list);
-        if active.is_empty() && options.is_empty() && !self.settings.mcp_exclusivo {
+        if active.is_empty() && options.is_empty() && !self.settings.mcp_exclusivo && opencode_extra.is_none() {
             return plain();
         }
         let Some(dir) = self.mcp_session_dir(session) else {
@@ -261,6 +274,7 @@ impl Workspace {
             session_dir: &dir,
             exclusive: self.settings.mcp_exclusivo,
             opencode_v2: self.settings.mcp_opencode_v2,
+            opencode_extra: opencode_extra.as_ref(),
             is_batch: &kuntur_mcp::probe::is_batch,
         };
         let mut plan = plan_launch(&input);

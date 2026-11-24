@@ -7,6 +7,7 @@ pub mod alerts;
 pub mod catalog;
 pub mod exact;
 pub mod launch;
+pub mod local;
 pub mod permission;
 pub mod running;
 pub mod suggest;
@@ -17,6 +18,7 @@ pub use catalog::{AgentDef, Catalog, ExtraAgent, ImagePaste, PasteKey, brand_col
 pub use exact::{ExactState, ExactTracker, PaneAgent, SubAgent};
 pub use kuntur_usage::AgentKind;
 pub use launch::{ShellFlavor, launch_line, quote_arg};
+pub use local::{LocalModel, LocalProvider, ProviderStatus};
 pub use permission::{Answer, answer_keys, can_answer};
 pub use running::{AgentState, ProcInfo, RunningAgent, agents_under, find_agents, state_for};
 pub use suggest::{is_risky, one_line, suggested_commands};

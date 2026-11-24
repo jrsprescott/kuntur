@@ -53,6 +53,9 @@ pub struct LaunchInput<'a> {
     /// Claude Code: `--strict-mcp-config`.
     pub exclusive: bool,
     pub opencode_v2: bool,
+    /// OpenCode: claves extra para su configuración de la sesión (ajustes v0.2.1: proveedor y
+    /// modelo de una IA local). Se combinan con los MCP en el mismo `opencode.json`.
+    pub opencode_extra: Option<&'a serde_json::Value>,
     /// ¿El comando es un `.cmd`/`.bat` (como `npx` en Windows)? Entonces va con `cmd /c`.
     pub is_batch: &'a dyn Fn(&str) -> bool,
 }
@@ -177,7 +180,9 @@ pub fn plan_launch(input: &LaunchInput) -> LaunchPlan {
         }
         Cli::OpenCode => {
             let permissions = input.options.permissions;
-            if let Some(json) = generate::opencode_json(&servers, input.opencode_v2, permissions) {
+            if let Some(json) =
+                generate::opencode_json_with(&servers, input.opencode_v2, permissions, input.opencode_extra)
+            {
                 let path = dir.join("opencode.json");
                 let p = path.to_string_lossy().into_owned();
                 match input.shell {
@@ -260,6 +265,7 @@ mod tests {
             session_dir: Path::new(r"C:\Datos\Kuntur\mcp\10-1"),
             exclusive,
             opencode_v2: false,
+            opencode_extra: None,
             is_batch: &|c: &str| c == "npx",
         }
     }

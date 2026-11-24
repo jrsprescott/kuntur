@@ -10,3 +10,5 @@ license.workspace = true
 kuntur-usage = { path = "../kuntur-usage" }
 kuntur-hook = { path = "../kuntur-hook" }
 sysinfo = { workspace = true }
+# Ajustes v0.2.1: respuestas JSON de LM Studio / Ollama y la configuración de OpenCode.
+serde_json = { workspace = true }

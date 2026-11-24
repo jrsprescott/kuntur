@@ -4701,6 +4701,7 @@ version = "0.2.0"
 dependencies = [
  "kuntur-hook",
  "kuntur-usage",
+ "serde_json",
  "sysinfo 0.40.4",
 ]
 
