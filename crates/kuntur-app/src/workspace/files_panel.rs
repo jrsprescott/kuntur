@@ -10,6 +10,8 @@ use kuntur_files::{FileEntry, Listing, format_modified, format_size, list_dir};
 use super::*;
 
 const ROW: f32 = 26.0;
+/// Columna de la fecha (alineada a la derecha).
+const DATE_COL: f32 = 50.0;
 
 #[derive(Default)]
 pub(super) struct FilesState {
@@ -57,11 +59,9 @@ impl Workspace {
                 .spawn(async move { list_dir(&task_dir).map_err(|e| e.to_string()) })
                 .await;
             let _ = this.update(cx, |w, cx| {
-                if w.files.dir.as_deref() == Some(dir.as_path()) {
-                    if w.files.listing.as_ref() != Some(&result) {
-                        w.files.listing = Some(result);
-                        cx.notify();
-                    }
+                if w.files.dir.as_deref() == Some(dir.as_path()) && w.files.listing.as_ref() != Some(&result) {
+                    w.files.listing = Some(result);
+                    cx.notify();
                 }
                 w.files.task = None;
             });
@@ -144,19 +144,25 @@ impl Workspace {
             )
             .when(away, |this| {
                 this.child(
-                    icon_button("files-home", IconName::SquareTerminal, c, "Volver a la carpeta de la sesión")
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            if let Some(f) = this.files.follow.clone() {
-                                this.open_dir(f, cx);
-                            }
-                        })),
+                    icon_button(
+                        "files-home",
+                        IconName::SquareTerminal,
+                        c,
+                        "Volver a la carpeta de la sesión",
+                    )
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        if let Some(f) = this.files.follow.clone() {
+                            this.open_dir(f, cx);
+                        }
+                    })),
                 )
             });
 
         let body: AnyElement = match &self.files.listing {
             None => div().into_any_element(),
-            Some(Err(_)) => empty_note(c, "No se pudo leer la carpeta", "Puede faltar permiso o ya no existir")
-                .into_any_element(),
+            Some(Err(_)) => {
+                empty_note(c, "No se pudo leer la carpeta", "Puede faltar permiso o ya no existir").into_any_element()
+            }
             Some(Ok(l)) if l.entries.is_empty() => empty_note(c, "Carpeta vacía", "").into_any_element(),
             Some(Ok(l)) => {
                 let count = l.entries.len();
@@ -210,6 +216,8 @@ impl Workspace {
                 let (click, right) = (entry.clone(), entry.path.clone());
                 h_flex()
                     .id(("file", range.start + i))
+                    // Sin ancho completo, el nombre no se estira y la fecha queda pegada a él.
+                    .w_full()
                     .h(px(ROW))
                     .px(px(8.))
                     .gap(px(8.))
@@ -251,7 +259,8 @@ impl Workspace {
                             .text_size(px(11.))
                             .text_color(c.muted)
                             .when_some(size, |this, s| this.child(s))
-                            .child(div().w(px(38.)).flex().justify_end().child(date)),
+                            // Cabe "abr 2024" (fechas de otro año), la más ancha de `format_modified`.
+                            .child(div().w(px(DATE_COL)).flex().justify_end().child(date)),
                     )
                     .into_any_element()
             })

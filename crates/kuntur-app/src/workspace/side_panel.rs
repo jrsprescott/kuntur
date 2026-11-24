@@ -8,7 +8,7 @@ use kuntur_agents::AgentState;
 use super::files_panel::empty_note;
 use super::title_bar::state_dot;
 use super::*;
-use crate::agents_panel::{counts, filter_rows, format_elapsed, ring_pct, ring_tooltip};
+use crate::agents_panel::{RingLevel, counts, filter_rows, format_elapsed, ring_pct, ring_tooltip};
 
 /// Lado de la celda de un agente instalado; la insignia va dentro del anillo.
 const INSTALLED_TILE: f32 = 32.0;
@@ -109,7 +109,10 @@ impl Workspace {
 
         let list: AnyElement = if shown.is_empty() {
             let (title, hint) = if rows.is_empty() {
-                ("No hay agentes corriendo", "Abre claude, codex, opencode… en una sesión")
+                (
+                    "No hay agentes corriendo",
+                    "Abre claude, codex, opencode… en una sesión",
+                )
             } else if !self.agent_query.trim().is_empty() {
                 ("Ningún agente coincide", "Prueba con otro nombre de agente o sesión")
             } else if self.agent_filter == AgentFilter::Waiting {
@@ -149,7 +152,9 @@ impl Workspace {
     fn render_search(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = &self.colors;
         let focused = self.search_focus.is_focused(window);
-        let caret = div().w(px(1.5)).h(px(14.)).flex_shrink_0().bg(c.accent);
+        // `Div` no implementa `Clone`: el cursor se construye cada vez que se usa.
+        let accent = c.accent;
+        let caret = move || div().w(px(1.5)).h(px(14.)).flex_shrink_0().bg(accent);
         let query = self.agent_query.clone();
         div().px(px(10.)).pt(px(10.)).pb(px(4.)).child(
             h_flex()
@@ -162,7 +167,11 @@ impl Workspace {
                 .rounded(px(7.))
                 .bg(c.hover)
                 .border_1()
-                .border_color(if focused { c.accent.opacity(0.6) } else { c.hover.opacity(0.) })
+                .border_color(if focused {
+                    c.accent.opacity(0.6)
+                } else {
+                    c.hover.opacity(0.)
+                })
                 .cursor_text()
                 .on_click(cx.listener(|this, _, window, cx| {
                     window.focus(&this.search_focus, cx);
@@ -178,11 +187,11 @@ impl Workspace {
                         .overflow_hidden()
                         .map(|this| {
                             if query.is_empty() {
-                                this.when(focused, |this| this.child(caret.clone()))
+                                this.when(focused, |this| this.child(caret()))
                                     .child(div().ml(px(1.)).text_color(c.muted).child("Buscar agentes"))
                             } else {
                                 this.child(div().text_color(c.text).child(query.clone()))
-                                    .when(focused, |this| this.child(caret.clone()))
+                                    .when(focused, |this| this.child(caret()))
                             }
                         }),
                 )
@@ -290,7 +299,13 @@ impl Workspace {
             .items_center()
             .rounded(px(8.))
             .cursor_pointer()
-            .map(|this| if in_active { this.bg(c.surface_2) } else { this.hover(move |s| s.bg(hover)) })
+            .map(|this| {
+                if in_active {
+                    this.bg(c.surface_2)
+                } else {
+                    this.hover(move |s| s.bg(hover))
+                }
+            })
             .on_click(cx.listener(move |this, _, window, cx| this.activate(sid, window, cx)))
             .when(in_active, |this| this.child(accent_bar(c.accent, 20.)))
             .child(badge(r.kind, 26., 7.))
@@ -393,7 +408,14 @@ impl Workspace {
                     })
                     .on_click(cx.listener(|this, _, _, cx| this.toggle_files(cx)))
                     .when(files_on, |this| this.child(accent_bar(c.accent, 18.)))
-                    .child(Icon::new(if files_on { IconName::FolderOpen } else { IconName::Folder }).size(px(16.)))
+                    .child(
+                        Icon::new(if files_on {
+                            IconName::FolderOpen
+                        } else {
+                            IconName::Folder
+                        })
+                        .size(px(16.)),
+                    )
                     .child("Archivos"),
             )
     }
@@ -403,12 +425,14 @@ impl Workspace {
     fn installed_tile(&self, kind: AgentKind) -> AnyElement {
         let c = &self.colors;
         let name = kuntur_agents::info(kind).map_or("Agente", |i| i.name);
-        let limits = (kind == AgentKind::Codex).then_some(self.codex_limits.as_ref()).flatten();
+        let limits = (kind == AgentKind::Codex)
+            .then_some(self.codex_limits.as_ref())
+            .flatten();
         let pct = ring_pct(limits);
         let tip: SharedString = ring_tooltip(name, limits).into();
-        let color = match pct {
-            Some(p) if p >= 90.0 => c.error,
-            Some(p) if p >= 75.0 => c.warn,
+        let color = match pct.map(RingLevel::from_pct) {
+            Some(RingLevel::Critical) => c.error,
+            Some(RingLevel::High) => c.warn,
             _ => c.accent,
         };
         let track = c.muted.opacity(0.25);
@@ -468,7 +492,13 @@ impl Workspace {
                             .flex()
                             .items_center()
                             .justify_center()
-                            .map(|this| if is_active { this.bg(c.surface_2) } else { this.hover(move |s| s.bg(hover)) })
+                            .map(|this| {
+                                if is_active {
+                                    this.bg(c.surface_2)
+                                } else {
+                                    this.hover(move |s| s.bg(hover))
+                                }
+                            })
                             .child(badge(r.kind, 26., 7.))
                             .child(
                                 div()

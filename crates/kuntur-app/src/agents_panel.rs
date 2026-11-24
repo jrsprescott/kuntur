@@ -96,6 +96,28 @@ pub fn ring_pct(limits: Option<&Limits>) -> Option<f32> {
         .map(|p| p.clamp(0.0, 100.0) as f32)
 }
 
+/// Nivel del anillo según el porcentaje usado: decide su color (acento / aviso / error).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RingLevel {
+    Normal,
+    /// Desde 75 %.
+    High,
+    /// Desde 90 %.
+    Critical,
+}
+
+impl RingLevel {
+    pub fn from_pct(pct: f32) -> Self {
+        if pct >= 90.0 {
+            RingLevel::Critical
+        } else if pct >= 75.0 {
+            RingLevel::High
+        } else {
+            RingLevel::Normal
+        }
+    }
+}
+
 /// Texto del tooltip de un agente instalado: "Codex · 5 h: 12 % · semanal: 44 %" o, sin datos,
 /// "Codex · sin datos de límite".
 pub fn ring_tooltip(name: &str, limits: Option<&Limits>) -> String {
@@ -157,7 +179,10 @@ mod tests {
         let r = rows();
         assert_eq!(filter_rows(&r, AgentFilter::All, "codex")[0].session_name, "api");
         assert_eq!(filter_rows(&r, AgentFilter::All, "CLAUDE web").len(), 1);
-        assert_eq!(filter_rows(&r, AgentFilter::All, "documentacion")[0].kind, AgentKind::OpenCode);
+        assert_eq!(
+            filter_rows(&r, AgentFilter::All, "documentacion")[0].kind,
+            AgentKind::OpenCode
+        );
         assert!(filter_rows(&r, AgentFilter::All, "claude api").is_empty());
         // La búsqueda se combina con el filtro.
         assert!(filter_rows(&r, AgentFilter::Working, "codex").is_empty());
@@ -195,14 +220,28 @@ mod tests {
     }
 
     #[test]
+    fn color_del_anillo_por_umbral() {
+        assert_eq!(RingLevel::from_pct(0.0), RingLevel::Normal);
+        assert_eq!(RingLevel::from_pct(74.9), RingLevel::Normal);
+        assert_eq!(RingLevel::from_pct(75.0), RingLevel::High);
+        assert_eq!(RingLevel::from_pct(89.9), RingLevel::High);
+        assert_eq!(RingLevel::from_pct(90.0), RingLevel::Critical);
+        assert_eq!(RingLevel::from_pct(100.0), RingLevel::Critical);
+    }
+
+    #[test]
     fn tooltip_del_anillo() {
         assert_eq!(
             ring_tooltip("Codex", Some(&limits(Some(12.4), Some(44.0)))),
             "Codex · 5 h: 12 % · semanal: 44 %"
         );
-        assert_eq!(ring_tooltip("Codex", Some(&limits(None, None))), "Codex · sin datos de límite");
+        assert_eq!(
+            ring_tooltip("Codex", Some(&limits(None, None))),
+            "Codex · sin datos de límite"
+        );
         assert_eq!(ring_tooltip("Claude Code", None), "Claude Code · sin datos de límite");
         assert_eq!(window_label(300), "5 h");
+        assert_eq!(window_label(1_440), "diario");
         assert_eq!(window_label(10_080), "semanal");
         assert_eq!(window_label(2_880), "2 d");
         assert_eq!(window_label(45), "45 min");

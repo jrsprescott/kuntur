@@ -161,9 +161,7 @@ impl Workspace {
                     .when(is_active, |this| this.font_weight(FontWeight::MEDIUM))
                     .child(name.to_string()),
             )
-            .when_some(state, |this, state| {
-                this.child(state_dot(c, state, 6.))
-            })
+            .when_some(state, |this, state| this.child(state_dot(c, state, 6.)))
             .child(
                 div()
                     .id(("tab-close", id))
@@ -175,7 +173,9 @@ impl Workspace {
                     .justify_center()
                     .text_color(c.muted)
                     .hover(move |s| s.bg(hover))
-                    .when(!is_active, |this| this.opacity(0.).group_hover(group, |s| s.opacity(1.)))
+                    .when(!is_active, |this| {
+                        this.opacity(0.).group_hover(group, |s| s.opacity(1.))
+                    })
                     .tooltip(|window, cx| Tooltip::new("Cerrar sesión (Ctrl+Shift+W)").build(window, cx))
                     .on_click(cx.listener(move |this, _, window, cx| {
                         cx.stop_propagation();
@@ -206,12 +206,8 @@ fn usage_button(c: &UiColors) -> impl IntoElement {
 
 /// Punto de estado: trabajando = acento, esperando = ámbar.
 pub(super) fn state_dot(c: &UiColors, state: AgentState, size: f32) -> Div {
-    div()
-        .size(px(size))
-        .flex_shrink_0()
-        .rounded_full()
-        .bg(match state {
-            AgentState::Working => c.accent,
-            AgentState::Waiting => c.warn,
-        })
+    div().size(px(size)).flex_shrink_0().rounded_full().bg(match state {
+        AgentState::Working => c.accent,
+        AgentState::Waiting => c.warn,
+    })
 }

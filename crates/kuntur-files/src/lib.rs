@@ -79,11 +79,7 @@ fn is_hidden(_meta: &std::fs::Metadata) -> bool {
 /// Carpetas primero; dentro de cada grupo, por nombre sin distinguir mayúsculas (y luego tal cual,
 /// para que el orden sea estable).
 pub fn sort_entries(entries: &mut [FileEntry]) {
-    entries.sort_by(|a, b| {
-        b.is_dir
-            .cmp(&a.is_dir)
-            .then_with(|| compare_names(&a.name, &b.name))
-    });
+    entries.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then_with(|| compare_names(&a.name, &b.name)));
 }
 
 fn compare_names(a: &str, b: &str) -> Ordering {

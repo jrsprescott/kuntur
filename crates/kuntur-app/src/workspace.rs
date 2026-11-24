@@ -91,9 +91,7 @@ enum PanelView {
 
 /// Segundos Unix de ahora.
 fn now_secs() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs())
+    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs())
 }
 
 impl Workspace {
@@ -690,7 +688,6 @@ impl Workspace {
     fn session_title(&self, view: &Entity<TerminalView>, cx: &App) -> Option<String> {
         view.read(cx).title().map(short_title).filter(|t| !t.is_empty())
     }
-
 }
 
 /// Botón de un solo ícono: gris en reposo, color de texto y fondo sutil al pasar el mouse.
@@ -928,6 +925,9 @@ impl Workspace {
             .px(px(12.))
             .gap(px(12.))
             .items_center()
+            // Mismo fondo que la terminal: sin él se ve el degradado de la ventana sin oscurecer
+            // (en Blue, una franja más clara que el resto).
+            .bg(c.terminal)
             .border_t_1()
             .border_color(c.border)
             .text_size(px(11.))

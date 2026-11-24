@@ -10,6 +10,8 @@
   .\scripts\smoke.ps1 -Sessions 3 -Theme blue -Out target\smoke-blue.png
 .EXAMPLE
   .\scripts\smoke.ps1 -Sessions 2 -Theme white -Palette -PaletteQuery 'tema' -Out target\smoke-palette.png
+.EXAMPLE
+  .\scripts\smoke.ps1 -Sessions 1 -Panel files -Out target\smoke-files.png
 #>
 param(
     [string[]]$Commands = @('Write-Host rojo -ForegroundColor Red; Write-Host verde -ForegroundColor Green', 'Get-ChildItem | Select-Object -First 5'),
@@ -24,7 +26,9 @@ param(
     # -PaletteRename la abre ya en "Renombrar sesión" (el texto se agrega al nombre actual).
     [switch]$Palette,
     [string]$PaletteQuery = '',
-    [switch]$PaletteRename
+    [switch]$PaletteRename,
+    # Panel izquierdo: completo, compacto (solo íconos) o en "Archivos". Vacío = el de la configuración.
+    [ValidateSet('', 'full', 'compact', 'files')][string]$Panel = ''
 )
 $ErrorActionPreference = 'Stop'
 $root = Resolve-Path (Join-Path $PSScriptRoot '..')
@@ -60,6 +64,7 @@ if ($Sessions -gt 0) { $smokeEnv.KUNTUR_SMOKE_SESSIONS = "$Sessions" }
 if ($Theme) { $smokeEnv.KUNTUR_SMOKE_THEME = $Theme }
 if ($Palette -or $PaletteQuery -or $PaletteRename) { $smokeEnv.KUNTUR_SMOKE_PALETTE = $(if ($PaletteRename) { 'rename' } else { '1' }) }
 if ($PaletteQuery) { $smokeEnv.KUNTUR_SMOKE_PALETTE_QUERY = $PaletteQuery }
+if ($Panel) { $smokeEnv.KUNTUR_SMOKE_PANEL = $Panel }
 foreach ($k in $smokeEnv.Keys) { Set-Item "Env:$k" $smokeEnv[$k] }
 $p = Start-Process $exe -PassThru
 foreach ($k in $smokeEnv.Keys) { Remove-Item "Env:$k" }
