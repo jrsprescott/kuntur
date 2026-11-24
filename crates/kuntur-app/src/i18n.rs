@@ -192,6 +192,21 @@ texts! {
     ToastPermission => "pide permiso", "asks for permission";
     ToastFinished => "terminó", "finished";
     ToastSession => "Sesión", "Session";
+    // ── Actualizaciones ──
+    Updates => "Actualizaciones", "Updates";
+    UpdatesAuto => "Buscar actualizaciones automáticamente", "Check for updates automatically";
+    UpdatesAutoHint => "Al abrir Kuntur y cada 24 h, en GitHub", "When Kuntur opens and every 24 h, on GitHub";
+    UpdatesCheckNow => "Buscar ahora", "Check now";
+    UpdatesVersion => "Versión instalada", "Installed version";
+    UpdatesChecking => "Buscando…", "Checking…";
+    UpdatesUpToDate => "Kuntur está al día", "Kuntur is up to date";
+    UpdatesAvailable => "disponible", "available";
+    UpdatesInstall => "Actualizar", "Update";
+    UpdatesDownloading => "Descargando", "Downloading";
+    UpdatesInstalling => "Abriendo el instalador…", "Starting the installer…";
+    UpdatesFailed => "No se pudo actualizar", "Could not update";
+    UpdatesOpenPage => "Ver la versión", "View release";
+    UpdatesTip => "Descarga el instalador, verifica su SHA-256 y su firma, y lo ejecuta", "Downloads the installer, checks its SHA-256 and signature, and runs it";
 }
 
 #[cfg(test)]

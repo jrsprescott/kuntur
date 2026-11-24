@@ -14,6 +14,7 @@ pub mod release;
 pub mod signature;
 
 pub use release::{Asset, Release, Update, choose_update, parse_releases};
+pub use semver::Version;
 
 /// Repositorio de las versiones publicadas.
 pub const REPO: &str = "jrsprescott/kuntur";

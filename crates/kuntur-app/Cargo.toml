@@ -38,6 +38,7 @@ jiff = { workspace = true }
 serde_json = { workspace = true }
 kuntur-audit = { path = "../kuntur-audit" }
 kuntur-mcp = { path = "../kuntur-mcp" }
+kuntur-update = { path = "../kuntur-update" }
 wry = { workspace = true }
 # Ajustes v0.2: idioma del sistema (Windows, Linux y Mac).
 sys-locale = "0.3"
