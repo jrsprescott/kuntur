@@ -183,9 +183,9 @@ impl Default for Settings {
 }
 
 impl Settings {
-    /// `%APPDATA%\Kuntur\config.toml`
+    /// `config.toml` en la carpeta de configuración (`%APPDATA%\Kuntur` en Windows; ver `dirs`).
     pub fn default_path() -> Option<PathBuf> {
-        std::env::var_os("APPDATA").map(|d| PathBuf::from(d).join("Kuntur").join("config.toml"))
+        crate::dirs::config_dir().map(|d| d.join("config.toml"))
     }
 
     /// Nunca falla: si no hay archivo o está roto, devuelve los valores por defecto.

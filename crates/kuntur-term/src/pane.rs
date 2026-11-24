@@ -34,6 +34,27 @@ impl PaneOptions {
     /// del usuario, si lo hay) para que además informe la carpeta actual con OSC 9;9, como Windows
     /// Terminal, y las marcas de prompt OSC 133; lo que el usuario ve no cambia.
     pub fn default_shell(size: GridSize) -> Self {
+        #[cfg(not(windows))]
+        {
+            // Linux/Mac (ajustes v0.2): el shell del usuario ($SHELL), con sesión de login.
+            let program = std::env::var("SHELL")
+                .ok()
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or_else(|| "/bin/bash".into());
+            Self {
+                program,
+                args: vec!["-l".into()],
+                cwd: None,
+                size,
+                env: Vec::new(),
+            }
+        }
+        #[cfg(windows)]
+        Self::powershell(size)
+    }
+
+    #[cfg(windows)]
+    fn powershell(size: GridSize) -> Self {
         let program = if find_in_path("pwsh.exe") {
             "pwsh.exe"
         } else {
@@ -63,6 +84,7 @@ impl PaneOptions {
 /// - `ESC ] 9 ; 9 ; "<carpeta>" ESC \` (carpeta actual, como Windows Terminal),
 /// - `ESC ] 133 ; A ESC \` antes del prompt y `ESC ] 133 ; B ESC \` después: ahí empieza lo que
 ///   escribe el usuario (ver [`crate::shell`]).
+#[cfg_attr(not(windows), allow(dead_code))]
 const PROMPT_HOOK: &str = concat!(
     "$global:__kunturPrompt = $function:prompt; $global:__kunturId = -1; ",
     "function global:prompt { ",
@@ -79,6 +101,7 @@ const PROMPT_HOOK: &str = concat!(
     "$d + $w + $e + ']133;A' + $t + $o + $e + ']133;B' + $t }"
 );
 
+#[cfg_attr(not(windows), allow(dead_code))]
 fn find_in_path(exe: &str) -> bool {
     std::env::var_os("PATH")
         .map(|p| std::env::split_paths(&p).any(|d| d.join(exe).is_file()))

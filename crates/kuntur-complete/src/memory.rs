@@ -22,9 +22,9 @@ pub struct Memory {
 }
 
 impl Memory {
-    /// `%APPDATA%\Kuntur\historial`
+    /// `historial` en la carpeta de configuración (`%APPDATA%\Kuntur` en Windows).
     pub fn default_dir() -> Option<PathBuf> {
-        std::env::var_os("APPDATA").map(|d| PathBuf::from(d).join("Kuntur").join("historial"))
+        kuntur_config::dirs::config_dir().map(|d| d.join("historial"))
     }
 
     /// Sin archivos.

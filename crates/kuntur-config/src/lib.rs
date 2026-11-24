@@ -1,6 +1,7 @@
 //! Configuración de Kuntur: temas (`themes/*.toml`) y ajustes persistentes.
 
 pub mod connections;
+pub mod dirs;
 pub mod mcp;
 pub mod settings;
 
