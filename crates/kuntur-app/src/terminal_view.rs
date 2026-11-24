@@ -153,6 +153,12 @@ impl TerminalView {
         });
     }
 
+    /// Escribe `text` como si se pegara (con bracketed paste si el programa lo pidió). F7: rutas
+    /// subidas "para el agente".
+    pub fn paste_text(&self, text: &str) {
+        let _ = self.pane.paste(text);
+    }
+
     pub fn set_palette(&mut self, palette: Palette, background: Hsla, cx: &mut Context<Self>) {
         self.palette = palette;
         self.background = background;

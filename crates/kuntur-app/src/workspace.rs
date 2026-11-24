@@ -9,6 +9,7 @@ mod dock_view;
 mod files_panel;
 mod side_panel;
 mod title_bar;
+mod transfers_view;
 mod usage_view;
 
 use std::path::PathBuf;
@@ -232,6 +233,8 @@ impl Workspace {
         }
         // Prueba de humo del gestor de conexiones (conexiones sintéticas).
         this.smoke_connections(window, cx);
+        // Prueba de humo del árbol remoto y la cola de transferencias (datos sintéticos, F7).
+        this.smoke_files(cx);
         this
     }
 

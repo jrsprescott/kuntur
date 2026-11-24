@@ -22,7 +22,7 @@ use kuntur_config::Settings;
 use workspace::Workspace;
 
 // Íconos que no vienen en el paquete por defecto de gpui-kit.
-gpui_kit::assets::icon_assets!(ExtraIcons, [Command, ChartColumn, Server, Pencil, Trash]);
+gpui_kit::assets::icon_assets!(ExtraIcons, [Command, ChartColumn, Server, Pencil, Trash, Download]);
 
 /// Íconos por defecto de gpui-kit + los que agrega Kuntur.
 struct KunturAssets;

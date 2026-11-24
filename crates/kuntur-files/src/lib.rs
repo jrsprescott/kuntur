@@ -1,11 +1,22 @@
-//! Panel Archivos: listado de una carpeta local (carpetas primero), tamaños y fechas para mostrar.
-//! Sin UI: la app lo llama en un hilo aparte.
+//! Panel Archivos: listado de una carpeta (carpetas primero), tamaños y fechas para mostrar, el
+//! trait [`FileSystem`] (local, SFTP, memoria) y la cola de [`transfer`]encias. Sin UI: la app lo
+//! llama fuera del hilo de la interfaz.
 //!
-//! Más adelante: SFTP (russh-sftp), WSL, cola de transferencias, portapapeles de archivos
-//! (CF_HDROP) y arrastre hacia el Explorador (ver docs/PLAN.md §5.6).
+//! Más adelante: portapapeles de archivos (CF_HDROP) y arrastre hacia el Explorador
+//! (ver docs/PLAN.md §5.6).
 
 use std::cmp::Ordering;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+
+pub mod fs;
+pub mod memory;
+pub mod path;
+pub mod transfer;
+
+pub use fs::{FileSystem, LocalFs};
+pub use memory::MemoryFs;
+pub use path::{PathStyle, agent_dir, conflict_name, location_label, posix_quote_all};
+pub use transfer::{Conflict, Direction, Job, JobId, JobState, Queue, Summary, Transfers};
 
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
@@ -16,12 +27,31 @@ pub const MAX_ENTRIES: usize = 2000;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FileEntry {
     pub name: String,
-    pub path: PathBuf,
+    /// Ruta completa en el estilo de su sistema de archivos (Windows o POSIX).
+    pub path: String,
     pub is_dir: bool,
     /// Bytes (0 en carpetas).
     pub size: u64,
     /// Última modificación, segundos Unix.
     pub modified: Option<i64>,
+}
+
+impl FileEntry {
+    /// Entrada a partir de los metadatos locales.
+    pub fn from_metadata(name: String, path: String, meta: &std::fs::Metadata) -> Self {
+        let is_dir = meta.is_dir();
+        Self {
+            name,
+            path,
+            is_dir,
+            size: if is_dir { 0 } else { meta.len() },
+            modified: meta
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs() as i64),
+        }
+    }
 }
 
 /// Resultado de listar una carpeta.
@@ -46,18 +76,11 @@ pub fn list_dir(dir: &Path) -> std::io::Result<Listing> {
             truncated = true;
             break;
         }
-        let is_dir = meta.is_dir();
-        entries.push(FileEntry {
-            name: entry.file_name().to_string_lossy().into_owned(),
-            path: entry.path(),
-            is_dir,
-            size: if is_dir { 0 } else { meta.len() },
-            modified: meta
-                .modified()
-                .ok()
-                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                .map(|d| d.as_secs() as i64),
-        });
+        entries.push(FileEntry::from_metadata(
+            entry.file_name().to_string_lossy().into_owned(),
+            entry.path().to_string_lossy().into_owned(),
+            &meta,
+        ));
     }
     sort_entries(&mut entries);
     Ok(Listing { entries, truncated })
@@ -161,7 +184,7 @@ mod tests {
     fn entry(name: &str, is_dir: bool) -> FileEntry {
         FileEntry {
             name: name.into(),
-            path: PathBuf::from(name),
+            path: name.into(),
             is_dir,
             size: 0,
             modified: None,

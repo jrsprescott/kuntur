@@ -18,6 +18,8 @@
   .\scripts\smoke.ps1 -Sessions 2 -Commands 'cd C:\Windows' -Dock reopen -DockCommands 'Get-Location' -Out target\smoke-dock.png
 .EXAMPLE
   .\scripts\smoke.ps1 -Sessions 1 -Connections list -Out target\smoke-conexiones.png
+.EXAMPLE
+  .\scripts\smoke.ps1 -Sessions 1 -Connections remote -Files remote -Out target\smoke-archivos-remotos.png
 #>
 param(
     [string[]]$Commands = @('Write-Host rojo -ForegroundColor Red; Write-Host verde -ForegroundColor Green', 'Get-ChildItem | Select-Object -First 5'),
@@ -46,6 +48,9 @@ param(
     # panel, 'form' el formulario de edición y 'remote' una pestaña remota a un puerto sin servidor
     # (muestra el error y la franja "Desconectado · Reconectar"). Nunca usa ~/.ssh ni credenciales.
     [ValidateSet('', 'list', 'form', 'remote')][string]$Connections = '',
+    # Panel "Archivos" (F7). 'remote' (con -Connections remote) muestra un árbol remoto SINTÉTICO en
+    # memoria y una cola de transferencias sintética; nunca un servidor real. 'local' = el árbol local.
+    [ValidateSet('', 'local', 'remote')][string]$Files = '',
     # Pantalla donde se abre la ventana, contando de izquierda a derecha desde 0. Por defecto, la de
     # más a la derecha que NO sea la principal (en la PC del usuario: el monitor Teros), para no
     # interrumpir lo que pasa en la principal. La ventana se abre sin tomar el foco.
@@ -106,6 +111,7 @@ if ($Usage) { $smokeEnv.KUNTUR_SMOKE_USAGE = $Usage }
 if ($Dock) { $smokeEnv.KUNTUR_SMOKE_DOCK = $Dock }
 if ($Dock -and $DockCommands.Count -gt 0) { $smokeEnv.KUNTUR_SMOKE_DOCK_INPUT = ($DockCommands -join '\n') }
 if ($Connections) { $smokeEnv.KUNTUR_SMOKE_CONNECTIONS = $Connections }
+if ($Files) { $smokeEnv.KUNTUR_SMOKE_FILES = $Files }
 foreach ($k in $smokeEnv.Keys) { Set-Item "Env:$k" $smokeEnv[$k] }
 $p = Start-Process $exe -PassThru
 foreach ($k in $smokeEnv.Keys) { Remove-Item "Env:$k" }
