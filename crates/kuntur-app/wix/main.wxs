@@ -108,12 +108,29 @@
                     <RemoveRegistryKey Root='HKCU' Key='Software\Kuntur\Installer' Action='removeOnUninstall'/>
                 </Component>
             </Directory>
+            <!-- Ajustes v0.2: acceso directo en el escritorio (el público, por ser instalación por
+                 máquina), con el mismo ícono y AUMID; se quita al desinstalar. -->
+            <Directory Id='DesktopFolder'>
+                <Component Id='DesktopShortcut' Guid='*'>
+                    <Shortcut
+                        Id='DesktopShortcut'
+                        Name='Kuntur'
+                        Description='Terminal for AI coding agents'
+                        Target='[APPLICATIONFOLDER]kuntur.exe'
+                        WorkingDirectory='APPLICATIONFOLDER'
+                        Icon='KunturIco'
+                        IconIndex='0'>
+                        <ShortcutProperty Key='System.AppUserModel.ID' Value='Kuntur.Kuntur'/>
+                    </Shortcut>
+                    <RegistryValue Root='HKCU' Key='Software\Kuntur\Installer' Name='DesktopShortcut' Type='integer' Value='1' KeyPath='yes'/>
+                </Component>
+            </Directory>
         </Directory>
 
         <Feature
             Id='Binaries'
             Title='Kuntur'
-            Description='Kuntur, kuntur-hook and the Start menu shortcut.'
+            Description='Kuntur, kuntur-hook and the Start menu and desktop shortcuts.'
             Level='1'
             ConfigurableDirectory='APPLICATIONFOLDER'
             AllowAdvertise='no'
@@ -125,6 +142,7 @@
             <ComponentRef Id='LicenseApacheTxt'/>
             <ComponentRef Id='AppUserModelId'/>
             <ComponentRef Id='StartMenuShortcut'/>
+            <ComponentRef Id='DesktopShortcut'/>
         </Feature>
         <SetProperty Id='ARPINSTALLLOCATION' Value='[APPLICATIONFOLDER]' After='CostFinalize'/>
 
