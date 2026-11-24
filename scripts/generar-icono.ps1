@@ -1,5 +1,7 @@
 ﻿<#
 .SYNOPSIS
+  (Reemplazado en v0.2.1 por scripts\icono-desde-png.py, que arma el ícono desde el diseño del cóndor en
+  assets\kunturv2.jpg. Este script queda como historia: si se corre, vuelve al ícono de la "K".)
   Genera assets\kuntur.ico: una "K" blanca sobre un cuadrado redondeado con el degradado del tema
   Blue, con un ala estilizada (el cóndor) en el trazo superior. Tamaños 16 a 256 px, cada uno como
   PNG dentro del .ico (Windows Vista o posterior). Solo hace falta correrlo si se cambia el diseño.
