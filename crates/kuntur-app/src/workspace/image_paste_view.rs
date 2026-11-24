@@ -388,7 +388,8 @@ async fn put_on_clipboard(png: Vec<u8>, cx: &mut AsyncApp) -> bool {
     #[cfg(not(windows))]
     {
         let image = gpui_kit::Image::from_bytes(gpui_kit::ImageFormat::Png, png);
-        cx.update(|cx| cx.write_to_clipboard(ClipboardItem::new_image(&image)))
-            .is_ok()
+        // En esta versión de GPUI `AsyncApp::update` devuelve el valor directamente (no un `Result`).
+        cx.update(|cx| cx.write_to_clipboard(ClipboardItem::new_image(&image)));
+        true
     }
 }
