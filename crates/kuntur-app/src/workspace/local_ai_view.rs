@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use kuntur_agents::local::{self, LocalModel, LocalProvider, ProviderStatus};
 
-use super::side_panel::badge;
+use super::side_panel::icon_badge;
 use super::*;
 use crate::i18n::{T, t};
 
@@ -351,7 +351,13 @@ impl Workspace {
             .gap(px(7.))
             .items_center()
             .rounded(px(6.))
-            .child(badge(provider.letter(), provider.color(), 16., 4.))
+            .child(icon_badge(
+                crate::agent_icons::for_agent(provider.id()),
+                provider.letter(),
+                provider.color(),
+                16.,
+                4.,
+            ))
             .child(div().flex_1().min_w_0().text_size(px(12.)).child(provider.name()))
             .child(
                 div()
@@ -488,7 +494,13 @@ impl Workspace {
                     .hover(move |s| s.bg(hover))
                     .tooltip(move |window, cx| Tooltip::new(tip.clone()).build(window, cx))
                     .on_click(cx.listener(|this, _, _, cx| this.set_sidebar(SidebarMode::Full, cx)))
-                    .child(badge(provider.letter(), provider.color(), 22., 11.))
+                    .child(icon_badge(
+                        crate::agent_icons::for_agent(provider.id()),
+                        provider.letter(),
+                        provider.color(),
+                        22.,
+                        11.,
+                    ))
                     .into_any_element()
             })
             .collect()
