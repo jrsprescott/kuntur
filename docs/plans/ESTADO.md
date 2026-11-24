@@ -6,10 +6,24 @@
 - Rama principal `main`: **Fases 1 y 2** (terminal real + sesiones, temas, paleta, persistencia). Estable.
 - Rama **`fase/f3-v5`**: Fase 3 (diseño v5) **terminada** (`docs/plans/f3-resultados.md`).
 - Rama de trabajo **`fase/f4-acoplada`** (sale de `fase/f3-v5`): Fase 4 · Terminal acoplada **terminada** (`docs/plans/f4-resultados.md`); faltan las pruebas manuales ⏳ del usuario. La **siguiente fase es F5** (agentes exactos, alertas y auditoría), que se empieza desde esta rama.
+- Rama **`fase/f8-vista-previa`** (sale de `fase/f4-acoplada`, en paralelo con otras fases): Fase 8 · Vista previa y diff **terminada para archivos locales** (`docs/plans/f8-resultados.md`; spike del visor web en `docs/plans/f8-spike-wry.md`); faltan las pruebas manuales ⏳ y los archivos remotos (dependen de F6/F7).
 - Planes: `docs/plans/README.md` (hoja de ruta), `docs/plans/2026-11-23-f3-v5-agentes-y-uso.md` y `docs/plans/2026-11-23-f4-terminal-acoplada.md`.
 - Diseño de referencia: `docs/PLAN.md` ("Cambios de la v4") y la simulación `docs/simulacion/index.html`.
 - **Especificación del usuario** (adoptada el 2026-11-23): `docs/ESPECIFICACION.md`, con las decisiones tomadas (se mantiene GPUI, costo estimado, spike de `wry`…). La hoja de ruta pasó a 11 fases (nueva F8 · Vista previa y diff).
 - **Decisión pendiente:** panel izquierdo con agentes arriba + árbol abajo a la vez (especificación §3) o el botón "Archivos" que alterna (actual). Se aplica en F7.
+
+## Fase 8: vista previa y diff (rama `fase/f8-vista-previa`)
+| Parte | Estado |
+|---|---|
+| Enlaces en la salida: lógica pura `crates/kuntur-term/src/links.rs` (URLs, rutas absolutas/relativas/entre comillas, `:línea`, solo si existen) | ✅ con pruebas |
+| Ctrl+mouse subraya, Ctrl+clic abre, clic derecho → menú (`terminal_view/links.rs`) | ✅ captura con `-Links` |
+| Crate `kuntur-preview` (tipo, lectura con límites, diff unificado, `git diff`, `notify`, LibreOffice) | ✅ con pruebas |
+| Panel `workspace/preview_view.rs`: división terminal \| vista previa, pestañas, separador, Markdown, imágenes/SVG, texto con números, diff a colores, recarga automática | ✅ capturas Dark/Blue |
+| Spike `wry` (WebView2 hijo de GPUI) | ✅ funciona: integrado para PDF/HTML (RAM aparte: ~141 MB HTML, ~256 MB PDF, 0 al cerrar) |
+| Office → PDF con LibreOffice | ✅ código y detección; sin probar con un documento real (LibreOffice no está instalado aquí) |
+| Archivos remotos por SFTP | ⏳ F6/F7 |
+
+Pruebas de humo: `.\scripts\smoke.ps1 -Sessions 1 -Preview 'crates\kuntur-preview\tests\datos\ejemplo.md'` (`-PreviewDiff`, `-PreviewEdit`, `-Links`); el spike: `.\spikes\wry-gpui\medir.ps1 -Step menu`.
 
 ## Fase 4: terminal acoplada
 | Parte | Estado |

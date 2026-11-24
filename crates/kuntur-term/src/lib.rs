@@ -4,6 +4,7 @@
 pub mod cwd;
 pub mod emulator;
 pub mod keys;
+pub mod links;
 pub mod mouse;
 pub mod palette;
 pub mod pane;
@@ -14,6 +15,7 @@ pub mod size;
 pub use cwd::CwdScanner;
 pub use emulator::{Emulator, EventSink, SelectionKind};
 pub use keys::{Key, Mods, encode_key};
+pub use links::{Link, LinkKind, LinkSpan, link_at, links_in_row};
 pub use mouse::{MouseAction, MouseButtonKind, MouseMode, MouseReport, MouseReporting, encode_mouse};
 pub use palette::{Palette, Rgb8};
 pub use pane::{Pane, PaneOptions};

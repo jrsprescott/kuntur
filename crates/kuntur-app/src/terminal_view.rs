@@ -8,6 +8,9 @@ use kuntur_term::{
     PaneOptions, Rgb8, Screen, SelectionKind, Side, TermMode, encode_key, encode_mouse,
 };
 
+mod links;
+pub use links::LinkEvent;
+
 const LINE_HEIGHT_FACTOR: f32 = 1.3;
 /// Contraste mínimo del texto contra su fondo (WCAG 3:1): ningún color de programa queda invisible.
 const MIN_CONTRAST: f32 = 3.0;
@@ -44,6 +47,10 @@ pub struct TerminalView {
     mouse_cell: Option<(usize, usize)>,
     title: Option<String>,
     exited: bool,
+    /// F8: enlace subrayado con Ctrl, última posición del mouse y modo de humo "todos".
+    hover_link: Option<links::HoverLink>,
+    last_mouse: Option<Point<Pixels>>,
+    show_all_links: bool,
     _pump: Task<()>,
 }
 
@@ -101,6 +108,9 @@ impl TerminalView {
             mouse_cell: None,
             title: None,
             exited: false,
+            hover_link: None,
+            last_mouse: None,
+            show_all_links: false,
             _pump: pump,
         }
     }
@@ -328,6 +338,9 @@ impl TerminalView {
 
     fn on_mouse_down(&mut self, ev: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         window.focus(&self.focus, cx);
+        if self.link_click(ev, window, cx) {
+            return;
+        }
         let m = self.metrics(window);
         let (col, row, side) = self.cell_at(ev.position, m);
 
@@ -365,6 +378,7 @@ impl TerminalView {
     }
 
     fn on_mouse_move(&mut self, ev: &MouseMoveEvent, window: &mut Window, cx: &mut Context<Self>) {
+        self.update_hover(ev.position, ev.modifiers, window, cx);
         let m = self.metrics(window);
         let (col, row, side) = self.cell_at(ev.position, m);
 
@@ -452,6 +466,7 @@ impl Render for TerminalView {
         let cursor_color = to_color(self.palette.cursor);
         // Con dos paneles (principal y acoplada) el cursor dice cuál tiene el teclado.
         let focused = self.focus.is_focused(window);
+        let links = self.underlined_links(&screen);
         let (family, font_size) = (self.font_family.clone(), px(self.font_size));
         let (pane, bounds_cell, size_cell) = (self.pane.clone(), self.bounds.clone(), self.last_size.clone());
 
@@ -473,6 +488,12 @@ impl Render for TerminalView {
             // Soltar fuera del área también termina la selección o el arrastre del programa.
             .on_mouse_up_out(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_scroll(cx.listener(Self::on_wheel))
+            .on_modifiers_changed(cx.listener(Self::on_modifiers))
+            .cursor(if self.hover_link.is_some() {
+                CursorStyle::PointingHand
+            } else {
+                CursorStyle::Arrow
+            })
             .child(
                 canvas(
                     move |bounds, _window, _cx| {
@@ -494,6 +515,7 @@ impl Render for TerminalView {
                             size: font_size,
                             cursor: cursor_color,
                             focused,
+                            links,
                         };
                         paint_screen(&screen, bounds, metrics, &style, window, cx)
                     },
@@ -509,6 +531,8 @@ struct TextStyleCfg {
     cursor: Hsla,
     /// Sin el teclado, el cursor se dibuja hueco.
     focused: bool,
+    /// Enlaces subrayados (fila, columna inicial, columna final exclusiva).
+    links: Vec<(usize, usize, usize)>,
 }
 
 fn paint_screen(
@@ -580,6 +604,17 @@ fn paint_screen(
             .text_system()
             .shape_line(text.into(), font_size, &runs, Some(m.cell_w));
         let _ = line.paint(point(bounds.origin.x, y), m.line_h, TextAlign::Left, None, window, cx);
+    }
+    // Enlaces (F8): subrayado del color del cursor.
+    for &(row, start, end) in &style.links {
+        let origin = point(
+            bounds.origin.x + m.cell_w * start as f32,
+            bounds.origin.y + m.line_h * (row + 1) as f32 - px(2.),
+        );
+        window.paint_quad(fill(
+            Bounds::new(origin, size(m.cell_w * (end - start) as f32, px(1.))),
+            cursor,
+        ));
     }
     // 3) Cursor: bloque semitransparente; hueco si el panel no tiene el teclado.
     if let Some((c, r)) = screen.cursor {

@@ -46,11 +46,14 @@ impl Workspace {
     ) -> Entity<TerminalView> {
         let palette = palette_from(&self.theme);
         let (family, size_pt, background) = (self.mono_font.clone(), self.settings.font_size, self.colors.terminal);
-        cx.new(|cx| {
+        let view = cx.new(|cx| {
             let mut v = TerminalView::new(window, cx, opts, palette.clone(), family, size_pt);
             v.set_palette(palette, background, cx);
             v
-        })
+        });
+        // F8: rutas y URLs de la salida (Ctrl+clic, clic derecho).
+        self.watch_links(&view, window, cx);
+        view
     }
 
     /// Panel que tiene el teclado ahora mismo en la sesión.

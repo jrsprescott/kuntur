@@ -6,6 +6,7 @@
 
 mod dock_view;
 mod files_panel;
+mod preview_view;
 mod side_panel;
 mod title_bar;
 mod usage_view;
@@ -31,6 +32,7 @@ use crate::terminal_view::{TerminalEvent, TerminalView};
 use crate::theme_bridge::{FALLBACK_MONO, FALLBACK_UI, UiColors, apply_to_kit, palette_from, pick_font};
 use dock_view::DockDrag;
 use files_panel::FilesState;
+use preview_view::PreviewState;
 use usage_view::UsageState;
 
 /// Panel izquierdo compacto (solo íconos) y completo.
@@ -91,6 +93,8 @@ pub struct Workspace {
     files: FilesState,
     /// Vista "Uso de agentes" (ocupa el área central mientras está abierta).
     usage: UsageState,
+    /// Vista previa de archivos (F8): divide la zona central cuando tiene pestañas.
+    preview: PreviewState,
     home: Option<PathBuf>,
     _monitor: Task<()>,
 }
@@ -132,6 +136,7 @@ impl Workspace {
             ram: None,
             files: FilesState::default(),
             usage: UsageState::default(),
+            preview: PreviewState::default(),
             home: home_dir(),
             _monitor: Self::spawn_monitor(cx),
         };
@@ -217,6 +222,9 @@ impl Workspace {
             let input = std::env::var("KUNTUR_SMOKE_DOCK_INPUT").ok();
             this.smoke_dock(delay, input, mode == "reopen", window, cx);
         }
+
+        // Prueba de humo de la vista previa (F8): archivos abiertos y enlaces subrayados.
+        this.smoke_preview(Duration::from_millis(2_500 + 600 * smoke_commands + 1_500), window, cx);
         this
     }
 
@@ -1044,6 +1052,8 @@ impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = self.colors.clone();
         let palette = self.palette.as_ref().map(|p| self.render_palette(p, cx));
+        let link_menu = self.render_link_menu(cx);
+        self.sync_web_visibility();
         v_flex()
             .relative()
             .size_full()
@@ -1073,12 +1083,14 @@ impl Render for Workspace {
                                 if self.usage.open {
                                     this.child(self.render_usage(cx))
                                 } else {
-                                    this.child(self.render_terminals(cx))
+                                    let terminals = self.render_terminals(cx);
+                                    this.child(self.render_with_preview(terminals, cx))
                                 }
                             }))
                             .child(self.render_status_line(cx)),
                     ),
             )
             .children(palette)
+            .children(link_menu)
     }
 }
