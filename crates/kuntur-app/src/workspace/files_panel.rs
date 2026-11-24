@@ -503,6 +503,11 @@ impl Workspace {
             });
         }
         self.sync_files(true, cx);
+        if self.files.smoke_fs.is_some() {
+            // Dentro de la carpeta del proyecto sintético.
+            self.files.dir = Some("/home/demo/proyecto".into());
+            self.load_files(cx);
+        }
     }
 
     // ── Dibujo ──────────────────────────────────────────────────────────────
@@ -990,7 +995,7 @@ pub(super) fn small_button(id: impl Into<ElementId>, label: &'static str, color:
     div()
         .id(id)
         .h(px(22.))
-        .px(px(8.))
+        .px(px(6.))
         .flex()
         .items_center()
         .rounded(px(6.))

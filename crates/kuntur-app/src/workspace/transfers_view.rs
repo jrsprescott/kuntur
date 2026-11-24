@@ -20,15 +20,15 @@ impl Workspace {
         let s = self.files.transfers.summary();
         let title = if s.active > 0 {
             format!(
-                "Transferencias · {} en curso · {} de {}",
+                "{} en curso · {} / {}",
                 s.active,
                 format_size(s.done_bytes),
                 format_size(s.total_bytes)
             )
         } else if s.asking > 0 {
-            "Transferencias · esperan respuesta".to_string()
+            "Esperan respuesta".to_string()
         } else {
-            "Transferencias · terminadas".to_string()
+            "Transferencias terminadas".to_string()
         };
         // Varias preguntas a la vez: la respuesta vale para todas.
         let for_all = s.asking > 1;
