@@ -57,10 +57,6 @@ const ICON_BUTTON: f32 = 28.0;
 const TITLE_PAD_LEFT: f32 = (PANEL_COMPACT - ICON_BUTTON) / 2.0;
 const STATUS_LINE: f32 = 22.0;
 const UI_TEXT: f32 = 12.5;
-/// Cada cuánto se leen procesos y memoria; las lecturas lentas (instalados, límites), cada
-/// `SLOW_EVERY` vueltas.
-const TICK: Duration = Duration::from_secs(2);
-const SLOW_EVERY: u32 = 15;
 
 const PALETTE_WIDTH: f32 = 520.0;
 /// Paso de Ctrl+= / Ctrl+- (puntos).
@@ -116,6 +112,8 @@ pub struct Workspace {
     codex_limits: Option<Limits>,
     /// Memoria de trabajo de Kuntur (bytes).
     ram: Option<u64>,
+    /// Lo último que el monitor dibujó: si una lectura no cambia nada visible, no se redibuja.
+    visible: crate::idle::VisibleTracker,
     files: FilesState,
     /// Vista "Uso de agentes" (ocupa el área central mientras está abierta).
     usage: UsageState,
@@ -191,6 +189,7 @@ impl Workspace {
             window_active: window.is_window_active(),
             codex_limits: None,
             ram: None,
+            visible: crate::idle::VisibleTracker::default(),
             files: FilesState::default(),
             usage: UsageState::default(),
             audit: AuditState::new(cx),
@@ -339,17 +338,21 @@ impl Workspace {
 
     // ── Lecturas en segundo plano ───────────────────────────────────────────
 
-    /// Cada 2 s, fuera del hilo de la UI: agentes de cada sesión y RAM; cada 30 s, agentes
-    /// instalados y límites de Codex. La UI solo recibe el resultado.
+    /// Cada 2 s (5 s con la ventana sin foco), fuera del hilo de la UI: agentes de cada sesión y
+    /// RAM; cada 30 s, agentes instalados y límites de Codex. La UI solo recibe el resultado y
+    /// solo se redibuja si cambió algo visible (ver `idle.rs`).
     fn spawn_monitor(cx: &mut Context<Self>) -> Task<()> {
         cx.spawn(async move |this, cx| {
             let mut sampler = Sampler::new();
-            let mut tick: u32 = 0;
+            let mut last_slow: Option<std::time::Instant> = None;
             loop {
                 let Ok((shells, catalog)) = this.update(cx, |w, cx| (w.shell_pids(cx), w.catalog.clone())) else {
                     break;
                 };
-                let slow = tick.is_multiple_of(SLOW_EVERY);
+                let slow = crate::idle::slow_due(last_slow.map(|t| t.elapsed()));
+                if slow {
+                    last_slow = Some(std::time::Instant::now());
+                }
                 let (back, sample, slow) = cx
                     .background_executor()
                     .spawn(async move {
@@ -358,11 +361,15 @@ impl Workspace {
                     })
                     .await;
                 sampler = back;
-                if this.update(cx, |w, cx| w.apply_sample(sample, slow, cx)).is_err() {
+                let Ok(active) = this.update(cx, |w, cx| {
+                    w.apply_sample(sample, slow, cx);
+                    w.window_active
+                }) else {
                     break;
-                }
-                cx.background_executor().timer(TICK).await;
-                tick = tick.wrapping_add(1);
+                };
+                cx.background_executor()
+                    .timer(crate::idle::monitor_interval(active))
+                    .await;
             }
         })
     }
@@ -401,7 +408,44 @@ impl Workspace {
         }
         self.check_alerts(cx);
         self.sync_files(false, cx);
-        cx.notify();
+        let now = self.visible_snapshot(cx);
+        if self.visible.changed(now) {
+            cx.notify();
+        }
+    }
+
+    /// Lo que se ve de las lecturas del monitor (y lo que cambia sin avisar: carpeta de la
+    /// terminal con el foco, estado de las pestañas remotas).
+    fn visible_snapshot(&self, cx: &App) -> crate::idle::Visible {
+        let now = now_secs();
+        let rows = self
+            .agent_rows(cx)
+            .into_iter()
+            .map(|r| {
+                let since = r.exact.as_ref().map_or(r.started_at, |e| e.since);
+                let elapsed = crate::agents_panel::format_elapsed(now.saturating_sub(since));
+                (r, elapsed)
+            })
+            .collect();
+        let mut status = vec![
+            self.focused_cwd(cx)
+                .map(|p| p.display().to_string())
+                .unwrap_or_default(),
+        ];
+        for e in self.sessions.iter() {
+            if let Some(r) = &e.value.remote {
+                status.push(format!("{}:{:?}:{:?}", e.id, r.main.state(), r.session.agents()));
+            }
+        }
+        crate::idle::Visible {
+            rows,
+            ram_mb: crate::idle::ram_mb(self.ram),
+            installed: self.installed.clone(),
+            codex_limits: self.codex_limits.clone(),
+            status,
+            ..Default::default()
+        }
+        .with_badges(self.badges.iter().map(|(&k, &v)| (k, v)))
     }
 
     /// La terminal (principal o acoplada) de una sesión.
@@ -1361,9 +1405,7 @@ impl Workspace {
             Some(r) => format!("{r}:{}", p.display()),
             None => kuntur_files::display_path(&p, self.home.as_deref()),
         });
-        let ram = self
-            .ram
-            .map(|b| format!("Kuntur · {} MB", (b as f64 / (1024.0 * 1024.0)).round() as u64));
+        let ram = crate::idle::ram_mb(self.ram).map(|mb| format!("Kuntur · {mb} MB"));
         h_flex()
             .h(px(STATUS_LINE))
             .flex_shrink_0()

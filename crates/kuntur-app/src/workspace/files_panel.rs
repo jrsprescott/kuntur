@@ -184,22 +184,32 @@ impl Workspace {
                 if w.files.session != Some(id) || w.files.dir != requested {
                     return;
                 }
-                match result {
+                // La carpeta se vuelve a leer en cada vuelta del monitor: solo se redibuja si cambió
+                // lo que se ve (carpeta, listado o error), no en cada lectura igual a la anterior.
+                let changed = match result {
                     Ok((fs, dir, listing)) => {
+                        let changed = w.files.fs_error.is_some()
+                            || w.files.dir.as_ref() != Some(&dir)
+                            || w.files.listing.as_ref() != Some(&listing);
                         w.files.fs = Some(fs);
                         w.files.fs_error = None;
                         w.files.dir = Some(dir);
                         if w.files.listing.as_ref() != Some(&listing) {
                             w.files.listing = Some(listing);
                         }
+                        changed
                     }
                     Err(e) => {
+                        let changed = w.files.fs_error.as_ref() != Some(&e) || w.files.listing.is_some();
                         w.files.fs = None;
                         w.files.fs_error = Some(e);
                         w.files.listing = None;
+                        changed
                     }
+                };
+                if changed {
+                    cx.notify();
                 }
-                cx.notify();
             });
         }));
     }

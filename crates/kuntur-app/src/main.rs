@@ -6,6 +6,7 @@ mod agents_panel;
 mod command_palette;
 mod connections;
 mod dock;
+mod idle;
 mod keynav;
 mod monitor;
 mod notify;
