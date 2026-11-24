@@ -143,6 +143,7 @@ impl Workspace {
         self.sessions.push(
             name,
             Session {
+                manual_name: false,
                 view,
                 shell: None,
                 dock: None,

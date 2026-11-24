@@ -10,6 +10,7 @@ mod file_menu;
 mod i18n;
 mod idle;
 mod keynav;
+mod marquee;
 mod monitor;
 mod notify;
 mod sessions;

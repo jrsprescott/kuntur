@@ -100,6 +100,8 @@ texts! {
     SidePanel => "Panel lateral", "Side panel";
     SidePanelFull => "Completo", "Full";
     SidePanelIcons => "Íconos", "Icons";
+    Marquee => "Desplazar el título de la pestaña", "Scroll the tab title";
+    MarqueeHint => "En la pestaña activa, si no entra; se detiene con el mouse", "On the active tab, when it doesn't fit; hovering stops it";
     Language => "Idioma", "Language";
     LanguageAuto => "Automático", "Automatic";
     Notifications => "Notificaciones", "Notifications";

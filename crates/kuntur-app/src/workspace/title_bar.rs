@@ -10,6 +10,23 @@ use super::*;
 /// Ancho máximo de una pestaña (el nombre se corta con elipsis).
 const TAB_MAX: f32 = 200.0;
 const TAB_HEIGHT: f32 = 26.0;
+/// Ancho máximo del texto de una pestaña (lo demás: ícono, punto de estado, insignia y ×).
+const TAB_TEXT_MAX: f32 = 118.0;
+
+/// Marquesina del título de la pestaña activa (ajustes v0.2): solo se mueve si el texto no entra,
+/// con la ventana enfocada, sin el mouse encima y con `marquesina = true`. Fuera de eso no hay
+/// temporizador (nada se redibuja en reposo).
+#[derive(Default)]
+pub(super) struct TabMarquee {
+    session: Option<u64>,
+    text: String,
+    /// Ancho del texto menos el visible (≤ 0: entra).
+    overflow: f32,
+    hovered: bool,
+    clock: crate::marquee::Marquee,
+    /// Hay un temporizador corriendo.
+    ticking: bool,
+}
 
 impl Workspace {
     pub(super) fn panel_width(&self) -> f32 {
@@ -25,6 +42,71 @@ impl Workspace {
         self.exact_session_state(id, cx)
     }
 
+    fn marquee_running(&self) -> bool {
+        let m = &self.tab_marquee;
+        self.settings.marquesina && self.window_active && !m.hovered && m.overflow > 0.0
+    }
+
+    /// Antes de dibujar: mide el título de la pestaña activa (solo cuando cambia) y, si hace falta,
+    /// arranca el temporizador de la marquesina, que se detiene solo cuando ya no corresponde.
+    pub(super) fn update_marquee(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let active = self.sessions.active_id();
+        let text = active.map(|id| self.tab_label(id, cx)).unwrap_or_default();
+        if self.tab_marquee.session != active || self.tab_marquee.text != text {
+            let overflow = if text.is_empty() {
+                0.0
+            } else {
+                let mut f = font(self.ui_font.clone());
+                f.weight = FontWeight::MEDIUM;
+                let run = TextRun {
+                    len: text.len(),
+                    font: f,
+                    color: self.colors.text,
+                    background_color: None,
+                    underline: None,
+                    strikethrough: None,
+                };
+                let width = window
+                    .text_system()
+                    .shape_line(text.clone().into(), px(UI_TEXT), &[run], None)
+                    .width;
+                f32::from(width) - TAB_TEXT_MAX
+            };
+            let m = &mut self.tab_marquee;
+            m.session = active;
+            m.text = text;
+            m.overflow = overflow;
+            m.hovered = false;
+            m.clock.reset();
+        }
+        if self.marquee_running() && !self.tab_marquee.ticking {
+            self.tab_marquee.ticking = true;
+            cx.spawn(async move |this, cx| {
+                loop {
+                    cx.background_executor()
+                        .timer(Duration::from_millis(crate::marquee::TICK_MS))
+                        .await;
+                    let go = this
+                        .update(cx, |w, cx| {
+                            if !w.marquee_running() {
+                                w.tab_marquee.ticking = false;
+                                return false;
+                            }
+                            let overflow = w.tab_marquee.overflow;
+                            w.tab_marquee.clock.tick(overflow);
+                            cx.notify();
+                            true
+                        })
+                        .unwrap_or(false);
+                    if !go {
+                        break;
+                    }
+                }
+            })
+            .detach();
+        }
+    }
+
     pub(super) fn render_title_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let c = &self.colors;
         let panel_tip = match self.settings.sidebar {
@@ -36,7 +118,7 @@ impl Workspace {
             .sessions
             .iter()
             .enumerate()
-            .map(|(i, e)| self.render_tab(i, e.id, &e.name, Some(e.id) == active, cx))
+            .map(|(i, e)| self.render_tab(i, e.id, &self.tab_label(e.id, cx), Some(e.id) == active, cx))
             .collect();
 
         TitleBar::new()
@@ -150,7 +232,8 @@ impl Workspace {
         let tip: SharedString = {
             let mut parts = vec![name.to_string()];
             parts.extend(remote.clone());
-            parts.extend(title);
+            // El título completo (si la pestaña ya lo muestra, no se repite).
+            parts.extend(title.filter(|t| t != name));
             match alerts {
                 0 => {}
                 1 => parts.push("1 alerta sin ver".into()),
@@ -208,15 +291,7 @@ impl Workspace {
                 .size(px(14.))
                 .flex_shrink_0(),
             )
-            .child(
-                div()
-                    .min_w_0()
-                    .whitespace_nowrap()
-                    .overflow_hidden()
-                    .text_ellipsis()
-                    .when(is_active, |this| this.font_weight(FontWeight::MEDIUM))
-                    .child(name.to_string()),
-            )
+            .child(self.render_tab_text(id, name, is_active, cx))
             .when_some(state.filter(|_| alerts == 0), |this, state| {
                 this.child(state_dot(c, state, 6.))
             })
@@ -241,6 +316,45 @@ impl Workspace {
                         this.close_session(id, window, cx);
                     }))
                     .child(Icon::new(IconName::Close).size(px(12.))),
+            )
+            .into_any_element()
+    }
+}
+
+impl Workspace {
+    /// Texto de la pestaña: con elipsis; en la activa, si no entra, la marquesina (se detiene con el
+    /// mouse encima; el tooltip de la pestaña muestra el título completo).
+    fn render_tab_text(&self, id: u64, name: &str, is_active: bool, cx: &mut Context<Self>) -> AnyElement {
+        let m = &self.tab_marquee;
+        let scrolling = is_active && self.settings.marquesina && m.session == Some(id) && m.overflow > 0.0;
+        if !scrolling {
+            return div()
+                .min_w_0()
+                .max_w(px(TAB_TEXT_MAX))
+                .whitespace_nowrap()
+                .overflow_hidden()
+                .text_ellipsis()
+                .when(is_active, |this| this.font_weight(FontWeight::MEDIUM))
+                .child(name.to_string())
+                .into_any_element();
+        }
+        div()
+            .id(("tab-text", id))
+            .w(px(TAB_TEXT_MAX))
+            .flex_shrink_0()
+            .overflow_hidden()
+            .whitespace_nowrap()
+            .font_weight(FontWeight::MEDIUM)
+            .on_hover(cx.listener(|this, hovered: &bool, _, cx| {
+                this.tab_marquee.hovered = *hovered;
+                cx.notify();
+            }))
+            .child(
+                div()
+                    .relative()
+                    .left(px(-m.clock.offset()))
+                    .whitespace_nowrap()
+                    .child(name.to_string()),
             )
             .into_any_element()
     }

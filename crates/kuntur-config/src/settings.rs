@@ -87,6 +87,9 @@ pub struct SessionConfig {
     /// Perfil cuyas opciones (modelo, esfuerzo, permisos) se usan al lanzar agentes aquí.
     #[serde(rename = "perfil", default, skip_serializing_if = "Option::is_none")]
     pub profile: Option<String>,
+    /// El usuario la renombró: su nombre gana sobre el título del agente (ajustes v0.2).
+    #[serde(rename = "nombre_manual", default, skip_serializing_if = "std::ops::Not::not")]
+    pub manual_name: bool,
 }
 
 impl SessionConfig {
@@ -129,6 +132,8 @@ pub struct Settings {
     pub alerts: bool,
     /// Sugerencias en gris mientras se escribe en el prompt (Tab o → aceptan).
     pub autocompletado: bool,
+    /// El título de la pestaña activa se desplaza si no entra (ajustes v0.2).
+    pub marquesina: bool,
     /// Claude Code: además de `--mcp-config`, `--strict-mcp-config` (ignora los MCP del usuario y del
     /// proyecto; solo los de la sesión).
     pub mcp_exclusivo: bool,
@@ -167,6 +172,7 @@ impl Default for Settings {
             font_size: 14.0,
             alerts: true,
             autocompletado: true,
+            marquesina: true,
             mcp_exclusivo: false,
             mcp_opencode_v2: false,
             mcp_perfil_inicial: None,
@@ -484,6 +490,28 @@ letra = \"M\"
         let s = Settings::load(&path);
         assert_eq!(s.language, Language::Auto);
         assert_eq!(s.notifications.interval_min, NotificationSettings::MAX_INTERVAL_MIN);
+    }
+
+    #[test]
+    fn marquesina_y_nombre_manual() {
+        let path = tmp("nombre-manual");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        // Archivo viejo: marquesina encendida y nombres sin la marca.
+        std::fs::write(&path, "[[sessions]]
+name = \"web\"
+").unwrap();
+        let s = Settings::load(&path);
+        assert!(s.marquesina);
+        assert!(!s.sessions[0].manual_name);
+        // La marca solo se escribe si es verdadera.
+        assert!(!toml::to_string_pretty(&s).unwrap().contains("nombre_manual"));
+        let mut s = s;
+        s.marquesina = false;
+        s.sessions[0].manual_name = true;
+        s.save(&path).unwrap();
+        assert_eq!(Settings::load(&path), s);
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("nombre_manual = true") && text.contains("marquesina = false"));
     }
 
     #[test]

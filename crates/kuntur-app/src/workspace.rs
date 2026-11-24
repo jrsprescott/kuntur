@@ -49,6 +49,7 @@ use files_panel::FilesState;
 use mcp_view::McpState;
 use preview_view::PreviewState;
 use settings_view::SettingsPanel;
+use title_bar::TabMarquee;
 use usage_view::UsageState;
 
 /// Panel izquierdo compacto (solo íconos) y completo.
@@ -74,6 +75,8 @@ struct Session {
     dock_state: DockState,
     /// Sesión remota (F6): conexión y terminal principal; `None` = local.
     remote: Option<RemoteTab>,
+    /// El usuario la renombró: su nombre gana sobre el título del agente (ajustes v0.2).
+    manual_name: bool,
     _events: Subscription,
     _dock_events: Option<Subscription>,
 }
@@ -113,6 +116,8 @@ pub struct Workspace {
     toasts: crate::notify::ToastGate,
     /// Panel "Configuración" (ajustes v0.2).
     settings_panel: SettingsPanel,
+    /// Marquesina del título de la pestaña activa (ajustes v0.2).
+    tab_marquee: TabMarquee,
     /// La ventana tiene el foco (si no, ninguna pestaña se está viendo).
     window_active: bool,
     codex_limits: Option<Limits>,
@@ -198,6 +203,7 @@ impl Workspace {
             badges: HashMap::new(),
             toasts: crate::notify::ToastGate::default(),
             settings_panel: SettingsPanel::default(),
+            tab_marquee: TabMarquee::default(),
             window_active: window.is_window_active(),
             codex_limits: None,
             ram: None,
@@ -237,10 +243,22 @@ impl Workspace {
                 if let Some(conn) = &s.connection
                     && this.open_remote(conn, s.cwd.clone(), Some(s.name.clone()), s.dock_ratio, window, cx)
                 {
+                    if let Some(id) = this.sessions.active_id()
+                        && let Some(e) = this.sessions.get_mut(id)
+                    {
+                        e.value.manual_name = s.manual_name;
+                    }
                     this.mcp_restore_last(&s);
                     continue;
                 }
                 this.add_session(Some(s.name.clone()), s.shell.clone(), s.dock_ratio, window, cx);
+                // Ajustes v0.2: los config.toml anteriores no guardaban si el nombre se puso a mano.
+                let manual = s.manual_name || !crate::sessions::is_default_name(&s.name);
+                if let Some(id) = this.sessions.active_id()
+                    && let Some(e) = this.sessions.get_mut(id)
+                {
+                    e.value.manual_name = manual;
+                }
                 this.mcp_restore_last(&s);
             }
             if this.sessions.is_empty() {
@@ -654,7 +672,7 @@ impl Workspace {
         let opts = Self::pane_options(shell.clone(), self.exact.next_session_dir.clone());
         let name = name.unwrap_or_else(|| {
             let existing: Vec<&str> = self.sessions.iter().map(|e| e.name.as_str()).collect();
-            next_default_name("PowerShell", &existing)
+            next_default_name(&crate::sessions::shell_label(shell.as_deref()), &existing)
         });
         let view = self.new_terminal(opts, window, cx);
         let events = cx.subscribe_in(&view, window, |this, view, ev: &TerminalEvent, window, cx| match ev {
@@ -674,6 +692,7 @@ impl Workspace {
                 dock: None,
                 dock_state: DockState::with_ratio(dock_ratio),
                 remote: None,
+                manual_name: false,
                 _events: events,
                 _dock_events: None,
             },
@@ -692,6 +711,9 @@ impl Workspace {
 
     fn rename_session(&mut self, id: u64, name: String, cx: &mut Context<Self>) {
         self.sessions.rename(id, name);
+        if let Some(e) = self.sessions.get_mut(id) {
+            e.value.manual_name = true;
+        }
         self.persist();
         cx.notify();
     }
@@ -911,6 +933,7 @@ impl Workspace {
                     cwd: e.value.remote.as_ref().and_then(|r| r.main.cwd()),
                     mcp,
                     profile,
+                    manual_name: e.value.manual_name,
                 }
             })
             .collect();
@@ -1207,6 +1230,24 @@ impl Workspace {
     fn session_title(&self, view: &Entity<TerminalView>, cx: &App) -> Option<String> {
         view.read(cx).title().map(short_title).filter(|t| !t.is_empty())
     }
+
+    /// Lo que muestra la pestaña (ajustes v0.2): el nombre puesto a mano siempre; si no, con un
+    /// agente corriendo en la terminal principal, el título que puso el agente (el tema de la
+    /// conversación en Claude Code); si no, el nombre del shell.
+    fn tab_label(&self, id: u64, cx: &App) -> String {
+        let Some(e) = self.sessions.get(id) else {
+            return String::new();
+        };
+        if e.value.manual_name {
+            return e.name.clone();
+        }
+        let agent_here = self.running.iter().any(|(sid, docked, _)| *sid == id && !docked);
+        agent_here
+            .then(|| e.value.view.read(cx).title())
+            .flatten()
+            .and_then(crate::sessions::agent_title)
+            .unwrap_or_else(|| e.name.clone())
+    }
 }
 
 /// Botón de un solo ícono: gris en reposo, color de texto y fondo sutil al pasar el mouse.
@@ -1485,6 +1526,7 @@ impl Workspace {
 impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = self.colors.clone();
+        self.update_marquee(window, cx);
         let palette = self.palette.as_ref().map(|p| self.render_palette(p, cx));
         let connections = self.connections.open.then(|| self.render_connections(cx));
         let mcp = self.mcp.open.then(|| self.render_mcp(cx));

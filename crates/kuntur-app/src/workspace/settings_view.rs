@@ -22,6 +22,7 @@ pub(super) enum Row {
     Theme,
     FontSize,
     Sidebar,
+    Marquee,
     Language,
     Notify,
     Waiting,
@@ -32,10 +33,11 @@ pub(super) enum Row {
 }
 
 impl Row {
-    const ALL: [Row; 10] = [
+    const ALL: [Row; 11] = [
         Row::Theme,
         Row::FontSize,
         Row::Sidebar,
+        Row::Marquee,
         Row::Language,
         Row::Notify,
         Row::Waiting,
@@ -172,6 +174,10 @@ impl Workspace {
                 self.set_font_size(self.settings.font_size + step, cx);
             }
             Row::Sidebar => self.toggle_sidebar(cx),
+            Row::Marquee => {
+                self.settings.marquesina = !self.settings.marquesina;
+                self.persist();
+            }
             Row::Language => {
                 let lang = crate::keynav::cycle(&LANGUAGES, self.settings.language, forward);
                 self.set_language(lang, cx);
@@ -306,6 +312,14 @@ impl Workspace {
                     true,
                     cx,
                 ),
+                cx,
+            ))
+            .child(self.switch_row(
+                Row::Marquee,
+                t(T::Marquee),
+                Some(t(T::MarqueeHint)),
+                self.settings.marquesina,
+                true,
                 cx,
             ))
             .child(
