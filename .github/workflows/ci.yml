@@ -101,7 +101,7 @@ jobs:
       - name: Compilar todo (check)
         run: cargo check --workspace --all-targets
       - name: Pruebas de los crates sin interfaz
-        run: cargo test -p kuntur-config -p kuntur-files -p kuntur-complete -p kuntur-update -p kuntur-usage -p kuntur-audit -p kuntur-agents -p kuntur-preview
+        run: cargo test --no-fail-fast -p kuntur-config -p kuntur-files -p kuntur-complete -p kuntur-update -p kuntur-usage -p kuntur-audit -p kuntur-agents -p kuntur-preview
 
   macos:
     runs-on: macos-latest
@@ -113,4 +113,4 @@ jobs:
       - name: Compilar todo (check)
         run: cargo check --workspace --all-targets
       - name: Pruebas de los crates sin interfaz
-        run: cargo test -p kuntur-config -p kuntur-files -p kuntur-complete -p kuntur-update -p kuntur-usage -p kuntur-audit -p kuntur-agents -p kuntur-preview
+        run: cargo test --no-fail-fast -p kuntur-config -p kuntur-files -p kuntur-complete -p kuntur-update -p kuntur-usage -p kuntur-audit -p kuntur-agents -p kuntur-preview
