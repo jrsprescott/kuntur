@@ -239,7 +239,7 @@ mod tests {
         let _ = COMPLETER.set(Mutex::new(Some(Completer::new(Memory::in_memory(), None))));
         let base = std::env::temp_dir().join(format!("kuntur-ghost-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(base.join("proyecto-demo")).unwrap();
+        std::fs::create_dir_all(base.join("proyecto-demo").join("Datos de prueba")).unwrap();
 
         let mut opts = PaneOptions::default_shell(GridSize::new(160, 30));
         opts.program = "powershell.exe".into();
@@ -282,5 +282,30 @@ mod tests {
         assert!(wait_until(|| pane.cwd().is_some_and(|d| d.ends_with("proyecto-demo"))));
         let saved = with_completer(|c| c.memory.history.entries().last().map(|e| e.command.clone()));
         assert_eq!(saved.flatten().as_deref(), Some("cd proyecto-demo\\"));
+
+        // Ruta con espacios: Tab borra la palabra escrita y la reescribe entre comillas simples,
+        // así PowerShell no la corta en el espacio.
+        assert!(wait_until(|| pane.prompt_input().is_some_and(|l| l.text.is_empty())));
+        pane.write(b"cd Datos").unwrap();
+        assert!(
+            wait_until(|| {
+                ghost.refresh(&pane);
+                ghost.shown().is_some_and(|s| s.input == "cd Datos")
+            }),
+            "no apareció la sugerencia con espacios: {:?}",
+            pane.prompt_input()
+        );
+        assert_eq!(ghost.shown().unwrap().suggestion.ghost, "  → 'Datos de prueba\\'");
+        assert_eq!(ghost.on_key("tab", &pane), KeyOutcome::Handled);
+        assert!(
+            wait_until(|| pane.prompt_input().is_some_and(|l| l.text == "cd 'Datos de prueba\\'")),
+            "quedó: {:?}",
+            pane.prompt_input()
+        );
+        assert_eq!(ghost.on_key("enter", &pane), KeyOutcome::Pass);
+        pane.write(b"\r").unwrap();
+        assert!(wait_until(|| pane
+            .cwd()
+            .is_some_and(|d| d.ends_with("Datos de prueba"))));
     }
 }

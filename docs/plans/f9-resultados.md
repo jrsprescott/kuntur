@@ -18,7 +18,7 @@ Rama `fase/f9-autocompletado` (sale de `fase/f4-acoplada`). Plan: [`2026-11-23-f
 
 ### Orden de las sugerencias
 1. **Historial**: el comando más reciente que empieza igual (primero los de la misma carpeta). Para `cd` solo los de la misma carpeta (una ruta relativa de otra carpeta no sirve).
-2. **Ruta** del último argumento (o de la primera palabra si parece ruta: `.\scr`, `C:\x`, `~\`). Para `cd`/`sl`/`Set-Location`/`pushd` solo carpetas, y primero las más visitadas.
+2. **Ruta** del último argumento (o de la primera palabra si parece ruta: `.\scr`, `C:\x`, `~\`). Para `cd`/`sl`/`Set-Location`/`pushd` solo carpetas, y primero las más visitadas. Si el nombre completado tiene espacios (u otros caracteres especiales de PowerShell) y la palabra no empezaba con comilla, en gris se ve el reemplazo `→ 'C:\Program Files\'` y aceptar **borra con Backspace la palabra escrita y la reescribe entre comillas simples** (si solo se agregara el resto, PowerShell cortaría en el espacio).
 3. **Memoria de carpetas** para `cd parte`: si la ruta empieza con lo escrito se agrega el resto; si no, en gris se ve `→ C:\ruta\completa` y aceptar reemplaza la palabra.
 
 ## Verificación automática ✅
@@ -29,7 +29,7 @@ Rama `fase/f9-autocompletado` (sale de `fase/f4-acoplada`). Plan: [`2026-11-23-f
 | `cargo clippy --workspace --all-targets -- -D warnings` | ✅ |
 | `cargo fmt --all -- --check` | ✅ |
 
-Lo nuevo con pruebas (≈40): marcas OSC 133 y su posición (también partidas entre lecturas), ciclo de fases y bloques, lectura de lo escrito (cortes por el ancho, desplazamiento, pantalla alterna), **ConPTY real**: PowerShell 5.1 marca el prompt, lo escrito se lee sin el prompt, código de salida 0 y 3, bloque visible; motor: palabras de PowerShell, rutas (mayúsculas, absolutas/relativas, `/`, `~`, comillas, solo carpetas para `cd`, ranking por visitas), historial (carpeta, repetidos, límite, espacio inicial), memoria de carpetas (frecuencia × recencia, difusa, carpetas borradas), archivos (ida y vuelta, rotos, compactación); **de punta a punta** en `ghost.rs`: `cd proy` → gris `ecto-demo\`, Esc lo oculta, Tab lo escribe en PowerShell, Enter lo guarda en el historial.
+Lo nuevo con pruebas (≈40): marcas OSC 133 y su posición (también partidas entre lecturas), ciclo de fases y bloques, lectura de lo escrito (cortes por el ancho, desplazamiento, pantalla alterna), **ConPTY real**: PowerShell 5.1 marca el prompt, lo escrito se lee sin el prompt, código de salida 0 y 3, bloque visible; motor: palabras de PowerShell, rutas (mayúsculas, absolutas/relativas, `/`, `~`, comillas, solo carpetas para `cd`, ranking por visitas), historial (carpeta, repetidos, límite, espacio inicial), memoria de carpetas (frecuencia × recencia, difusa, carpetas borradas), archivos (ida y vuelta, rotos, compactación); **de punta a punta** en `ghost.rs`: `cd proy` → gris `ecto-demo\`, Esc lo oculta, Tab lo escribe en PowerShell, Enter lo guarda en el historial; y con espacios: `cd Datos` → gris `→ 'Datos de prueba\'`, Tab borra `Datos` y deja `cd 'Datos de prueba\'` en PowerShell, y Enter entra a esa carpeta.
 
 ### Pruebas de humo (`scripts/smoke.ps1`)
 
@@ -39,7 +39,8 @@ Nuevos parámetros: `-Type 'texto'` (se escribe en la primera sesión después d
 |---|---|---|
 | `-Sessions 1 -Commands 'cls' -Type 'cd C:\Win'` (Dark) | 71 MB | `cd C:\Win` y en gris `dows\` |
 | `-Sessions 1 -Theme white -History 'git status --short','git log --oneline -5' -Type 'git l' …` | 63 MB | `git l` y en gris `og --oneline -5` (del historial); raya roja junto a `cmd /c exit 3` |
-| `-Sessions 1 -WaitSec 9 -Commands 'Start-Sleep 1','Write-Host bloque-ok','cmd /c exit 3','Get-ChildItem C:\Windows\Media …' -Type 'cd C:\Program'` (Dark) | 62 MB | `cd C:\Program` y en gris ` Files\` (al aceptar queda `cd 'C:\Program Files\'`); bloques tenues para los comandos que terminaron bien y rojo para `exit 3` |
+| `-Sessions 1 -WaitSec 9 -Commands 'Start-Sleep 1','Write-Host bloque-ok','cmd /c exit 3','Get-ChildItem C:\Windows\Media …' -Type 'cd C:\Program'` (Dark) | 62 MB | Bloques tenues para los comandos que terminaron bien y rojo para `exit 3` (esta captura mostraba en gris solo ` Files\` para `cd C:\Program`: corregido, ver la fila siguiente) |
+| `-Sessions 1 -Commands 'cls' -Type 'cd C:\Program'` (Dark) | 62 MB | `cd C:\Program` y en gris `→ 'C:\Program Files\'`: aceptar reescribe la palabra entre comillas (comprobado de punta a punta en la prueba ConPTY de `ghost.rs`) |
 
 Presupuesto de RAM (< 90 MB) ✅. Nota: en `-Commands` el separador interno es `\n` literal, así que una ruta como `C:\no…` se parte (artefacto de la prueba de humo, no de la app).
 
@@ -48,7 +49,7 @@ Presupuesto de RAM (< 90 MB) ✅. Nota: en `-Commands` el separador interno es `
 Abrir `target\release\kuntur.exe` normal (PowerShell por defecto).
 
 - [ ] ⏳ Escribir `cd C:\Win` → aparece `dows\` en gris; **Tab** lo completa (`cd C:\Windows\`); seguir con `Fon` → `ts\`; **→** también acepta.
-- [ ] ⏳ Escribir `cd c:\prog` (minúsculas) → sugiere `ram Files\`; al aceptar queda `cd 'c:\Program Files\'` (con comillas porque hay espacio).
+- [ ] ⏳ Escribir `cd c:\prog` (minúsculas) → en gris `→ 'c:\Program Files\'`; al aceptar queda `cd 'c:\Program Files\'` (con comillas porque hay espacio).
 - [ ] ⏳ Ejecutar un par de comandos (`git status`, `dir`), luego escribir `git s` → aparece el resto del historial en gris; Tab lo acepta.
 - [ ] ⏳ Visitar varias veces una carpeta (`cd D:\algo\mi-proyecto`), ir a otra y escribir `cd proy` → en gris `→ D:\algo\mi-proyecto`; Tab reemplaza la palabra por la ruta.
 - [ ] ⏳ Con sugerencia visible, **Esc** la oculta (y no borra la línea); sin sugerencia, Esc y **Tab** hacen lo de siempre en PowerShell (Tab cicla el completado de PowerShell).

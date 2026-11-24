@@ -141,12 +141,14 @@ pub fn complete(
     }
 
     if quote.is_none() && needs_quotes(&best.name) {
-        // `cd C:\Prog` → `cd 'C:\Program Files\'`.
-        let full = format!("{dir_part}{}{tail}", best.name);
+        // `cd C:\Prog` → `cd 'C:\Program Files\'`: aceptar borra la palabra escrita entera y la
+        // reescribe entre comillas (si solo se agregara el resto, PowerShell cortaría en el
+        // espacio). En gris se ve el reemplazo completo, como en la memoria de carpetas.
+        let quoted = ps_quote(&format!("{dir_part}{}{tail}", best.name));
         return Some(Suggestion {
             erase: word.chars().count(),
-            insert: ps_quote(&full),
-            ghost,
+            ghost: format!("  → {quoted}"),
+            insert: quoted,
             source: Source::Path,
         });
     }
@@ -257,9 +259,12 @@ mod tests {
         let t = tree("comillas");
         let word = format!("{}\\Prog", t.display());
         let s = run(&word, &t, true).unwrap();
-        assert_eq!(s.ghost, "ram Files\\");
-        assert_eq!(s.erase, word.chars().count());
+        assert_eq!(s.erase, word.chars().count(), "borra la palabra escrita entera");
         assert_eq!(s.insert, format!("'{}\\Program Files\\'", t.display()));
+        assert_eq!(s.ghost, format!("  → {}", s.insert), "en gris se ve el reemplazo");
+        // Relativa: `cd Datos` → `cd 'Datos de usuario\'`.
+        let s = run("Datos", &t, true).unwrap();
+        assert_eq!((s.erase, s.insert.as_str()), (5, "'Datos de usuario\\'"));
         // Si el usuario ya abrió comillas, solo se agrega lo que falta.
         let s = run("'Datos", &t, true).unwrap();
         assert_eq!(s, Suggestion::append(" de usuario\\", Source::Path));
