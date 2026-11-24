@@ -81,6 +81,10 @@
                     <Component Id='LicenseApacheTxt' Guid='*'>
                         <File Id='LicenseApache' Name='LICENSE-APACHE.txt' DiskId='1' Source='$(var.Root)\LICENSE-APACHE' KeyPath='yes'/>
                     </Component>
+                    <!-- Ajustes v0.2.1: aviso MIT de Lobe Icons (los logos de los agentes van dentro de kuntur.exe). -->
+                    <Component Id='LicenseLobeIconsTxt' Guid='*'>
+                        <File Id='LicenseLobeIcons' Name='LICENSE-lobe-icons.txt' DiskId='1' Source='$(var.Root)\crates\kuntur-app\assets\agents\LICENSE-lobe-icons.txt' KeyPath='yes'/>
+                    </Component>
                     <!-- AUMID registrado: nombre e ícono de las notificaciones de Windows. -->
                     <Component Id='AppUserModelId' Guid='DB0E26C2-42C7-45A0-BB12-349687963779'>
                         <RegistryKey Root='HKLM' Key='Software\Classes\AppUserModelId\Kuntur.Kuntur' ForceDeleteOnUninstall='yes'>
@@ -140,6 +144,7 @@
             <ComponentRef Id='KunturIcon'/>
             <ComponentRef Id='LicenseMitTxt'/>
             <ComponentRef Id='LicenseApacheTxt'/>
+            <ComponentRef Id='LicenseLobeIconsTxt'/>
             <ComponentRef Id='AppUserModelId'/>
             <ComponentRef Id='StartMenuShortcut'/>
             <ComponentRef Id='DesktopShortcut'/>

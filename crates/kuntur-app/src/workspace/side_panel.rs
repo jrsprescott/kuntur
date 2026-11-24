@@ -8,6 +8,7 @@ use kuntur_agents::AgentState;
 use super::files_panel::empty_note;
 use super::title_bar::state_dot;
 use super::*;
+use crate::agent_icons::{AgentIcon, IconStyle};
 use crate::agents_panel::{RingLevel, counts, filter_rows, format_elapsed, ring_pct, ring_tooltip};
 
 /// Lado de la celda de un agente instalado; la insignia va dentro del anillo.
@@ -34,6 +35,29 @@ pub(super) fn badge(letter: char, color: u32, size: f32, radius: f32) -> Div {
         .text_size(px(size * 0.46))
         .font_weight(FontWeight::BOLD)
         .child(letter.to_string())
+}
+
+/// Insignia con el ícono de marca del agente (ajustes v0.2.1) sobre el mismo fondo tenue de su color;
+/// sin ícono, la letra de siempre. Los logos de un solo color se pintan en el color de marca (se ven
+/// igual de bien en los temas oscuros y en el claro); los de color, tal cual.
+pub(super) fn icon_badge(icon: Option<AgentIcon>, letter: char, color: u32, size: f32, radius: f32) -> Div {
+    let Some(icon) = icon else {
+        return badge(letter, color, size, radius);
+    };
+    let tint = brand(color);
+    let inner = px(size * 0.62);
+    let base = div()
+        .size(px(size))
+        .flex_shrink_0()
+        .rounded(px(radius))
+        .flex()
+        .items_center()
+        .justify_center()
+        .bg(tint.opacity(0.18));
+    match icon.style {
+        IconStyle::Color => base.child(img(icon.path).size(inner)),
+        IconStyle::Mono => base.child(svg().path(icon.path).size(inner).text_color(tint)),
+    }
 }
 
 /// Anillo de porcentaje (0–100) que empieza arriba y avanza en sentido horario.
@@ -77,16 +101,22 @@ impl Workspace {
     /// Insignia del agente `id` del catálogo (gris con "?" si ya no está).
     pub(super) fn agent_badge(&self, id: &str, size: f32, radius: f32) -> Div {
         let (letter, color) = self.catalog.get(id).map_or(('?', 0x888888), |a| (a.letter, a.color));
-        badge(letter, color, size, radius)
+        icon_badge(crate::agent_icons::for_agent(id), letter, color, size, radius)
     }
 
     /// Insignia de un agente de los historiales de uso / auditoría.
     pub(super) fn usage_badge(&self, kind: AgentKind, size: f32, radius: f32) -> Div {
-        let (letter, color) = self
-            .catalog
+        match self.catalog.by_usage(kind) {
+            Some(a) => icon_badge(crate::agent_icons::for_agent(&a.id), a.letter, a.color, size, radius),
+            None => badge('?', 0x888888, size, radius),
+        }
+    }
+
+    /// ¿El agente de este historial sigue instalado? (Uso de agentes marca los que no.)
+    pub(super) fn usage_installed(&self, kind: AgentKind) -> bool {
+        self.catalog
             .by_usage(kind)
-            .map_or(('?', 0x888888), |a| (a.letter, a.color));
-        badge(letter, color, size, radius)
+            .is_some_and(|a| self.installed.contains(&a.id))
     }
 
     pub(super) fn render_side_panel(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
@@ -539,7 +569,13 @@ impl Workspace {
             .tooltip(move |window, cx| Tooltip::new(tip.clone()).build(window, cx))
             .on_click(cx.listener(move |this, _, window, cx| this.launch_agent(&launch_id, window, cx)))
             .when_some(pct, |this, p| this.child(ring(p, color, track)))
-            .child(badge(agent.letter, agent.color, INSTALLED_BADGE, INSTALLED_BADGE / 2.))
+            .child(icon_badge(
+                crate::agent_icons::for_agent(&agent.id),
+                agent.letter,
+                agent.color,
+                INSTALLED_BADGE,
+                INSTALLED_BADGE / 2.,
+            ))
             .into_any_element()
     }
 

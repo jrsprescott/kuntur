@@ -129,3 +129,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md). Changes a
 Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or [MIT license](LICENSE-MIT) at your option.
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in Kuntur by you, as
 defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
+
+The agent and AI provider logos come from [Lobe Icons](https://github.com/lobehub/lobe-icons) (MIT; see
+`crates/kuntur-app/assets/agents/LICENSE-lobe-icons.txt`). The logos are trademarks of their respective owners and
+are used only to identify each tool; this does not imply any affiliation or endorsement.

@@ -101,6 +101,9 @@ texts! {
     SidePanelFull => "Completo", "Full";
     SidePanelIcons => "Íconos", "Icons";
     Marquee => "Desplazar el título de la pestaña", "Scroll the tab title";
+    // ── Uso de agentes (ajustes v0.2.1) ──
+    UsageNotInstalled => "no instalado", "not installed";
+    UsageLocal => "local", "local";
     // ── Barra de título ──
     BrandTip => "Kuntur Terminal IA Agente · ver el proyecto en GitHub", "Kuntur Terminal IA Agente · view the project on GitHub";
     TipPanelFull =>"Panel completo (Ctrl+Shift+B)", "Full panel (Ctrl+Shift+B)";

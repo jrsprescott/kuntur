@@ -48,7 +48,9 @@ fn pick_agent(roll: u64) -> (AgentKind, &'static str, bool) {
         0..40 => (AgentKind::ClaudeCode, "claude-sonnet-5-5", true),
         40..52 => (AgentKind::ClaudeCode, "claude-opus-5-5", true),
         52..80 => (AgentKind::Codex, "gpt-5.5", true),
-        80..92 => (AgentKind::OpenCode, "deepseek/deepseek-v4-pro", false),
+        80..88 => (AgentKind::OpenCode, "deepseek/deepseek-v4-pro", false),
+        // Modelo local (LM Studio vía OpenCode): costo cero y etiqueta "local" (ajustes v0.2.1).
+        88..92 => (AgentKind::OpenCode, "lmstudio/qwen3-coder-30b", false),
         // Sin precio en la tabla: la vista lo muestra como "sin precio".
         _ => (AgentKind::Gemini, "gemini-demo", false),
     }
@@ -141,5 +143,7 @@ mod tests {
         assert!(year.models.len() >= 4);
         assert_eq!(year.top_tasks.len(), 10);
         assert!(year.totals.cache_read > 0);
+        // También hay un modelo local, que nunca queda "sin precio".
+        assert!(year.models.iter().any(|m| crate::is_local_model(&m.model)));
     }
 }

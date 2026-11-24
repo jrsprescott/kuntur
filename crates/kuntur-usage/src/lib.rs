@@ -14,6 +14,7 @@ pub mod synthetic;
 
 pub use aggregate::{AgentShare, ModelRow, Summary, TaskRow, Totals, pct_change, provider_of, summarize};
 pub use model::{AgentKind, Cost, Period, UsageRecord};
+pub use pricing::is_local_model;
 
 use std::path::{Path, PathBuf};
 
