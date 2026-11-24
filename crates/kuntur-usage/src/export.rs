@@ -2,9 +2,11 @@
 
 use jiff::tz::TimeZone;
 
-use crate::UsageRecord;
+use crate::{Cost, UsageRecord};
 
-const HEADER: &str = "fecha,agente,modelo,entrada,salida,cache_lectura,cache_escritura,sesion,titulo,carpeta";
+/// `costo_usd` con punto decimal (formato de datos); `costo_tipo` = real / estimado / vacío si no hay precio.
+const HEADER: &str =
+    "fecha,agente,modelo,entrada,salida,cache_lectura,cache_escritura,costo_usd,costo_tipo,sesion,titulo,carpeta";
 
 /// CSV (RFC 4180, con BOM UTF-8 para que Excel lea las tildes) de los registros con
 /// `start <= ts < end`, en orden cronológico y con la fecha en la zona local `tz`.
@@ -22,6 +24,11 @@ pub fn to_csv(records: &[UsageRecord], start: i64, end: i64, tz: &TimeZone) -> S
                     .to_string()
             })
             .unwrap_or_default();
+        let cost = match r.cost {
+            Cost::Unknown => (String::new(), ""),
+            Cost::Estimated(m) => (usd(m), "estimado"),
+            Cost::Real(m) => (usd(m), "real"),
+        };
         let fields = [
             date,
             r.agent.name().to_string(),
@@ -30,6 +37,8 @@ pub fn to_csv(records: &[UsageRecord], start: i64, end: i64, tz: &TimeZone) -> S
             r.output.to_string(),
             r.cache_read.to_string(),
             r.cache_write.to_string(),
+            cost.0,
+            cost.1.to_string(),
             field(&r.session_id),
             field(r.title.as_deref().unwrap_or("")),
             field(r.project.as_deref().unwrap_or("")),
@@ -38,6 +47,11 @@ pub fn to_csv(records: &[UsageRecord], start: i64, end: i64, tz: &TimeZone) -> S
         out.push_str("\r\n");
     }
     out
+}
+
+/// Micro-dólares como USD con 6 decimales (sin pérdida): 12 500 → "0.012500".
+fn usd(micros: u64) -> String {
+    format!("{}.{:06}", micros / 1_000_000, micros % 1_000_000)
 }
 
 /// Texto de los historiales como campo seguro: entre comillas si lleva separadores, y con un
@@ -59,7 +73,7 @@ fn field(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::AgentKind;
+    use crate::{AgentKind, Cost};
 
     fn ts(s: &str) -> i64 {
         s.parse::<jiff::Timestamp>().unwrap().as_second()
@@ -77,6 +91,8 @@ mod tests {
             session_id: "s1".into(),
             title: title.map(str::to_string),
             project: Some("C:/proyectos/demo".into()),
+            cost: Cost::Unknown,
+            key: None,
         }
     }
 
@@ -84,7 +100,11 @@ mod tests {
     fn filtra_ordena_y_usa_la_hora_local() {
         let records = vec![
             rec("2026-11-23T15:00:00Z", Some("Segundo")),
-            rec("2026-11-23T14:00:00Z", Some("Primero")),
+            {
+                let mut r = rec("2026-11-23T14:00:00Z", Some("Primero"));
+                r.cost = Cost::Estimated(12_500);
+                r
+            },
             rec("2026-11-20T14:00:00Z", Some("Fuera")),
         ];
         let tz = TimeZone::fixed(jiff::tz::offset(-5));
@@ -98,9 +118,10 @@ mod tests {
         assert_eq!(lines[0], HEADER);
         assert_eq!(
             lines[1],
-            "2026-11-23 09:00:00,Codex,gpt-5,10,2,3,0,s1,Primero,C:/proyectos/demo"
+            "2026-11-23 09:00:00,Codex,gpt-5,10,2,3,0,0.012500,estimado,s1,Primero,C:/proyectos/demo"
         );
         assert!(lines[2].contains("Segundo"));
+        assert!(lines[2].contains(",0,,,s1,"), "sin precio: columnas de costo vacías");
         assert_eq!(lines.len(), 4, "dos filas y la línea vacía final");
         assert!(csv.starts_with('\u{feff}'));
     }

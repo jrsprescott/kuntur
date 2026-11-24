@@ -1,0 +1,148 @@
+# Precios de API para el COSTO ESTIMADO de "Uso de agentes" (USD por millón de tokens).
+#
+# - Es el precio de API: si usas una suscripción (Claude Pro/Max, ChatGPT Plus…), lo que pagas es
+#   otra cosa; esto indica cuánto costaría ese uso por API.
+# - Para cambiar o agregar precios, copia este archivo a %APPDATA%\Kuntur\pricing.toml (la paleta
+#   tiene "Uso de agentes: editar precios") y edítalo: tus entradas reemplazan a estas.
+# - `modelo` se compara sin mayúsculas, con el nombre exacto o con una fecha al final
+#   ("claude-haiku-4-5" vale para "claude-haiku-4-5-20251001"). Un prefijo "proveedor/" del nombre
+#   (OpenCode) se ignora.
+# - Los modelos que no estén aquí aparecen como "sin precio" y no suman (no se inventan precios).
+# - cache_lectura = entrada en caché (acierto); cache_escritura = escritura de caché de 5 min.
+
+# Anthropic — https://platform.claude.com/docs/en/about-claude/pricing (verificado 2026-11-23)
+# Haiku 5.5: precio para prompts de hasta 100 000 tokens (por encima es más caro).
+[[precio]]
+modelo = "claude-fable-5-2"
+entrada = 8.0
+salida = 40.0
+cache_lectura = 0.20
+cache_escritura = 10.0
+
+[[precio]]
+modelo = "claude-opus-5-5"
+entrada = 4.0
+salida = 20.0
+cache_lectura = 0.20
+cache_escritura = 5.0
+
+[[precio]]
+modelo = "claude-sonnet-5-5"
+entrada = 2.0
+salida = 10.0
+cache_lectura = 0.10
+cache_escritura = 2.50
+
+[[precio]]
+modelo = "claude-haiku-5-5"
+entrada = 0.10
+salida = 0.50
+cache_lectura = 0.01
+cache_escritura = 0.125
+
+[[precio]]
+modelo = "claude-opus-4-8"
+entrada = 5.0
+salida = 25.0
+cache_lectura = 0.50
+cache_escritura = 6.25
+
+[[precio]]
+modelo = "claude-sonnet-4-6"
+entrada = 3.0
+salida = 15.0
+cache_lectura = 0.30
+cache_escritura = 3.75
+
+[[precio]]
+modelo = "claude-haiku-4-5"
+entrada = 1.0
+salida = 5.0
+cache_lectura = 0.10
+cache_escritura = 1.25
+
+# OpenAI — https://developers.openai.com/api/docs/pricing (Standard, contexto corto; verificado 2026-11-23)
+# OpenAI no cobra la escritura de caché.
+[[precio]]
+modelo = "gpt-6-astra"
+entrada = 10.0
+salida = 50.0
+cache_lectura = 1.0
+cache_escritura = 0.0
+
+[[precio]]
+modelo = "gpt-5.6-terra"
+entrada = 2.0
+salida = 12.0
+cache_lectura = 0.20
+cache_escritura = 0.0
+
+[[precio]]
+modelo = "gpt-5.5"
+entrada = 5.0
+salida = 30.0
+cache_lectura = 0.50
+cache_escritura = 0.0
+
+[[precio]]
+modelo = "gpt-5"
+entrada = 1.25
+salida = 10.0
+cache_lectura = 0.125
+cache_escritura = 0.0
+
+# DeepSeek — https://api-docs.deepseek.com/quick_start/pricing (verificado 2026-11-23)
+# Tarifa de horario pico (la más alta); fuera del pico cuesta la mitad.
+[[precio]]
+modelo = "deepseek-v4-pro"
+entrada = 1.32
+salida = 3.96
+cache_lectura = 0.044
+cache_escritura = 0.0
+
+[[precio]]
+modelo = "deepseek-v4.1-flash"
+entrada = 0.30
+salida = 1.20
+cache_lectura = 0.006
+cache_escritura = 0.0
+
+[[precio]]
+modelo = "deepseek-v4-flash"
+entrada = 0.30
+salida = 1.20
+cache_lectura = 0.006
+cache_escritura = 0.0
+
+[[precio]]
+modelo = "deepseek-flash"
+entrada = 0.30
+salida = 1.20
+cache_lectura = 0.006
+cache_escritura = 0.0
+
+# Z.ai (GLM) — https://docs.z.ai/guides/overview/pricing (verificado 2026-11-23)
+[[precio]]
+modelo = "glm-5.3"
+entrada = 1.40
+salida = 4.40
+cache_lectura = 0.26
+cache_escritura = 0.0
+
+[[precio]]
+modelo = "glm-5.3-flash"
+entrada = 0.15
+salida = 0.50
+cache_lectura = 0.03
+cache_escritura = 0.0
+
+# MiniMax — https://platform.minimax.io/docs/guides/pricing (Standard, hasta 512k; verificado 2026-11-23)
+[[precio]]
+modelo = "minimax-m3"
+entrada = 0.30
+salida = 1.20
+cache_lectura = 0.06
+cache_escritura = 0.0
+
+# Sin precio publicado legible al 2026-11-23 (agrégalos en tu pricing.toml si los conoces):
+# MiniMax-M2.7, qwen3.8-max, kimi-k2.6, kimi-k3, glm-5.3-flash-free.

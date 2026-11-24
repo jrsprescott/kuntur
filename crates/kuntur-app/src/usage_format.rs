@@ -2,7 +2,7 @@
 //! % de cambio, rango de fechas y niveles del mapa de calor. El `Workspace` los dibuja.
 
 use jiff::tz::TimeZone;
-use kuntur_usage::{ModelRow, Period, Summary};
+use kuntur_usage::{ModelRow, Period, Summary, Totals};
 
 const MONTHS: [&str; 12] = [
     "ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic",
@@ -34,6 +34,31 @@ pub fn compact(n: u64) -> String {
         999_950..999_950_000 => one_decimal(n as f64 / 1e6, "M"),
         _ => format!("{} M", thousands((n as f64 / 1e6).round() as u64)),
     }
+}
+
+/// Dinero desde micro-dólares: "US$ 1.234,56"; entre 0 y 1 centavo, "< US$ 0,01".
+pub fn usd(micros: u64) -> String {
+    let cents = (micros + 5_000) / 10_000;
+    if micros > 0 && cents == 0 {
+        return "< US$ 0,01".into();
+    }
+    format!("US$ {},{:02}", thousands(cents / 100), cents % 100)
+}
+
+/// Detalle de la tarjeta de costo (tooltip): qué significa y de dónde sale.
+pub fn cost_detail(t: &Totals) -> String {
+    let mut parts =
+        vec!["Precio de API: lo que costaría este uso por API, no lo que cobra una suscripción".to_string()];
+    if t.real_cost_micros > 0 {
+        parts.push(format!("{} informado por OpenCode", usd(t.real_cost_micros)));
+    }
+    if t.unpriced_turns > 0 {
+        parts.push(format!(
+            "{} turnos de modelos sin precio no suman (agrégalos en pricing.toml)",
+            thousands(t.unpriced_turns)
+        ));
+    }
+    parts.join(" · ")
 }
 
 /// Tiempo de agente: "0 min", "45 min", "2 h 05 min", "152 h".
@@ -177,6 +202,26 @@ mod tests {
     }
 
     #[test]
+    fn dinero() {
+        assert_eq!(usd(0), "US$ 0,00");
+        assert_eq!(usd(4_000), "< US$ 0,01");
+        assert_eq!(usd(5_000), "US$ 0,01");
+        assert_eq!(usd(12_345_678), "US$ 12,35");
+        assert_eq!(usd(1_234_560_000), "US$ 1.234,56");
+    }
+
+    #[test]
+    fn detalle_del_costo() {
+        let mut t = Totals::default();
+        assert!(cost_detail(&t).starts_with("Precio de API"));
+        t.real_cost_micros = 2_500_000;
+        t.unpriced_turns = 3;
+        let d = cost_detail(&t);
+        assert!(d.contains("US$ 2,50 informado por OpenCode"));
+        assert!(d.contains("3 turnos de modelos sin precio"));
+    }
+
+    #[test]
     fn duraciones() {
         assert_eq!(duration(30), "0 min");
         assert_eq!(duration(45 * 60), "45 min");
@@ -248,6 +293,7 @@ mod tests {
             input,
             output: 0,
             turns: 1,
+            cost_micros: None,
         };
         let models = vec![
             row("claude-a", "Anthropic", 10),

@@ -19,7 +19,7 @@ use std::path::Path;
 
 use serde::Deserialize;
 
-use crate::model::{AgentKind, UsageRecord};
+use crate::model::{AgentKind, Cost, UsageRecord};
 
 /// Uso de los límites de Codex (para el anillo del panel). Porcentajes 0–100.
 #[derive(Clone, Debug, PartialEq)]
@@ -144,15 +144,34 @@ fn read_titles(path: &Path) -> HashMap<String, String> {
 /// Lee los rollouts bajo `root` (`.jsonl` y `.jsonl.zst`) y, si existe, los títulos de
 /// `session_index.jsonl` en la carpeta superior.
 pub fn read_dir(root: &Path) -> Vec<UsageRecord> {
-    let titles = root
-        .parent()
-        .map(|p| read_titles(&p.join("session_index.jsonl")))
-        .unwrap_or_default();
-    let mut records = Vec::new();
-    for path in rollouts(root) {
-        let Some(text) = read_text(&path) else { continue };
-        records.extend(parse_lines(&text, &file_stem(&path)));
-    }
+    let titles = titles(root);
+    rollouts(root)
+        .iter()
+        .flat_map(|path| read_file(path, &titles))
+        .collect()
+}
+
+/// Rollouts bajo `root`, en orden estable.
+pub fn files(root: &Path) -> Vec<std::path::PathBuf> {
+    rollouts(root)
+}
+
+/// `session_index.jsonl` (títulos), en la carpeta superior de `root`.
+pub fn titles_path(root: &Path) -> Option<std::path::PathBuf> {
+    root.parent().map(|p| p.join("session_index.jsonl"))
+}
+
+/// Títulos por sesión del índice de `root` (vacío si no existe).
+pub fn titles(root: &Path) -> HashMap<String, String> {
+    titles_path(root).map(|p| read_titles(&p)).unwrap_or_default()
+}
+
+/// Lee un solo rollout con los títulos ya cargados (importación incremental).
+pub fn read_file(path: &Path, titles: &HashMap<String, String>) -> Vec<UsageRecord> {
+    let Some(text) = read_text(path) else {
+        return Vec::new();
+    };
+    let mut records = parse_lines(&text, &file_stem(path));
     for r in &mut records {
         r.title = titles.get(&r.session_id).cloned();
     }
@@ -204,6 +223,8 @@ pub fn parse_lines(text: &str, fallback_session: &str) -> Vec<UsageRecord> {
                     session_id: session.clone(),
                     title: None,
                     project: turn_cwd.clone().or_else(|| meta_cwd.clone()),
+                    cost: Cost::Unknown,
+                    key: None,
                 });
             }
             _ => {}

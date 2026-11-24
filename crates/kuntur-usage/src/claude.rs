@@ -9,11 +9,11 @@
 //!   El título que pone el usuario (`custom-title`) gana sobre el generado.
 
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
-use crate::model::{AgentKind, UsageRecord};
+use crate::model::{AgentKind, Cost, UsageRecord};
 
 #[derive(Deserialize)]
 struct Line {
@@ -99,7 +99,8 @@ impl Reader {
             return;
         };
         let key = (message.id.unwrap_or_default(), line.request_id.unwrap_or_default());
-        if key != (String::new(), String::new()) && !self.seen.insert(key) {
+        let record_key = (key != (String::new(), String::new())).then(|| format!("{}|{}", key.0, key.1));
+        if record_key.is_some() && !self.seen.insert(key) {
             return;
         }
         self.records.push(UsageRecord {
@@ -113,6 +114,8 @@ impl Reader {
             session_id: line.session_id.unwrap_or_default(),
             title: None,
             project: line.cwd.or_else(|| project_hint.map(str::to_string)),
+            cost: Cost::Unknown,
+            key: record_key,
         });
     }
 
@@ -132,19 +135,36 @@ impl Reader {
 /// nivel (el proyecto codificado por Claude Code) es la pista de carpeta si una línea no trae `cwd`.
 pub fn read_dir(root: &Path) -> Vec<UsageRecord> {
     let mut reader = Reader::default();
-    for path in crate::files_under(root, &[".jsonl"]) {
+    for path in files(root) {
         let Ok(text) = std::fs::read_to_string(&path) else {
             continue;
         };
-        let hint = path
-            .strip_prefix(root)
-            .ok()
-            .and_then(Path::parent)
-            .and_then(|dir| dir.components().next())
-            .map(|c| c.as_os_str().to_string_lossy().into_owned());
-        reader.feed(&text, hint.as_deref());
+        reader.feed(&text, hint(root, &path).as_deref());
     }
     reader.finish()
+}
+
+/// Archivos de historial bajo `root`, en orden estable.
+pub fn files(root: &Path) -> Vec<PathBuf> {
+    crate::files_under(root, &[".jsonl"])
+}
+
+/// Lee un solo archivo (importación incremental: solo se releen los que cambiaron). Las
+/// respuestas repetidas en otros archivos se descartan después, por `key`.
+pub fn read_file(root: &Path, path: &Path) -> Vec<UsageRecord> {
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    parse_lines(&text, hint(root, path).as_deref())
+}
+
+/// Carpeta de primer nivel bajo `root` (el proyecto codificado por Claude Code).
+fn hint(root: &Path, path: &Path) -> Option<String> {
+    path.strip_prefix(root)
+        .ok()
+        .and_then(Path::parent)
+        .and_then(|dir| dir.components().next())
+        .map(|c| c.as_os_str().to_string_lossy().into_owned())
 }
 
 /// Lee el texto de un JSONL. `project_hint` se usa como carpeta si la línea no trae `cwd`.

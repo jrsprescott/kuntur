@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use jiff::civil::Date;
 use jiff::tz::TimeZone;
 
-use crate::model::{AgentKind, Period, UsageRecord};
+use crate::model::{AgentKind, Cost, Period, UsageRecord};
 
 /// Totales de un período.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -19,6 +19,12 @@ pub struct Totals {
     /// Sesiones distintas (por agente + id).
     pub sessions: u64,
     pub agent_time_secs: u64,
+    /// Costo conocido (real + estimado), en micro-dólares.
+    pub cost_micros: u64,
+    /// Parte del costo que informó la propia fuente (OpenCode).
+    pub real_cost_micros: u64,
+    /// Turnos de modelos sin precio (no suman al costo).
+    pub unpriced_turns: u64,
 }
 
 impl Totals {
@@ -41,6 +47,18 @@ pub struct ModelRow {
     pub input: u64,
     pub output: u64,
     pub turns: u64,
+    /// Costo conocido en micro-dólares; `None` si ningún turno de este modelo tiene precio.
+    pub cost_micros: Option<u64>,
+}
+
+/// Participación de un agente.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AgentShare {
+    pub agent: AgentKind,
+    /// Entrada + salida.
+    pub total: u64,
+    /// Costo conocido en micro-dólares (0 si ninguno de sus modelos tiene precio).
+    pub cost_micros: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -71,8 +89,8 @@ pub struct Summary {
     pub heatmap: [[u64; 24]; 7],
     /// Ordenado por entrada + salida, de mayor a menor.
     pub models: Vec<ModelRow>,
-    /// Entrada + salida por agente, de mayor a menor.
-    pub agents: Vec<(AgentKind, u64)>,
+    /// Entrada + salida (y costo) por agente, de mayor a menor.
+    pub agents: Vec<AgentShare>,
     /// Las 10 sesiones con más tokens.
     pub top_tasks: Vec<TaskRow>,
 }
@@ -220,6 +238,14 @@ fn totals(records: &[&UsageRecord]) -> Totals {
         t.cache_read += r.cache_read;
         t.cache_write += r.cache_write;
         t.turns += 1;
+        match r.cost {
+            Cost::Unknown => t.unpriced_turns += 1,
+            Cost::Estimated(m) => t.cost_micros += m,
+            Cost::Real(m) => {
+                t.cost_micros += m;
+                t.real_cost_micros += m;
+            }
+        }
         sessions.entry((r.agent, r.session_id.as_str())).or_default().push(r.ts);
     }
     t.sessions = sessions.len() as u64;
@@ -246,10 +272,14 @@ fn models(records: &[&UsageRecord]) -> Vec<ModelRow> {
             input: 0,
             output: 0,
             turns: 0,
+            cost_micros: None,
         });
         row.input += r.input;
         row.output += r.output;
         row.turns += 1;
+        if let Some(m) = r.cost.micros() {
+            row.cost_micros = Some(row.cost_micros.unwrap_or(0) + m);
+        }
     }
     let mut rows: Vec<ModelRow> = map.into_values().collect();
     rows.sort_by(|a, b| {
@@ -260,13 +290,22 @@ fn models(records: &[&UsageRecord]) -> Vec<ModelRow> {
     rows
 }
 
-fn agents(records: &[&UsageRecord]) -> Vec<(AgentKind, u64)> {
-    let mut map: HashMap<AgentKind, u64> = HashMap::new();
+fn agents(records: &[&UsageRecord]) -> Vec<AgentShare> {
+    let mut map: HashMap<AgentKind, (u64, u64)> = HashMap::new();
     for r in records {
-        *map.entry(r.agent).or_default() += r.total();
+        let e = map.entry(r.agent).or_default();
+        e.0 += r.total();
+        e.1 += r.cost.micros().unwrap_or(0);
     }
-    let mut rows: Vec<_> = map.into_iter().collect();
-    rows.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    let mut rows: Vec<AgentShare> = map
+        .into_iter()
+        .map(|(agent, (total, cost_micros))| AgentShare {
+            agent,
+            total,
+            cost_micros,
+        })
+        .collect();
+    rows.sort_by(|a, b| b.total.cmp(&a.total).then_with(|| a.agent.cmp(&b.agent)));
     rows
 }
 
@@ -338,6 +377,8 @@ mod tests {
             session_id: session.into(),
             title: None,
             project: None,
+            cost: Cost::Unknown,
+            key: None,
         }
     }
 
@@ -427,6 +468,8 @@ mod tests {
             rec("b", "gpt-5", "2026-11-23T08:00:00-05:00", 100, 0),
         ];
         records[2].agent = AgentKind::Codex;
+        records[0].cost = Cost::Real(100);
+        records[2].cost = Cost::Estimated(500);
         let s = summarize(&records, Period::Days7, now(), &lima());
         assert_eq!(
             s.models,
@@ -436,18 +479,38 @@ mod tests {
                     provider: "OpenAI",
                     input: 100,
                     output: 0,
-                    turns: 1
+                    turns: 1,
+                    cost_micros: Some(500),
                 },
                 ModelRow {
                     model: "claude-x".into(),
                     provider: "Anthropic",
                     input: 20,
                     output: 20,
-                    turns: 2
+                    turns: 2,
+                    cost_micros: Some(100),
                 },
             ]
         );
-        assert_eq!(s.agents, vec![(AgentKind::Codex, 100), (AgentKind::ClaudeCode, 40)]);
+        assert_eq!(
+            s.agents,
+            vec![
+                AgentShare {
+                    agent: AgentKind::Codex,
+                    total: 100,
+                    cost_micros: 500
+                },
+                AgentShare {
+                    agent: AgentKind::ClaudeCode,
+                    total: 40,
+                    cost_micros: 100
+                },
+            ]
+        );
+        // Costo total: real + estimado; el turno sin costo se cuenta aparte.
+        assert_eq!(s.totals.cost_micros, 600);
+        assert_eq!(s.totals.real_cost_micros, 100);
+        assert_eq!(s.totals.unpriced_turns, 1);
     }
 
     #[test]

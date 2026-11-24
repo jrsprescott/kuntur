@@ -43,6 +43,33 @@ pub struct UsageRecord {
     pub title: Option<String>,
     /// Carpeta del proyecto (solo el último segmento se muestra en la UI).
     pub project: Option<String>,
+    /// Costo del registro: real si la fuente lo trae (OpenCode), estimado con la tabla de precios,
+    /// o desconocido.
+    pub cost: Cost,
+    /// Identidad de la respuesta para no contarla dos veces cuando aparece en varios archivos
+    /// (Claude Code copia el historial al reanudar una sesión): `message.id|requestId`.
+    pub key: Option<String>,
+}
+
+/// Costo en micro-dólares (USD × 10⁻⁶): enteros para sumar sin errores de redondeo.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Cost {
+    #[default]
+    Unknown,
+    /// Calculado con la tabla de precios (precio de API, no lo que cobra una suscripción).
+    Estimated(u64),
+    /// Informado por la propia fuente.
+    Real(u64),
+}
+
+impl Cost {
+    /// Micro-dólares, si se conoce.
+    pub fn micros(self) -> Option<u64> {
+        match self {
+            Cost::Unknown => None,
+            Cost::Estimated(m) | Cost::Real(m) => Some(m),
+        }
+    }
 }
 
 impl UsageRecord {

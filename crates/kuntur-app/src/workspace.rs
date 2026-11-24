@@ -594,6 +594,10 @@ impl Workspace {
                 self.open_usage(window, cx);
                 self.export_usage(cx);
             }
+            PaletteAction::EditPrices => {
+                self.open_usage(window, cx);
+                self.edit_prices(cx);
+            }
             PaletteAction::RenameSession => {}
         }
     }

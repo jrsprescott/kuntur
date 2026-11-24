@@ -3,18 +3,22 @@
 //! cuándo se trabaja (día × hora), agentes, modelos y las tareas que más tokens usaron. Esc vuelve a
 //! la terminal. La lectura del historial y los cálculos corren fuera del hilo de la UI.
 
+use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use jiff::tz::TimeZone;
 use kuntur_usage::chart::bars;
+use kuntur_usage::pricing::PriceTable;
+use kuntur_usage::store::{Sources, UsageStore};
 use kuntur_usage::{Period, Summary, UsageRecord, pct_change, summarize};
 
 use super::files_panel::empty_note;
 use super::side_panel::{badge, brand};
 use super::*;
 use crate::usage_format::{
-    change, compact, duration, folder_name, heat_levels, no_change_note, providers, range, share, thousands, versus,
+    change, compact, cost_detail, duration, folder_name, heat_levels, no_change_note, providers, range, share,
+    thousands, usd, versus,
 };
 
 /// Al reabrir la vista, se vuelve a leer el historial si la última lectura es más vieja que esto.
@@ -93,6 +97,45 @@ fn agent_color(kind: AgentKind, c: &UiColors) -> Hsla {
     kuntur_agents::info(kind).map_or(c.muted, |i| brand(i.color))
 }
 
+/// Carpeta de datos de Kuntur (`%APPDATA%\Kuntur`): ahí van `usage.db` y `pricing.toml`.
+fn data_dir() -> Option<PathBuf> {
+    std::env::var_os("APPDATA").map(|a| PathBuf::from(a).join("Kuntur"))
+}
+
+/// Tabla incluida + la del usuario encima. Si la del usuario tiene un error, se usan los precios
+/// incluidos y se devuelve el aviso.
+fn load_prices() -> (PriceTable, Option<String>) {
+    let builtin = PriceTable::builtin();
+    let Some(path) = data_dir().map(|d| d.join("pricing.toml")).filter(|p| p.is_file()) else {
+        return (builtin, None);
+    };
+    match std::fs::read_to_string(&path)
+        .map_err(|e| e.to_string())
+        .and_then(|text| PriceTable::parse(&text))
+    {
+        Ok(user) => (builtin.with_overrides(user), None),
+        Err(e) => (
+            builtin,
+            Some(format!(
+                "pricing.toml tiene un error ({e}): se usan los precios incluidos"
+            )),
+        ),
+    }
+}
+
+/// Historial real por el almacén incremental (`usage.db`): solo se releen los archivos que
+/// cambiaron. Si la base no se puede usar, se lee todo directamente.
+fn load_real(home: &Path) -> Vec<UsageRecord> {
+    let sources = Sources::under_home(home);
+    if let Some(mut store) = data_dir().and_then(|d| UsageStore::open(&d.join("usage.db")).ok())
+        && store.import(&sources).is_ok()
+        && let Ok(records) = store.records()
+    {
+        return records;
+    }
+    kuntur_usage::load_local(home)
+}
+
 impl Workspace {
     // ── Estado ──────────────────────────────────────────────────────────────
 
@@ -121,29 +164,66 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Lee el historial en segundo plano. Con `KUNTUR_SMOKE_USAGE` usa datos sintéticos: las
+    /// Lee el historial en segundo plano (el real, por el almacén incremental) y le pone el costo
+    /// estimado con la tabla de precios. Con `KUNTUR_SMOKE_USAGE` usa datos sintéticos: las
     /// capturas de prueba nunca muestran el historial real.
     fn load_usage(&mut self, cx: &mut Context<Self>) {
         let home = self.home.clone();
         let synthetic = std::env::var_os("KUNTUR_SMOKE_USAGE").is_some();
         self.usage.load = Some(cx.spawn(async move |this, cx| {
-            let records = cx
+            let (records, notice) = cx
                 .background_executor()
                 .spawn(async move {
-                    if synthetic {
+                    let (prices, notice) = if synthetic {
+                        (PriceTable::builtin(), None)
+                    } else {
+                        load_prices()
+                    };
+                    let mut records = if synthetic {
                         kuntur_usage::synthetic::records(now_secs() as i64, &TimeZone::system())
                     } else {
-                        home.map(|h| kuntur_usage::load_local(&h)).unwrap_or_default()
-                    }
+                        home.as_deref().map(load_real).unwrap_or_default()
+                    };
+                    prices.apply(&mut records);
+                    (records, notice)
                 })
                 .await;
             let _ = this.update(cx, |w, cx| {
                 w.usage.records = Some(Arc::new(records));
                 w.usage.loaded_at = Some(Instant::now());
                 w.usage.load = None;
+                if notice.is_some() {
+                    w.usage.notice = notice.map(Into::into);
+                }
                 w.recompute_usage(cx);
             });
         }));
+    }
+
+    /// "Editar precios": crea `%APPDATA%\Kuntur\pricing.toml` (copia de la tabla incluida) si no
+    /// existe y lo abre con el editor de Windows. Los cambios se ven al volver a abrir la vista.
+    pub(super) fn edit_prices(&mut self, cx: &mut Context<Self>) {
+        let Some(path) = data_dir().map(|d| d.join("pricing.toml")) else {
+            self.usage.notice = Some("No se encontró la carpeta de datos de Kuntur (%APPDATA%)".into());
+            cx.notify();
+            return;
+        };
+        if !path.exists() {
+            let written = path
+                .parent()
+                .map_or(Ok(()), std::fs::create_dir_all)
+                .and_then(|_| std::fs::write(&path, kuntur_usage::pricing::BUILTIN));
+            if let Err(e) = written {
+                self.usage.notice = Some(format!("No se pudo crear pricing.toml: {e}").into());
+                cx.notify();
+                return;
+            }
+        }
+        cx.open_with_system(&path);
+        // Los precios se aplican al cargar: la próxima apertura vuelve a cargar.
+        self.usage.loaded_at = None;
+        self.usage.notice = Some("Se abrió pricing.toml: guarda los cambios y vuelve a abrir Uso de agentes".into());
+        cx.notify();
     }
 
     /// Recalcula el resumen del período elegido (fuera del hilo de la UI); mientras tanto se ve el
@@ -340,7 +420,7 @@ impl Workspace {
         let note = no_change_note(self.usage.period, prev.is_some());
         let delta = |cur: u64, old: Option<u64>| old.and_then(|o| change(pct_change(cur, o)));
         let cache_line = t.cache_share().map(|p| format!("{} % desde caché", p.round() as u64));
-        // Mismo alto para las cuatro (la de entrada lleva una línea más).
+        // Mismo alto para todas (la de entrada y la de costo llevan una línea más).
         let cards = h_flex()
             .flex_shrink_0()
             .items_stretch()
@@ -384,10 +464,29 @@ impl Workspace {
                 delta(t.agent_time_secs, prev.map(|p| p.agent_time_secs)),
                 (vs, note),
                 None,
+            ))
+            .child(card(
+                c,
+                "card-cost",
+                "Costo estimado",
+                usd(t.cost_micros),
+                cost_detail(t),
+                // En el costo, bajar es lo bueno: verde al bajar, rojo al subir.
+                delta(t.cost_micros, prev.map(|p| p.cost_micros)).map(|(text, up)| (text, !up)),
+                (vs, note),
+                Some(if t.unpriced_turns > 0 {
+                    format!(
+                        "{} {} sin precio",
+                        thousands(t.unpriced_turns),
+                        if t.unpriced_turns == 1 { "turno" } else { "turnos" }
+                    )
+                } else {
+                    "precio de API".to_string()
+                }),
             ));
 
         // Resumen en una línea (§10): agente más usado · agentes usados · sesiones.
-        let top_agent = s.agents.first().map(|(k, _)| k.name()).unwrap_or("—");
+        let top_agent = s.agents.first().map(|a| a.agent.name()).unwrap_or("—");
         let agents_used = s.agents.len();
         let facts = format!(
             "Agente más usado: {top_agent} · {agents_used} {} · {} {}",
@@ -564,10 +663,16 @@ impl Workspace {
 
     fn render_agents(&self, s: &Summary) -> Div {
         let c = &self.colors;
-        let total: u64 = s.agents.iter().map(|a| a.1).sum();
+        let total: u64 = s.agents.iter().map(|a| a.total).sum();
         let track = c.hover;
-        let rows = s.agents.iter().map(|&(kind, tokens)| {
+        let rows = s.agents.iter().map(|a| {
+            let (kind, tokens) = (a.agent, a.total);
             let pct = share(tokens, total);
+            let money = if a.cost_micros > 0 {
+                format!(" · {}", usd(a.cost_micros))
+            } else {
+                String::new()
+            };
             let color = agent_color(kind, c);
             h_flex().gap(px(10.)).items_center().child(badge(kind, 22., 6.)).child(
                 v_flex()
@@ -582,7 +687,7 @@ impl Workspace {
                             .child(
                                 div()
                                     .text_color(c.muted)
-                                    .child(format!("{} · {pct} %", compact(tokens))),
+                                    .child(format!("{}{money} · {pct} %", compact(tokens))),
                             ),
                     )
                     .child(
@@ -624,7 +729,8 @@ impl Workspace {
             .child(div().flex_1().child("Modelo"))
             .child(num("Entrada".into(), 76.))
             .child(num("Salida".into(), 76.))
-            .child(num("Turnos".into(), 60.));
+            .child(num("Turnos".into(), 60.))
+            .child(num("Costo".into(), 84.));
         let rows = s.models.iter().take(MAX_MODELS).map(|m| {
             h_flex()
                 .text_size(px(12.5))
@@ -642,6 +748,7 @@ impl Workspace {
                 .child(num(compact(m.input), 76.).text_color(c.muted))
                 .child(num(compact(m.output), 76.).text_color(c.muted))
                 .child(num(thousands(m.turns), 60.).text_color(c.muted))
+                .child(num(m.cost_micros.map_or_else(|| "sin precio".to_string(), usd), 84.).text_color(c.muted))
         });
         let hidden = s.models.len().saturating_sub(MAX_MODELS);
         section(c, "Modelos", None)

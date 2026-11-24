@@ -137,7 +137,7 @@ fn group(days: &[(Date, u64, u64)], key: impl Fn(Date) -> Date, names: impl Fn(D
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{AgentKind, UsageRecord, summarize};
+    use crate::{AgentKind, Cost, UsageRecord, summarize};
     use jiff::tz::TimeZone;
 
     fn ts(s: &str) -> i64 {
@@ -165,6 +165,8 @@ mod tests {
             session_id: "a".into(),
             title: None,
             project: None,
+            cost: Cost::Unknown,
+            key: None,
         }
     }
 

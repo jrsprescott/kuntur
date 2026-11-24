@@ -19,7 +19,7 @@
 | Task 10 (parte): **RAM** abajo a la derecha | ✅ hecho (64–80 MB en las pruebas de humo, objetivo < 90 MB) |
 | Filtros **Hoy / 7 días / 30 días / 1 año / Todo** en `kuntur-usage` (especificación §10) | ✅ hecho, con pruebas |
 | Task 9: vista **Uso de agentes** (selector de períodos, tarjetas, tokens por hora/día/semana/mes, mapa de horas, modelos, agentes, tareas top, CSV) + botones de ícono Tema y Estadísticas | ✅ hecho; capturas con datos sintéticos en Blue/Dark/White y "Hoy"; probado contra el historial real (~5 s de lectura en segundo plano) |
-| Task 9b: **costo estimado** (`pricing.toml` editable) y **almacén SQLite incremental** | ⏸ **siguiente paso** |
+| Task 9b: **costo estimado** (`pricing.toml` editable) y **almacén SQLite incremental** | ✅ hecho: precios verificados el 2026-11-23 en las páginas oficiales (Anthropic, OpenAI, DeepSeek, Z.ai, MiniMax); sin precio publicado: MiniMax-M2.7, qwen3.8-max, Kimi, glm-5.3-flash-free. Importación real: 0,66 s la primera vez, 0,04 s las siguientes |
 | Task 10 (resto): humo con datos sintéticos de uso (`-Usage`), `f3-resultados.md`, CI | ⏸ pendiente |
 
 Pruebas de humo del panel: `.\scripts\smoke.ps1 -Sessions 1 -Panel files -Commands 'cd C:\Windows\Media'` (`-Panel full|compact|files`).

@@ -8,10 +8,12 @@ pub mod codex;
 pub mod export;
 pub mod model;
 pub mod opencode;
+pub mod pricing;
+pub mod store;
 pub mod synthetic;
 
-pub use aggregate::{ModelRow, Summary, TaskRow, Totals, pct_change, provider_of, summarize};
-pub use model::{AgentKind, Period, UsageRecord};
+pub use aggregate::{AgentShare, ModelRow, Summary, TaskRow, Totals, pct_change, provider_of, summarize};
+pub use model::{AgentKind, Cost, Period, UsageRecord};
 
 use std::path::{Path, PathBuf};
 

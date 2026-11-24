@@ -29,6 +29,38 @@ fn report(agent: AgentKind, records: &[UsageRecord]) {
     );
 }
 
+/// Mide la importación incremental contra el historial real, en una base temporal (se borra al
+/// terminar). Imprime solo tiempos y cantidades.
+#[test]
+#[ignore = "lee el historial real del usuario; solo para comprobación manual"]
+fn importacion_incremental_del_historial_real() {
+    use kuntur_usage::store::{Sources, UsageStore};
+    let db = std::env::temp_dir().join(format!("kuntur-prueba-usage-{}.db", std::process::id()));
+    let _ = std::fs::remove_file(&db);
+    let sources = Sources::under_home(&home());
+    let t = std::time::Instant::now();
+    let mut store = UsageStore::open(&db).unwrap();
+    let first = store.import(&sources).unwrap();
+    let n = store.records().unwrap().len();
+    println!(
+        "primera importación: {:?} en {:.2} s ({n} registros)",
+        first,
+        t.elapsed().as_secs_f64()
+    );
+    let t = std::time::Instant::now();
+    let second = store.import(&sources).unwrap();
+    let again = store.records().unwrap();
+    println!(
+        "segunda importación: {:?} en {:.2} s",
+        second,
+        t.elapsed().as_secs_f64()
+    );
+    let direct = kuntur_usage::load_local(&home()).len();
+    println!("registros: almacén={} lectura directa={direct}", again.len());
+    drop(store);
+    let _ = std::fs::remove_file(&db);
+}
+
 #[test]
 #[ignore = "lee el historial real del usuario; solo para comprobación manual"]
 fn totales_del_historial_real() {

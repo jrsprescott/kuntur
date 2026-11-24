@@ -23,6 +23,7 @@ pub enum PaletteAction {
     FontReset,
     Usage,
     ExportUsage,
+    EditPrices,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -41,7 +42,7 @@ const fn item(action: PaletteAction, label: &'static str, shortcut: Option<&'sta
 }
 
 /// Todas las acciones, en el orden en que se muestran.
-pub const ITEMS: [PaletteItem; 17] = [
+pub const ITEMS: [PaletteItem; 18] = [
     item(PaletteAction::NewSession, "Nueva sesión", Some("Ctrl+Shift+T")),
     item(PaletteAction::RenameSession, "Renombrar sesión", None),
     item(PaletteAction::CloseSession, "Cerrar sesión", Some("Ctrl+Shift+W")),
@@ -59,6 +60,7 @@ pub const ITEMS: [PaletteItem; 17] = [
     item(PaletteAction::FontReset, "Fuente: restablecer", Some("Ctrl+0")),
     item(PaletteAction::Usage, "Uso de agentes", Some("Ctrl+Shift+U")),
     item(PaletteAction::ExportUsage, "Uso de agentes: exportar CSV", None),
+    item(PaletteAction::EditPrices, "Uso de agentes: editar precios", None),
 ];
 
 /// Minúsculas y sin tildes; la puntuación cuenta como espacio.

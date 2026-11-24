@@ -5,7 +5,7 @@
 use jiff::ToSpan;
 use jiff::tz::TimeZone;
 
-use crate::{AgentKind, UsageRecord};
+use crate::{AgentKind, Cost, UsageRecord};
 
 /// Días hacia atrás que cubre (más de un año, para que "1 año" y "Todo" difieran).
 pub const DAYS: i64 = 420;
@@ -45,11 +45,12 @@ impl Rng {
 /// (agente, modelo, ¿usa caché?) según un número 0–99: Claude Code es el más usado.
 fn pick_agent(roll: u64) -> (AgentKind, &'static str, bool) {
     match roll {
-        0..40 => (AgentKind::ClaudeCode, "claude-sonnet-4-5", true),
-        40..52 => (AgentKind::ClaudeCode, "claude-opus-4-1", true),
-        52..80 => (AgentKind::Codex, "gpt-5-codex", true),
-        80..92 => (AgentKind::OpenCode, "deepseek/deepseek-chat", false),
-        _ => (AgentKind::Gemini, "gemini-2.5-pro", false),
+        0..40 => (AgentKind::ClaudeCode, "claude-sonnet-5-5", true),
+        40..52 => (AgentKind::ClaudeCode, "claude-opus-5-5", true),
+        52..80 => (AgentKind::Codex, "gpt-5.5", true),
+        80..92 => (AgentKind::OpenCode, "deepseek/deepseek-v4-pro", false),
+        // Sin precio en la tabla: la vista lo muestra como "sin precio".
+        _ => (AgentKind::Gemini, "gemini-demo", false),
     }
 }
 
@@ -96,6 +97,8 @@ pub fn records(now: i64, tz: &TimeZone) -> Vec<UsageRecord> {
                     session_id: format!("sintetica-{back}-{s}"),
                     title: Some(title.into()),
                     project: Some(project.into()),
+                    cost: Cost::Unknown,
+                    key: None,
                 });
                 ts += 20 + rng.below(160) as i64;
             }
