@@ -9,6 +9,7 @@ mod audit_view;
 mod connections_view;
 mod dock_view;
 mod files_panel;
+mod preview_view;
 mod side_panel;
 mod title_bar;
 mod usage_view;
@@ -42,6 +43,7 @@ use audit_view::AuditState;
 use connections_view::{ConnectionsState, RemoteTab};
 use dock_view::DockDrag;
 use files_panel::FilesState;
+use preview_view::PreviewState;
 use usage_view::UsageState;
 
 /// Panel izquierdo compacto (solo íconos) y completo.
@@ -118,6 +120,8 @@ pub struct Workspace {
     audit: AuditState,
     /// Gestor de conexiones SSH (panel flotante, F6).
     connections: ConnectionsState,
+    /// Vista previa de archivos (F8): divide la zona central cuando tiene pestañas.
+    preview: PreviewState,
     home: Option<PathBuf>,
     /// F5b: estado exacto por hooks / OSC 7501, worktrees, instalador de ganchos.
     exact: ExactAgents,
@@ -186,6 +190,7 @@ impl Workspace {
             usage: UsageState::default(),
             audit: AuditState::new(cx),
             connections: ConnectionsState::default(),
+            preview: PreviewState::default(),
             home: home_dir(),
             exact: ExactAgents::default(),
             _monitor: Self::spawn_monitor(cx),
@@ -312,6 +317,9 @@ impl Workspace {
         }
         // Prueba de humo del gestor de conexiones (conexiones sintéticas).
         this.smoke_connections(window, cx);
+
+        // Prueba de humo de la vista previa (F8): archivos abiertos y enlaces subrayados.
+        this.smoke_preview(Duration::from_millis(2_500 + 600 * smoke_commands + 1_500), window, cx);
         this
     }
 
@@ -1366,6 +1374,8 @@ impl Render for Workspace {
         let c = self.colors.clone();
         let palette = self.palette.as_ref().map(|p| self.render_palette(p, cx));
         let connections = self.connections.open.then(|| self.render_connections(cx));
+        let link_menu = self.render_link_menu(cx);
+        self.sync_web_visibility();
         v_flex()
             .relative()
             .size_full()
@@ -1397,7 +1407,8 @@ impl Render for Workspace {
                                 } else if self.audit.open {
                                     this.child(self.render_audit(window, cx))
                                 } else {
-                                    this.child(self.render_terminals(cx))
+                                    let terminals = self.render_terminals(cx);
+                                    this.child(self.render_with_preview(terminals, cx))
                                 }
                             }))
                             .child(self.render_status_line(cx)),
@@ -1406,5 +1417,6 @@ impl Render for Workspace {
             .children(palette)
             .children(self.render_exact_overlay(cx))
             .children(connections)
+            .children(link_menu)
     }
 }

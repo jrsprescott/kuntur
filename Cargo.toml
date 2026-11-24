@@ -25,8 +25,11 @@ zstd = "0.14"
 rusqlite = { version = "0.43", features = ["bundled"] }
 jiff = "1"
 sysinfo = "0.40"
+# F8 (kuntur-preview: recarga automática y diff)
+notify = "9"
+similar = "2"
+wry = "0.57"
 # Se irán activando por fase (ver docs/plans/README.md).
-# notify = "9"                 # F8 (kuntur-preview: recarga automática)
 # nucleo = "0.5"               # F9 (kuntur-complete)
 
 [profile.release]

@@ -53,6 +53,13 @@ pub(super) struct ExactAgents {
     _events: Option<Task<()>>,
 }
 
+impl ExactAgents {
+    /// Diálogo "Instalar ganchos" abierto (la vista previa oculta el visor web mientras tanto).
+    pub(super) fn installer_open(&self) -> bool {
+        self.installer.is_some()
+    }
+}
+
 /// Límites de la línea de estado de Claude en el formato del anillo (ventanas de 5 h y semanal).
 fn limits_from(l: &StatusLimits) -> Limits {
     Limits {

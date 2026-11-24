@@ -8,6 +8,7 @@
 - Rama **`fase/f4-acoplada`** (sale de `fase/f3-v5`): Fase 4 · Terminal acoplada **terminada** (`docs/plans/f4-resultados.md`); faltan las pruebas manuales ⏳ del usuario.
 - Rama de trabajo **`fase/f5-agentes`** (sale de `fase/f4-acoplada`): **Fase 5 terminada** (`docs/plans/f5-resultados.md`, con el detalle en `f5a-resultados.md` y `f5b-resultados.md`). F5a: catálogo configurable, abrir agentes con un clic, agentes de la acoplada, alertas y auditoría. F5b: `kuntur-hook.exe` + named pipe, OSC 7501, estado exacto (trabajando / pide permiso / espera respuesta / terminó), subagentes con su acción, Permitir / Rechazar desde la fila, worktree por agente (la acoplada arranca ahí), "Enviar a terminal", anillo de Claude por su línea de estado e instalador de ganchos con confirmación. Faltan las pruebas manuales ⏳ del usuario (sobre todo **instalar los ganchos** y probar con `claude` real). Pendiente: auditoría desde los hooks.
 - Rama **`fase/f6-ssh`** (sale de `fase/f4-acoplada`): Fase 6 · SSH y conexiones **terminada** (`docs/plans/f6-resultados.md`); faltan las pruebas manuales ⏳ contra un servidor real. Se trabajó en paralelo a F5: al integrar, revisar los ganchos en `workspace.rs` (lista en `f6-resultados.md`).
+- Rama **`fase/f8-vista-previa`** (sale de `fase/f4-acoplada`, en paralelo con otras fases): Fase 8 · Vista previa y diff **terminada para archivos locales** (`docs/plans/f8-resultados.md`; spike del visor web en `docs/plans/f8-spike-wry.md`); faltan las pruebas manuales ⏳ y los archivos remotos (dependen de F6/F7).
 - Planes: `docs/plans/README.md` (hoja de ruta), `docs/plans/2026-11-23-f3-v5-agentes-y-uso.md` y `docs/plans/2026-11-23-f4-terminal-acoplada.md`.
 - Diseño de referencia: `docs/PLAN.md` ("Cambios de la v4") y la simulación `docs/simulacion/index.html`.
 - **Especificación del usuario** (adoptada el 2026-11-23): `docs/ESPECIFICACION.md`, con las decisiones tomadas (se mantiene GPUI, costo estimado, spike de `wry`…). La hoja de ruta pasó a 11 fases (nueva F8 · Vista previa y diff).
@@ -29,6 +30,19 @@ Pruebas de humo: `.\scripts\smoke.ps1 -Sessions 2 -Audit -AuditQuery 'git' -Badg
 | Conexión a un servidor real, ssh-agent real, `sudo apt upgrade` | ⏳ lista manual en `f6-resultados.md` |
 
 Pruebas de humo: `.\scripts\smoke.ps1 -Sessions 1 -Connections list|form|remote` (conexiones **sintéticas**; nunca `~/.ssh` ni credenciales reales).
+
+## Fase 8: vista previa y diff (rama `fase/f8-vista-previa`)
+| Parte | Estado |
+|---|---|
+| Enlaces en la salida: lógica pura `crates/kuntur-term/src/links.rs` (URLs, rutas absolutas/relativas/entre comillas, `:línea`, solo si existen) | ✅ con pruebas |
+| Ctrl+mouse subraya, Ctrl+clic abre, clic derecho → menú (`terminal_view/links.rs`) | ✅ captura con `-Links` |
+| Crate `kuntur-preview` (tipo, lectura con límites, diff unificado, `git diff`, `notify`, LibreOffice) | ✅ con pruebas |
+| Panel `workspace/preview_view.rs`: división terminal \| vista previa, pestañas, separador, Markdown, imágenes/SVG, texto con números, diff a colores, recarga automática | ✅ capturas Dark/Blue |
+| Spike `wry` (WebView2 hijo de GPUI) | ✅ funciona: integrado para PDF/HTML (RAM aparte: ~141 MB HTML, ~256 MB PDF, 0 al cerrar) |
+| Office → PDF con LibreOffice | ✅ código y detección; sin probar con un documento real (LibreOffice no está instalado aquí) |
+| Archivos remotos por SFTP | ⏳ F6/F7 |
+
+Pruebas de humo: `.\scripts\smoke.ps1 -Sessions 1 -Preview 'crates\kuntur-preview\tests\datos\ejemplo.md'` (`-PreviewDiff`, `-PreviewEdit`, `-Links`); el spike: `.\spikes\wry-gpui\medir.ps1 -Step menu`.
 
 ## Fase 4: terminal acoplada
 | Parte | Estado |

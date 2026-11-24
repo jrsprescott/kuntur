@@ -24,6 +24,12 @@
   .\scripts\smoke.ps1 -Sessions 1 -HooksInstall -Theme white -Out target\smoke-ganchos.png
 .EXAMPLE
   .\scripts\smoke.ps1 -Sessions 1 -Connections list -Out target\smoke-conexiones.png
+.EXAMPLE
+  .\scripts\smoke.ps1 -Sessions 1 -Preview 'crates\kuntur-preview\tests\datos\ejemplo.md;crates\kuntur-preview\tests\datos\ejemplo.svg' -Out target\smoke-preview.png
+.EXAMPLE
+  .\scripts\smoke.ps1 -Sessions 1 -Preview 'crates\kuntur-preview\tests\datos\ejemplo.md' -PreviewEdit -PreviewDiff -Out target\smoke-diff.png
+.EXAMPLE
+  .\scripts\smoke.ps1 -Sessions 1 -Commands 'cd crates\kuntur-preview\tests\datos','dir; Write-Host ver .\ejemplo.md:3 y https://example.com' -Links -Out target\smoke-links.png
 #>
 param(
     [string[]]$Commands = @('Write-Host rojo -ForegroundColor Red; Write-Host verde -ForegroundColor Green', 'Get-ChildItem | Select-Object -First 5'),
@@ -69,6 +75,17 @@ param(
     # panel, 'form' el formulario de edición y 'remote' una pestaña remota a un puerto sin servidor
     # (muestra el error y la franja "Desconectado · Reconectar"). Nunca usa ~/.ssh ni credenciales.
     [ValidateSet('', 'list', 'form', 'remote')][string]$Connections = '',
+    # Vista previa (F8): archivos (rutas relativas a la raíz del repo, separadas por ';') que se abren
+    # al iniciar; usar solo los archivos SINTÉTICOS de crates\kuntur-preview\tests\datos.
+    [string]$Preview = '',
+    # Las pestañas de la vista previa abren en modo diff ("Cambios").
+    [switch]$PreviewDiff,
+    # Copia -Preview (un solo archivo) a target\smoke-preview\ y, a los pocos segundos, le agrega y
+    # cambia líneas desde este script: comprueba la recarga automática y el diff contra la versión anterior.
+    [switch]$PreviewEdit,
+    # Subraya los enlaces (rutas/URLs) de la primera sesión después de sus comandos y abre el menú
+    # contextual del primero que sea una ruta.
+    [switch]$Links,
     # Pantalla donde se abre la ventana, contando de izquierda a derecha desde 0. Por defecto, la de
     # más a la derecha que NO sea la principal (en la PC del usuario: el monitor Teros), para no
     # interrumpir lo que pasa en la principal. La ventana se abre sin tomar el foco.
@@ -143,6 +160,22 @@ if ($HooksInstall) {
 }
 if ($Dock -and $DockCommands.Count -gt 0) { $smokeEnv.KUNTUR_SMOKE_DOCK_INPUT = ($DockCommands -join '\n') }
 if ($Connections) { $smokeEnv.KUNTUR_SMOKE_CONNECTIONS = $Connections }
+$editFile = $null
+if ($PreviewEdit -and $Preview) {
+    # Copia de trabajo fuera del repo (target\ no se sube), para poder modificarla.
+    $dir = Join-Path $root 'target\smoke-preview'
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    $editFile = Join-Path $dir (Split-Path $Preview -Leaf)
+    Copy-Item (Join-Path $root $Preview) $editFile -Force
+    $Preview = $editFile
+}
+if ($Preview) {
+    $smokeEnv.KUNTUR_SMOKE_PREVIEW = (($Preview -split ';') | Where-Object { $_ } | ForEach-Object {
+            if ([System.IO.Path]::IsPathRooted($_)) { $_ } else { Join-Path $root $_ }
+        }) -join ';'
+}
+if ($PreviewDiff) { $smokeEnv.KUNTUR_SMOKE_PREVIEW_DIFF = '1' }
+if ($Links) { $smokeEnv.KUNTUR_SMOKE_LINKS = '1' }
 foreach ($k in $smokeEnv.Keys) { Set-Item "Env:$k" $smokeEnv[$k] }
 $p = Start-Process $exe -PassThru
 foreach ($k in $smokeEnv.Keys) { Remove-Item "Env:$k" }
@@ -165,6 +198,17 @@ if ($Dock -eq 'reopen') { $dockWait += 3 }
 # Los eventos sintéticos salen a los 3 s (más sus demoras).
 if ($AgentEvents) { $dockWait += 3 }
 if ($SendSuggestion -gt 0) { $dockWait += 3 }
+if ($Links) { $dockWait += 3 }
+if ($editFile) {
+    # Cambia la copia como lo haría un agente: una línea modificada y dos nuevas.
+    Start-Sleep -Seconds 3
+    $text = [System.IO.File]::ReadAllText($editFile)
+    $lines = $text -split "`n"
+    if ($lines.Count -gt 2) { $lines[2] = $lines[2] + ' (línea cambiada por la prueba)' }
+    $text = ($lines -join "`n") + "`n## Agregado por la prueba de humo`n`nEsta sección no estaba al abrir el archivo.`n"
+    [System.IO.File]::WriteAllText($editFile, $text, (New-Object System.Text.UTF8Encoding $false))
+    $dockWait += 1
+}
 Start-Sleep -Seconds ($WaitSec + $Commands.Count + $dockWait)
 
 $r = New-Object KunturSmoke+RECT; [KunturSmoke]::GetClientRect($p.MainWindowHandle, [ref]$r) | Out-Null

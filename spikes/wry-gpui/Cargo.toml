@@ -1,0 +1,22 @@
+[package]
+name = "wry-gpui"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# Prueba técnica de F8: ¿se puede incrustar un WebView2 (wry) como ventana hija de la ventana GPUI
+# (vía `HasWindowHandle`)? Mide posición, redimensionar, z-order con menús y RAM de WebView2.
+# Resultado: docs/plans/f8-spike-wry.md. Fuera del workspace: compila aparte.
+
+# Proyecto independiente (no pertenece al workspace de la raíz).
+[workspace]
+
+[dependencies]
+gpui-kit = "0.11"
+wry = "0.57"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 4
+strip = true

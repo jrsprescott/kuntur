@@ -55,6 +55,8 @@ impl Workspace {
             v
         });
         self.register_terminal(&view, token);
+        // F8: rutas y URLs de la salida (Ctrl+clic, clic derecho).
+        self.watch_links(&view, window, cx);
         view
     }
 
