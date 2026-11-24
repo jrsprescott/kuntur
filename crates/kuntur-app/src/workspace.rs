@@ -16,6 +16,7 @@ mod settings_view;
 mod side_panel;
 mod title_bar;
 mod transfers_view;
+mod update_view;
 mod usage_view;
 
 use std::collections::{HashMap, HashSet};
@@ -51,6 +52,7 @@ use mcp_view::McpState;
 use preview_view::PreviewState;
 use settings_view::SettingsPanel;
 use title_bar::TabMarquee;
+use update_view::UpdateState;
 use usage_view::UsageState;
 
 /// Panel izquierdo compacto (solo íconos) y completo.
@@ -119,6 +121,8 @@ pub struct Workspace {
     settings_panel: SettingsPanel,
     /// Marquesina del título de la pestaña activa (ajustes v0.2).
     tab_marquee: TabMarquee,
+    /// Aviso de actualización (ajustes v0.2, §7).
+    update: UpdateState,
     /// La ventana tiene el foco (si no, ninguna pestaña se está viendo).
     window_active: bool,
     codex_limits: Option<Limits>,
@@ -206,6 +210,7 @@ impl Workspace {
             toasts: crate::notify::ToastGate::default(),
             settings_panel: SettingsPanel::default(),
             tab_marquee: TabMarquee::default(),
+            update: UpdateState::default(),
             window_active: window.is_window_active(),
             codex_limits: None,
             ram: None,
@@ -367,6 +372,8 @@ impl Workspace {
         this.start_mcp(window, cx);
         // Ajustes v0.2: panel de Configuración abierto para las capturas.
         this.smoke_settings(window, cx);
+        // Ajustes v0.2: buscar versiones nuevas (10 s después de abrir y cada 24 h).
+        this.start_updates(cx);
         this
     }
 
@@ -1475,7 +1482,7 @@ impl Workspace {
 
 impl Workspace {
     /// Línea inferior de 22 px: carpeta actual a la izquierda y la RAM de Kuntur a la derecha.
-    fn render_status_line(&self, cx: &App) -> impl IntoElement {
+    fn render_status_line(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let c = &self.colors;
         let remote = self.sessions.active_id().and_then(|id| self.remote_label(id));
         let cwd = self.focused_cwd(cx).map(|p| match &remote {
@@ -1483,6 +1490,7 @@ impl Workspace {
             None => kuntur_files::display_path(&p, self.home.as_deref()),
         });
         let ram = crate::idle::ram_mb(self.ram).map(|mb| format!("Kuntur · {mb} MB"));
+        let update = self.render_update_status(cx);
         h_flex()
             .h(px(STATUS_LINE))
             .flex_shrink_0()
@@ -1514,6 +1522,7 @@ impl Workspace {
                             )
                     }),
             )
+            .children(update)
             .when_some(ram, |this, ram| {
                 this.child(
                     div()

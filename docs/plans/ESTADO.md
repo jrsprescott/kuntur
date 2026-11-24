@@ -6,7 +6,7 @@
 - **Rama `integracion/f10-f11` (pendiente de revisión para avanzar `main`): Fases 1 a 11 integradas** (2026-11-24, merge de `fase/f10-mcp` y luego `fase/f11-publicacion` sobre `main`). Pruebas, clippy y fmt en verde; capturas revisadas; MSI generado desde esta rama (no instalado). Conflictos, corrección de CPU en reposo (antes/después), capturas y pendientes en `docs/plans/integracion-f10-f11.md`. Cuando el usuario avance `main` a esta rama, **`main` tendrá F1–F11**.
 - Rama **`main`**: Fases 1 a 9 (hasta que se avance a `integracion/f10-f11`). Integración anterior: `docs/plans/integracion-f5-f9.md`.
 - Rama **`fase/f10-mcp`**: Fase 10 · MCP y comandos (`docs/plans/f10-resultados.md`): crate `kuntur-mcp`, gestor de MCP por pestaña (botón, Ctrl+Shift+M, paleta), perfiles con modelo/esfuerzo/permisos, configuración MCP generada por CLI al lanzar (Claude Code, Codex, OpenCode; nunca la global), «Probar», capturas → vista previa y comandos con atajo. Faltan las pruebas manuales ⏳ con MCP y agentes reales.
-- Rama **`fase/f11-publicacion`**: Fase 11 · Pulido y publicación (`docs/plans/f11-resultados.md`): licencia MIT OR Apache-2.0, ícono, instalador MSI (`scripts\msi.ps1 -Check`, WiX v3 + cargo-wix; AUMID `Kuntur.Kuntur`), contraste WCAG (Blue corregido), teclado en Uso/Auditoría/Conexiones, medición final, README en inglés + `README.es.md`, CONTRIBUTING, SECURITY, CHANGELOG y revisión de privacidad del historial. El repositorio **sigue privado** hasta que el usuario decida. Falta instalar el MSI en una PC de prueba ⏳.
+- Rama **`fase/f11-publicacion`**: Fase 11 · Pulido y publicación (`docs/plans/f11-resultados.md`): licencia MIT OR Apache-2.0, ícono, instalador MSI (`scripts\msi.ps1 -Check`, WiX v3 + cargo-wix; AUMID `Kuntur.Kuntur`), contraste WCAG (Blue corregido), teclado en Uso/Auditoría/Conexiones, medición final, README en inglés + `README.es.md`, CONTRIBUTING, SECURITY, CHANGELOG y revisión de privacidad del historial. El repositorio es **público** desde el 2026-11-24 (revisión de privacidad del historial y del instalador 0.1.0, que se regeneró sin rutas de la PC). Falta instalar el MSI en una PC de prueba ⏳.
 - Las ramas `integracion/*` y `fase/*` quedan como historia de cada fase (no hace falta trabajar en ellas).
 - Rama **`fase/f3-v5`**: Fase 3 (diseño v5) **terminada** (`docs/plans/f3-resultados.md`).
 - Rama **`fase/f4-acoplada`** (sale de `fase/f3-v5`): Fase 4 · Terminal acoplada **terminada** (`docs/plans/f4-resultados.md`); faltan las pruebas manuales ⏳ del usuario.
@@ -29,6 +29,16 @@ Plan: `docs/plans/2026-11-24-ajustes-v0.2.md` (sección 1, con su "Estado").
 | Barra del agente con miniaturas `#n`, "Imagen…", ×, aviso; clic → vista previa | ✅ compila; sin captura (un solo monitor) |
 | Humo `-PasteImage` (imagen sintética, sin portapapeles) | ✅ agregado, no ejecutado |
 | Tab/Backspace/Esc en la barra, agentes remotos en la barra | ⏳ ver el plan |
+
+## Ajustes v0.2 · actualizador, firma y Linux/Mac (rama `ajustes/v0.2-update`)
+| Parte | Estado |
+|---|---|
+| Versión del workspace **0.2.0**; CHANGELOG 0.2.0 (faltan títulos de pestaña e imágenes) | ✅ |
+| `kuntur-update`: versión más nueva (incluidas preliminares), MSI + SHA-256, descarga verificada, firma (WinVerifyTrust, mismo firmante si el exe en uso está firmado) | ✅ con pruebas; prueba manual contra GitHub real ✅ |
+| Aviso en la línea inferior, Configuración → Actualizaciones, instalar con `msiexec /passive` y reabrir Kuntur | ✅ compila y con pruebas; de punta a punta ⏳ (hace falta una 0.2.x publicada) |
+| README/SECURITY: la única conexión de red propia es buscar actualizaciones (desactivable) | ✅ |
+| Firma: `msi.ps1 -Sign`, SignPath opcional en la CI, `docs/FIRMA.md` | ✅; certificado ⏳ (usuario) |
+| Linux/Mac: carpetas por sistema (`kuntur_config::dirs`), `$SHELL`, trabajos `linux`/`macos` en la CI | ✅ (crates de Rust puro verificados con `cargo check --target`); la app completa ⏳ en la CI |
 
 ## Ajustes v0.2 · paso 2: árbol de archivos y menú tipo VS Code (rama `ajustes/v0.2-arbol`)
 Plan: `docs/plans/2026-11-24-ajustes-v0.2.md` (secciones 5 y 6).

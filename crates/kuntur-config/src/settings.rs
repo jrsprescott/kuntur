@@ -147,6 +147,10 @@ pub struct Settings {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mcp_perfil_inicial: Option<String>,
     /// Idioma de la interfaz (`auto`, `es`, `en`).
+    /// Buscar versiones nuevas en GitHub al arrancar y cada 24 h (la única conexión de red propia
+    /// de Kuntur; ajustes v0.2).
+    #[serde(rename = "buscar_actualizaciones")]
+    pub check_updates: bool,
     #[serde(rename = "idioma")]
     pub language: Language,
     /// Cuándo se muestran las notificaciones (con `alertas = true`).
@@ -180,6 +184,7 @@ impl Default for Settings {
             mcp_exclusivo: false,
             mcp_opencode_v2: false,
             mcp_perfil_inicial: None,
+            check_updates: true,
             language: Language::Auto,
             notifications: NotificationSettings::default(),
             sessions: Vec::new(),
@@ -193,9 +198,9 @@ impl Default for Settings {
 }
 
 impl Settings {
-    /// `%APPDATA%\Kuntur\config.toml`
+    /// `config.toml` en la carpeta de configuración (`%APPDATA%\Kuntur` en Windows; ver `dirs`).
     pub fn default_path() -> Option<PathBuf> {
-        std::env::var_os("APPDATA").map(|d| PathBuf::from(d).join("Kuntur").join("config.toml"))
+        crate::dirs::config_dir().map(|d| d.join("config.toml"))
     }
 
     /// Nunca falla: si no hay archivo o está roto, devuelve los valores por defecto.
@@ -460,6 +465,16 @@ letra = \"M\"
         let n = &s.notifications;
         assert!(n.waiting && n.permission && n.finished && n.only_background);
         assert_eq!(n.interval_min, 5);
+    }
+
+    #[test]
+    fn buscar_actualizaciones_encendido_por_defecto_y_se_puede_apagar() {
+        let path = tmp("actualizaciones");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, "theme = \"blue\"\n").unwrap();
+        assert!(Settings::load(&path).check_updates);
+        std::fs::write(&path, "buscar_actualizaciones = false\n").unwrap();
+        assert!(!Settings::load(&path).check_updates);
     }
 
     #[test]

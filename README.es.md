@@ -2,7 +2,7 @@
 
 [English](README.md) · **Español**
 
-> **Estado: versión preliminar (0.1).** Se puede usar a diario en Windows 11, pero todavía tiene asperezas.
+> **Estado: versión preliminar (0.2).** Se puede usar a diario en Windows 11, pero todavía tiene asperezas.
 > Los comentarios son bienvenidos.
 
 **Kuntur Terminal IA Agente** — *Kuntur* significa cóndor en quechua — es una terminal liviana para Windows, escrita en Rust, pensada para trabajar con
@@ -13,7 +13,8 @@ valle desde lo alto, ves de un vistazo todas tus sesiones y lo que hace cada age
 
 - **Liviana:** unos **60–80 MB de RAM** con una ventana y menos de **120 MB** con cinco sesiones y varios agentes
   (Warp usa ~900 MB en el mismo equipo). Dibujo nativo por GPU con [GPUI](https://www.gpui.rs/).
-- **Privada por diseño:** todo corre en tu PC. Sin cuenta, sin telemetría, sin conexiones de red propias.
+- **Privada por diseño:** todo corre en tu PC. Sin cuenta, sin telemetría; su única conexión de red propia es buscar
+  actualizaciones en GitHub (se puede apagar).
 
 ## Funciones
 
@@ -110,7 +111,10 @@ kuntur/
 
 ## Privacidad
 
-- Kuntur **no abre conexiones de red propias** y **no tiene telemetría**. Las únicas conexiones son las sesiones SSH
+- Kuntur **no tiene telemetría**. Su **única conexión de red propia** es buscar actualizaciones: al abrirse y cada
+  24 h consulta la API pública de GitHub (User-Agent `Kuntur/<versión>`, sin datos tuyos) y, solo si pulsas
+  "Actualizar", descarga el instalador y verifica su SHA-256 y su firma. Se apaga en Configuración → Actualizaciones
+  (`buscar_actualizaciones = false`). Las demás conexiones son las sesiones SSH
   que abras y lo que hagan los programas que ejecutes dentro de la terminal (un HTML en la vista previa puede cargar
   lo que referencia, como en cualquier navegador; los enlaces se abren en tu navegador).
 - El uso, los costos y la auditoría se calculan **en tu PC** a partir de los registros de los agentes; nada sale de ella.

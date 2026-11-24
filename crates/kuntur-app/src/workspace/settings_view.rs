@@ -30,10 +30,12 @@ pub(super) enum Row {
     Finished,
     Interval,
     Background,
+    UpdatesAuto,
+    UpdatesNow,
 }
 
 impl Row {
-    const ALL: [Row; 11] = [
+    const ALL: [Row; 13] = [
         Row::Theme,
         Row::FontSize,
         Row::Sidebar,
@@ -45,6 +47,8 @@ impl Row {
         Row::Finished,
         Row::Interval,
         Row::Background,
+        Row::UpdatesAuto,
+        Row::UpdatesNow,
     ];
 
     fn index(self) -> usize {
@@ -191,6 +195,20 @@ impl Workspace {
             Row::Finished => self.set_notifications(|n| n.finished = !n.finished),
             Row::Interval => self.set_notifications(|n| n.interval_min = step_interval(n.interval_min, forward)),
             Row::Background => self.set_notifications(|n| n.only_background = !n.only_background),
+            Row::UpdatesAuto => {
+                self.settings.check_updates = !self.settings.check_updates;
+                self.persist();
+                if self.settings.check_updates {
+                    self.check_updates(false, cx);
+                }
+            }
+            Row::UpdatesNow => {
+                if self.update_available() {
+                    self.start_update(cx);
+                } else {
+                    self.check_updates(true, cx);
+                }
+            }
         }
         cx.notify();
     }
@@ -384,7 +402,17 @@ impl Workspace {
                 n.only_background,
                 notify_on,
                 cx,
-            ));
+            ))
+            .child(section_title(t(T::Updates), &c))
+            .child(self.switch_row(
+                Row::UpdatesAuto,
+                t(T::UpdatesAuto),
+                Some(t(T::UpdatesAutoHint)),
+                self.settings.check_updates,
+                true,
+                cx,
+            ))
+            .child(self.updates_now_row(cx));
 
         let footer = div()
             .px(px(14.))
@@ -663,6 +691,52 @@ impl Workspace {
             .child(div().text_size(px(12.5)).child(t(T::Theme)))
             .child(h_flex().gap(px(14.)).children(circles))
             .into_any_element()
+    }
+}
+
+impl Workspace {
+    /// Fila "Versión instalada": estado (al día, disponible, descargando…) y el botón "Buscar
+    /// ahora" o "Actualizar".
+    fn updates_now_row(&self, cx: &mut Context<Self>) -> AnyElement {
+        let c = &self.colors;
+        let hover = c.hover;
+        let available = self.update_available();
+        let label = self.update_action_label();
+        let control = h_flex()
+            .flex_shrink_0()
+            .gap(px(8.))
+            .items_center()
+            .child(
+                div()
+                    .max_w(px(180.))
+                    .whitespace_nowrap()
+                    .overflow_hidden()
+                    .text_ellipsis()
+                    .text_size(px(11.))
+                    .text_color(if available { c.accent } else { c.muted })
+                    .child(self.update_status_text()),
+            )
+            .child(
+                div()
+                    .id("updates-now")
+                    .px(px(8.))
+                    .h(px(22.))
+                    .flex()
+                    .items_center()
+                    .rounded(px(5.))
+                    .bg(c.surface_2)
+                    .text_size(px(11.5))
+                    .cursor_pointer()
+                    .hover(move |s| s.bg(hover))
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        this.settings_panel.selected = Row::UpdatesNow.index();
+                        this.change_setting(Row::UpdatesNow, true, window, cx);
+                    }))
+                    .child(label),
+            )
+            .into_any_element();
+        let version: &'static str = t(T::UpdatesVersion);
+        self.setting_row(Row::UpdatesNow, version, None, control, cx)
     }
 }
 

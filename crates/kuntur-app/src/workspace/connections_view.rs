@@ -46,9 +46,9 @@ pub(super) struct ConnectionsState {
     ctx: Option<SshContext>,
 }
 
-/// Carpeta de datos de Kuntur (`%APPDATA%\Kuntur`).
+/// Carpeta de datos de Kuntur (`%APPDATA%\Kuntur` en Windows; ver `kuntur_config::dirs`).
 fn app_dir() -> Option<PathBuf> {
-    std::env::var_os("APPDATA").map(|a| PathBuf::from(a).join("Kuntur"))
+    kuntur_config::dirs::config_dir()
 }
 
 /// ¿Prueba de humo del gestor? (conexiones sintéticas, secretos en memoria, nada del usuario).

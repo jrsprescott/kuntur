@@ -209,7 +209,7 @@ fn load_file(path: &Path, libreoffice: Option<&Path>, temp_dir: &Path) -> Result
 
 /// Carpeta de datos del WebView2 (si no, crea `kuntur.exe.WebView2` junto al ejecutable).
 fn webview_data_dir() -> Option<PathBuf> {
-    std::env::var_os("LOCALAPPDATA").map(|d| PathBuf::from(d).join("Kuntur").join("WebView2"))
+    Some(kuntur_config::dirs::local_dir().join("WebView2"))
 }
 
 fn web_rect(b: Bounds<Pixels>) -> wry::Rect {

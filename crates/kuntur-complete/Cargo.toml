@@ -7,4 +7,5 @@ publish.workspace = true
 license.workspace = true
 
 [dependencies]
+kuntur-config = { path = "../kuntur-config" }
 nucleo-matcher = { workspace = true }
