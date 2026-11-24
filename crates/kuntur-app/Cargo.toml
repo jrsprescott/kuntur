@@ -18,6 +18,7 @@ kuntur-usage = { path = "../kuntur-usage" }
 kuntur-files = { path = "../kuntur-files" }
 kuntur-ssh = { path = "../kuntur-ssh" }
 kuntur-preview = { path = "../kuntur-preview" }
+kuntur-complete = { path = "../kuntur-complete" }
 gpui-kit = { workspace = true }
 smol = { workspace = true }
 sysinfo = { workspace = true }

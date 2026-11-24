@@ -30,6 +30,10 @@
   .\scripts\smoke.ps1 -Sessions 1 -Preview 'crates\kuntur-preview\tests\datos\ejemplo.md' -PreviewEdit -PreviewDiff -Out target\smoke-diff.png
 .EXAMPLE
   .\scripts\smoke.ps1 -Sessions 1 -Commands 'cd crates\kuntur-preview\tests\datos','dir; Write-Host ver .\ejemplo.md:3 y https://example.com' -Links -Out target\smoke-links.png
+.EXAMPLE
+  .\scripts\smoke.ps1 -Sessions 1 -Commands 'cls' -Type 'cd C:\Win' -Out target\smoke-ghost.png
+.EXAMPLE
+  .\scripts\smoke.ps1 -Sessions 1 -Commands 'cls' -History 'git status --short','git log --oneline -5' -Type 'git l' -Out target\smoke-ghost-hist.png
 #>
 param(
     [string[]]$Commands = @('Write-Host rojo -ForegroundColor Red; Write-Host verde -ForegroundColor Green', 'Get-ChildItem | Select-Object -First 5'),
@@ -86,6 +90,11 @@ param(
     # Subraya los enlaces (rutas/URLs) de la primera sesión después de sus comandos y abre el menú
     # contextual del primero que sea una ruta.
     [switch]$Links,
+    # Texto que se escribe en la primera sesión DESPUÉS de los comandos y SIN Enter, para capturar
+    # el autocompletado en gris (texto fantasma).
+    [string]$Type = '',
+    # Historial SINTÉTICO del autocompletado (en memoria; nunca se lee ni escribe el historial real).
+    [string[]]$History = @(),
     # Pantalla donde se abre la ventana, contando de izquierda a derecha desde 0. Por defecto, la de
     # más a la derecha que NO sea la principal (en la PC del usuario: el monitor Teros), para no
     # interrumpir lo que pasa en la principal. La ventana se abre sin tomar el foco.
@@ -176,6 +185,8 @@ if ($Preview) {
 }
 if ($PreviewDiff) { $smokeEnv.KUNTUR_SMOKE_PREVIEW_DIFF = '1' }
 if ($Links) { $smokeEnv.KUNTUR_SMOKE_LINKS = '1' }
+if ($Type) { $smokeEnv.KUNTUR_SMOKE_TYPE = $Type }
+if ($History.Count -gt 0) { $smokeEnv.KUNTUR_SMOKE_HISTORY = ($History -join '\n') }
 foreach ($k in $smokeEnv.Keys) { Set-Item "Env:$k" $smokeEnv[$k] }
 $p = Start-Process $exe -PassThru
 foreach ($k in $smokeEnv.Keys) { Remove-Item "Env:$k" }
@@ -209,6 +220,7 @@ if ($editFile) {
     [System.IO.File]::WriteAllText($editFile, $text, (New-Object System.Text.UTF8Encoding $false))
     $dockWait += 1
 }
+if ($Type) { $dockWait += 2 }
 Start-Sleep -Seconds ($WaitSec + $Commands.Count + $dockWait)
 
 $r = New-Object KunturSmoke+RECT; [KunturSmoke]::GetClientRect($p.MainWindowHandle, [ref]$r) | Out-Null

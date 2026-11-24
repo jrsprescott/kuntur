@@ -30,7 +30,8 @@ notify = "9"
 similar = "2"
 wry = "0.57"
 # Se irán activando por fase (ver docs/plans/README.md).
-# nucleo = "0.5"               # F9 (kuntur-complete)
+# F9 (kuntur-complete): solo el buscador difuso de nucleo, sin su motor con hilos.
+nucleo-matcher = "0.3"
 
 [profile.release]
 opt-level = 3

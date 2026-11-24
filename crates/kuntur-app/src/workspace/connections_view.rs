@@ -102,6 +102,8 @@ impl Workspace {
             };
             let mut v = TerminalView::with_pane(window, cx, make, palette.clone(), family, size_pt);
             v.set_palette(palette, background, cx);
+            // F9: el autocompletado mira el disco y el historial de esta PC, no los del servidor.
+            v.set_remote();
             v
         });
         (view, term)

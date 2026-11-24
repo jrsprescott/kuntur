@@ -12,12 +12,13 @@ pub mod palette;
 pub mod pane;
 pub mod paste;
 pub mod screen;
+pub mod shell;
 pub mod size;
 pub mod transport;
 
 pub use agent_signal::{AgentSignal, SignalState, parse_7501};
-pub use cwd::CwdScanner;
-pub use emulator::{Emulator, EventSink, SelectionKind};
+pub use cwd::{CwdScanner, OscEvent};
+pub use emulator::{Emulator, EventSink, InputLine, SelectionKind};
 pub use keys::{Key, Mods, encode_key};
 pub use links::{Link, LinkKind, LinkSpan, link_at, links_in_row};
 pub use mouse::{MouseAction, MouseButtonKind, MouseMode, MouseReport, MouseReporting, encode_mouse};
@@ -26,6 +27,7 @@ pub use palette::{Palette, Rgb8};
 pub use pane::{Pane, PaneOptions};
 pub use paste::paste_bytes;
 pub use screen::{CellView, Screen};
+pub use shell::{AbsPoint, Block, ShellMark, ShellPhase, ShellState};
 pub use size::GridSize;
 pub use transport::{LocalPty, Transport};
 

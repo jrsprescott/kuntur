@@ -1040,6 +1040,11 @@ impl Workspace {
             return;
         }
         let m = ev.keystroke.modifiers;
+        // F8: Esc cierra el menú de enlaces; sin menú sigue a la terminal (y al autocompletado, F9).
+        if ev.keystroke.key == "escape" && !m.modified() && self.close_link_menu(cx) {
+            cx.stop_propagation();
+            return;
+        }
         if self.usage.open && ev.keystroke.key == "escape" && !m.modified() {
             self.close_usage(window, cx);
             cx.stop_propagation();

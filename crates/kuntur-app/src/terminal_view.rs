@@ -1,3 +1,6 @@
+mod blocks;
+pub(crate) mod ghost;
+
 use std::cell::Cell;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -23,6 +26,8 @@ pub fn notifier(tx: smol::channel::Sender<()>) -> impl Fn() + Send + 'static {
 }
 /// Contraste mínimo del texto contra su fondo (WCAG 3:1): ningún color de programa queda invisible.
 const MIN_CONTRAST: f32 = 3.0;
+/// Opacidad del texto fantasma del autocompletado (sobre el color del texto).
+const GHOST_OPACITY: f32 = 0.42;
 
 #[derive(Clone, Copy)]
 struct Metrics {
@@ -60,6 +65,8 @@ pub struct TerminalView {
     hover_link: Option<links::HoverLink>,
     last_mouse: Option<Point<Pixels>>,
     show_all_links: bool,
+    /// Autocompletado en gris (ver `ghost.rs`).
+    ghost: ghost::Ghost,
     _pump: Task<()>,
 }
 
@@ -132,13 +139,20 @@ impl TerminalView {
             hover_link: None,
             last_mouse: None,
             show_all_links: false,
+            ghost: ghost::Ghost::default(),
             _pump: pump,
         }
+    }
+
+    /// Terminal remota (F6): sin autocompletado local (ver `ghost.rs`).
+    pub fn set_remote(&mut self) {
+        self.ghost.set_remote();
     }
 
     /// Hubo salida nueva del programa: redibujar y avisar si cambió el título o terminó.
     fn on_output(&mut self, cx: &mut Context<Self>) {
         cx.notify();
+        self.ghost.refresh(&self.pane);
         let title = self.pane.title();
         if title != self.title {
             self.title = title;
@@ -157,9 +171,12 @@ impl TerminalView {
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(2500));
             for cmd in input.split("\\n") {
+                // Como un Enter desde el teclado: el comando queda como bloque (OSC 133).
+                pane.mark_command_start();
                 let _ = pane.write(format!("{cmd}\r").as_bytes());
                 std::thread::sleep(std::time::Duration::from_millis(600));
             }
+            ghost::smoke_type(&pane);
         });
     }
 
@@ -321,6 +338,13 @@ impl TerminalView {
                 return;
             }
             _ => {}
+        }
+
+        // Autocompletado: Tab/→ aceptan la sugerencia en gris, Esc la oculta, Enter la registra.
+        if !m.control && !m.alt && !m.shift && self.ghost.on_key(key, &self.pane) == ghost::KeyOutcome::Handled {
+            cx.notify();
+            cx.stop_propagation();
+            return;
         }
 
         let mods = Mods {
@@ -529,6 +553,17 @@ impl Render for TerminalView {
         let links = self.underlined_links(&screen);
         let (family, font_size) = (self.font_family.clone(), px(self.font_size));
         let (pane, bounds_cell, size_cell) = (self.pane.clone(), self.bounds.clone(), self.last_size.clone());
+        let ghost = self
+            .ghost
+            .shown()
+            .filter(|g| focused && screen.cursor == Some((g.col, g.row)))
+            .cloned();
+        let ghost_color = to_color(self.palette.fg).opacity(GHOST_OPACITY);
+        let shell_blocks = self.pane.visible_blocks();
+        let block_colors = blocks::BlockColors {
+            ok: to_color(self.palette.fg).opacity(0.25),
+            error: to_color(self.palette.ansi[1]).opacity(0.85),
+        };
 
         div()
             .size_full()
@@ -571,13 +606,22 @@ impl Render for TerminalView {
                     },
                     move |bounds, _, window, cx| {
                         let style = TextStyleCfg {
-                            family,
+                            family: family.clone(),
                             size: font_size,
                             cursor: cursor_color,
                             focused,
                             links,
                         };
-                        paint_screen(&screen, bounds, metrics, &style, window, cx)
+                        paint_screen(&screen, bounds, metrics, &style, window, cx);
+                        blocks::paint(&shell_blocks, bounds, metrics, &block_colors, window);
+                        if let Some(g) = &ghost {
+                            let style = ghost::GhostStyle {
+                                family,
+                                size: font_size,
+                                color: ghost_color,
+                            };
+                            ghost::paint(g, screen.cols, bounds, metrics, &style, window, cx);
+                        }
                     },
                 )
                 .size_full(),

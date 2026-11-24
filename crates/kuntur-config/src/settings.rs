@@ -70,6 +70,8 @@ pub struct Settings {
     /// pestaña no visible queda esperando o termina. `false` apaga la notificación (la insignia queda).
     #[serde(rename = "alertas")]
     pub alerts: bool,
+    /// Sugerencias en gris mientras se escribe en el prompt (Tab o → aceptan).
+    pub autocompletado: bool,
     pub sessions: Vec<SessionConfig>,
     /// Agentes extra (§5).
     #[serde(rename = "agentes", skip_serializing_if = "Vec::is_empty")]
@@ -85,6 +87,7 @@ impl Default for Settings {
             sidebar: SidebarMode::Icons,
             font_size: 14.0,
             alerts: true,
+            autocompletado: true,
             sessions: Vec::new(),
             agents: Vec::new(),
             connections: Vec::new(),
@@ -160,6 +163,7 @@ mod tests {
                 color: Some("#112233".into()),
                 logs: None,
             }],
+            autocompletado: false,
             sessions: vec![
                 SessionConfig {
                     name: "web".into(),
@@ -277,6 +281,16 @@ letra = \"M\"
         assert_eq!(s.agents[0].letter, None);
         assert_eq!(s.agents[1].command, r"C:\herramientas\mio.exe");
         assert_eq!(s.agents[1].letter, Some('M'));
+    }
+
+    #[test]
+    fn autocompletado_encendido_por_defecto() {
+        let path = tmp("autocompletado");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, "theme = \"blue\"\n").unwrap();
+        assert!(Settings::load(&path).autocompletado);
+        std::fs::write(&path, "autocompletado = false\n").unwrap();
+        assert!(!Settings::load(&path).autocompletado);
     }
 
     #[test]

@@ -1,11 +1,41 @@
-//! Carpeta actual del shell a partir de las secuencias que emiten los shells:
+//! Lo que el shell (o un agente) informa por OSC en la salida, con un único escáner
+//! ([`OscScanner`]):
 //! - OSC 7: `ESC ] 7 ; file://host/C:/ruta` (estándar de facto; bash/zsh/fish, ruta en URL).
 //! - OSC 9;9: `ESC ] 9 ; 9 ; "C:\ruta"` (Windows Terminal / ConEmu; PowerShell, cmd con `prompt`).
+//! - OSC 133: marcas de integración de shell (`A` prompt, `B` entrada, `C` comando, `D;código`
+//!   fin), ver [`crate::shell`].
+//! - OSC 7501: estado de un agente, ver [`crate::agent_signal`].
 //!
 //! Terminadas en BEL (`0x07`) o ST (`ESC \`). El escáner no altera los bytes: solo mira el flujo
 //! antes de que llegue al emulador, y guarda estado porque una secuencia puede partirse entre lecturas.
 
+use crate::agent_signal::{AgentSignal, parse_7501};
 use crate::osc::OscScanner;
+use crate::shell::ShellMark;
+
+/// Algo que el shell o un agente informó por OSC.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum OscEvent {
+    /// Carpeta actual (OSC 7 / OSC 9;9).
+    Cwd(String),
+    /// Marca de integración de shell (OSC 133).
+    Mark(ShellMark),
+    /// Estado de un agente (OSC 7501).
+    Agent(AgentSignal),
+}
+
+impl OscEvent {
+    /// Qué es el contenido de un OSC (sin `ESC ]` ni terminador); `None` si no interesa.
+    pub fn parse(payload: &[u8]) -> Option<OscEvent> {
+        if let Some(rest) = payload.strip_prefix(b"133;") {
+            return ShellMark::parse(&String::from_utf8_lossy(rest)).map(OscEvent::Mark);
+        }
+        if let Some(dir) = cwd_from_osc(payload) {
+            return Some(OscEvent::Cwd(dir));
+        }
+        parse_7501(payload).map(OscEvent::Agent)
+    }
+}
 
 #[derive(Default)]
 pub struct CwdScanner {
@@ -19,10 +49,20 @@ impl CwdScanner {
 
     /// Procesa un trozo de salida y devuelve la última carpeta completa encontrada en él.
     pub fn feed(&mut self, bytes: &[u8]) -> Option<String> {
-        let mut found = None;
-        self.osc.feed(bytes, |payload| {
-            if let Some(p) = cwd_from_osc(payload) {
-                found = Some(p);
+        self.feed_events(bytes).into_iter().rev().find_map(|(_, e)| match e {
+            OscEvent::Cwd(d) => Some(d),
+            _ => None,
+        })
+    }
+
+    /// Procesa un trozo de salida y devuelve cada aviso (carpeta, marca OSC 133, agente) con la
+    /// posición del trozo **justo después** de su terminador (para alimentar el emulador hasta ahí
+    /// y saber dónde quedó el cursor).
+    pub fn feed_events(&mut self, bytes: &[u8]) -> Vec<(usize, OscEvent)> {
+        let mut found = Vec::new();
+        self.osc.feed_at(bytes, |end, payload| {
+            if let Some(ev) = OscEvent::parse(payload) {
+                found.push((end, ev));
             }
         });
         found
@@ -157,5 +197,61 @@ mod tests {
         assert_eq!(s.feed(&grande), None);
         assert_eq!(s.feed(b"\x1b]9;9;C:\\despues\x07").as_deref(), Some(r"C:\despues"));
         assert_eq!(s.feed(b"\x1b]9;9;\x07"), None, "una ruta vacía no cuenta");
+    }
+
+    #[test]
+    fn marcas_osc_133_con_su_posicion() {
+        let (d, a, prompt, b) = (
+            &b"\x1b]133;D;1\x07"[..],
+            &b"\x1b]133;A\x1b\\"[..],
+            &b"PS C:\\> "[..],
+            &b"\x1b]133;B\x07"[..],
+        );
+        let chunk = [d, a, prompt, b].concat();
+        let mut s = CwdScanner::new();
+        assert_eq!(
+            s.feed_events(&chunk),
+            vec![
+                (d.len(), OscEvent::Mark(ShellMark::CommandEnd(Some(1)))),
+                (d.len() + a.len(), OscEvent::Mark(ShellMark::PromptStart)),
+                (chunk.len(), OscEvent::Mark(ShellMark::InputStart)),
+            ]
+        );
+        // `feed` sigue devolviendo solo carpetas.
+        assert_eq!(s.feed(b"\x1b]133;C\x07"), None);
+        // Partida entre lecturas: la posición es la del trozo donde termina.
+        assert!(s.feed_events(b"\x1b]13").is_empty());
+        assert_eq!(
+            s.feed_events(b"3;B\x07xy"),
+            vec![(4, OscEvent::Mark(ShellMark::InputStart))]
+        );
+    }
+
+    /// Un solo escáner entrega los cuatro tipos (7 / 9;9 / 133 / 7501), en orden y con su posición.
+    #[test]
+    fn un_solo_escaner_para_carpeta_marcas_y_agentes() {
+        let cwd = &b"\x1b]9;9;\"C:\\uno\"\x1b\\"[..];
+        let mark = &b"\x1b]133;A\x07"[..];
+        let agent = &b"\x1b]7501;state=working;agent=claude\x07"[..];
+        let osc7 = &b"\x1b]7;file://h/C:/dos\x07"[..];
+        let chunk = [cwd, mark, agent, osc7].concat();
+        let events = CwdScanner::new().feed_events(&chunk);
+        let after_agent = cwd.len() + mark.len() + agent.len();
+        assert_eq!(
+            events,
+            vec![
+                (cwd.len(), OscEvent::Cwd(r"C:\uno".into())),
+                (cwd.len() + mark.len(), OscEvent::Mark(ShellMark::PromptStart)),
+                (
+                    after_agent,
+                    OscEvent::Agent(AgentSignal {
+                        state: crate::agent_signal::SignalState::Working,
+                        agent: Some("claude".into()),
+                        action: None,
+                    })
+                ),
+                (chunk.len(), OscEvent::Cwd(r"C:\dos".into())),
+            ]
+        );
     }
 }

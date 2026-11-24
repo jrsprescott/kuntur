@@ -83,6 +83,7 @@ fn smoke_window(options: &mut WindowOptions, cx: &App) {
 fn main() {
     let config = config_path();
     let settings = config.as_deref().map(Settings::load).unwrap_or_default();
+    terminal_view::ghost::init(settings.autocompletado);
 
     gpui_kit::application().with_assets(KunturAssets).run(move |cx| {
         gpui_kit::init(cx);

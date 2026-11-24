@@ -569,6 +569,16 @@ impl Workspace {
     /// Cada cuadro: el WebView2 se ve solo si la pestaña activa es web y nada de Kuntur tiene que
     /// dibujarse encima (paleta, menú de enlaces, vista de uso): una ventana hija siempre queda por
     /// encima de lo que dibuja GPUI.
+    /// Esc con el menú de enlaces abierto lo cierra (antes de que la tecla llegue a la terminal y
+    /// al autocompletado). `true` si había menú.
+    pub(super) fn close_link_menu(&mut self, cx: &mut Context<Self>) -> bool {
+        if self.preview.link_menu.take().is_none() {
+            return false;
+        }
+        cx.notify();
+        true
+    }
+
     pub(super) fn sync_web_visibility(&self) {
         let mut web = self.preview.web.borrow_mut();
         let Some(h) = web.as_mut() else {

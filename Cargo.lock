@@ -4686,6 +4686,7 @@ dependencies = [
  "jiff",
  "kuntur-agents",
  "kuntur-audit",
+ "kuntur-complete",
  "kuntur-config",
  "kuntur-files",
  "kuntur-hook",
@@ -4714,6 +4715,9 @@ dependencies = [
 [[package]]
 name = "kuntur-complete"
 version = "0.1.0"
+dependencies = [
+ "nucleo-matcher",
+]
 
 [[package]]
 name = "kuntur-config"
@@ -5425,6 +5429,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3b335231dfd352ffb0f8017f3b6027a4917f7df785ea2143d8af2adc66980ae"
 dependencies = [
  "winapi",
+]
+
+[[package]]
+name = "nucleo-matcher"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf33f538733d1a5a3494b836ba913207f14d9d4a1d3cd67030c5061bdd2cac85"
+dependencies = [
+ "memchr",
+ "unicode-segmentation",
 ]
 
 [[package]]
@@ -7799,7 +7813,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b8050abb251097357e24aff63ba2c52a6309ecb7d23a5474023df960a02694d8"
 dependencies = [
  "annotate-snippets",
- "base64 0.22.1",
+ "base64 0.23.1",
  "encoding_rs_io",
  "granit-parser",
  "nohash-hasher",

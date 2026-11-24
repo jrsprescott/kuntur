@@ -9,6 +9,7 @@
 - Rama de trabajo **`fase/f5-agentes`** (sale de `fase/f4-acoplada`): **Fase 5 terminada** (`docs/plans/f5-resultados.md`, con el detalle en `f5a-resultados.md` y `f5b-resultados.md`). F5a: catálogo configurable, abrir agentes con un clic, agentes de la acoplada, alertas y auditoría. F5b: `kuntur-hook.exe` + named pipe, OSC 7501, estado exacto (trabajando / pide permiso / espera respuesta / terminó), subagentes con su acción, Permitir / Rechazar desde la fila, worktree por agente (la acoplada arranca ahí), "Enviar a terminal", anillo de Claude por su línea de estado e instalador de ganchos con confirmación. Faltan las pruebas manuales ⏳ del usuario (sobre todo **instalar los ganchos** y probar con `claude` real). Pendiente: auditoría desde los hooks.
 - Rama **`fase/f6-ssh`** (sale de `fase/f4-acoplada`): Fase 6 · SSH y conexiones **terminada** (`docs/plans/f6-resultados.md`); faltan las pruebas manuales ⏳ contra un servidor real. Se trabajó en paralelo a F5: al integrar, revisar los ganchos en `workspace.rs` (lista en `f6-resultados.md`).
 - Rama **`fase/f8-vista-previa`** (sale de `fase/f4-acoplada`, en paralelo con otras fases): Fase 8 · Vista previa y diff **terminada para archivos locales** (`docs/plans/f8-resultados.md`; spike del visor web en `docs/plans/f8-spike-wry.md`); faltan las pruebas manuales ⏳ y los archivos remotos (dependen de F6/F7).
+- Rama **`fase/f9-autocompletado`** (sale de `fase/f4-acoplada`, en paralelo con otras fases): Fase 9 · Shell y autocompletado **terminada** (`docs/plans/f9-resultados.md`); faltan las pruebas manuales ⏳ del usuario (escribir rutas y aceptar con Tab).
 - Planes: `docs/plans/README.md` (hoja de ruta), `docs/plans/2026-11-23-f3-v5-agentes-y-uso.md` y `docs/plans/2026-11-23-f4-terminal-acoplada.md`.
 - Diseño de referencia: `docs/PLAN.md` ("Cambios de la v4") y la simulación `docs/simulacion/index.html`.
 - **Especificación del usuario** (adoptada el 2026-11-23): `docs/ESPECIFICACION.md`, con las decisiones tomadas (se mantiene GPUI, costo estimado, spike de `wry`…). La hoja de ruta pasó a 11 fases (nueva F8 · Vista previa y diff).
@@ -43,6 +44,19 @@ Pruebas de humo: `.\scripts\smoke.ps1 -Sessions 1 -Connections list|form|remote`
 | Archivos remotos por SFTP | ⏳ F6/F7 |
 
 Pruebas de humo: `.\scripts\smoke.ps1 -Sessions 1 -Preview 'crates\kuntur-preview\tests\datos\ejemplo.md'` (`-PreviewDiff`, `-PreviewEdit`, `-Links`); el spike: `.\spikes\wry-gpui\medir.ps1 -Step menu`.
+
+## Fase 9: shell y autocompletado (rama `fase/f9-autocompletado`)
+| Parte | Estado |
+|---|---|
+| OSC 133 (`A`/`B`/`D;código`) en el script de arranque de PowerShell; Kuntur pone `C` al enviar Enter | ✅ probado con ConPTY real |
+| Lo escrito en el prompt (`Pane::prompt_input`), solo fuera de programas a pantalla completa | ✅ |
+| Motor `kuntur-complete`: rutas, historial por carpeta, memoria de carpetas (frecuencia × recencia, `nucleo-matcher`) | ✅ con pruebas |
+| Texto fantasma gris en la terminal: Tab/→ aceptan, Esc oculta (`terminal_view/ghost.rs`) | ✅ capturas |
+| Bloques: raya en el margen (tenue = bien, roja = error) (`terminal_view/blocks.rs`) | ✅ capturas |
+| `autocompletado = true` en `config.toml`; historial en `%APPDATA%\Kuntur\historial\` | ✅ |
+| Completar comandos/parámetros sin historial, completado remoto (F6), plegar/copiar bloques | ⏳ pendiente |
+
+Pruebas de humo: `.\scripts\smoke.ps1 -Sessions 1 -Commands 'cls' -Type 'cd C:\Win'` (texto sin Enter) y `-History 'git status','git log --oneline -5' -Type 'git l'` (historial **sintético** en memoria).
 
 ## Fase 4: terminal acoplada
 | Parte | Estado |
