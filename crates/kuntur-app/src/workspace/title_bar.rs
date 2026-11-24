@@ -1,5 +1,6 @@
 //! Barra de título (34 px): botón del panel · pestañas de sesiones · `+` · espacio de arrastre ·
-//! botones de ícono (Terminal acoplada, Tema, Uso de agentes, Acciones) · botones de Windows.
+//! botones de ícono (Terminal acoplada, Tema, Uso de agentes, Conexiones, Acciones) · botones de
+//! Windows.
 
 use gpui_kit::component::TitleBar;
 use kuntur_agents::AgentState;
@@ -102,6 +103,11 @@ impl Workspace {
                                     .on_click(cx.listener(|this, _, window, cx| this.toggle_usage(window, cx))),
                             )
                             .child(
+                                icon_button("connections", IconName::Server, c, "Conexiones SSH (Ctrl+Shift+O)")
+                                    .when(self.connections.open, |this| this.bg(c.surface_2).text_color(c.text))
+                                    .on_click(cx.listener(|this, _, window, cx| this.toggle_connections(window, cx))),
+                            )
+                            .child(
                                 icon_button("command", IconName::Command, c, "Acciones (Ctrl+Shift+P)")
                                     .on_click(cx.listener(|this, _, window, cx| this.toggle_palette(window, cx))),
                             ),
@@ -121,8 +127,10 @@ impl Workspace {
             .iter()
             .find(|e| e.id == id)
             .and_then(|e| self.session_title(&e.value.view, cx));
+        let remote = self.remote_label(id);
         let tip: SharedString = {
             let mut parts = vec![name.to_string()];
+            parts.extend(remote.clone());
             parts.extend(title);
             if index < 9 {
                 parts.push(format!("Ctrl+{}", index + 1));
@@ -166,7 +174,16 @@ impl Workspace {
                     this.close_session(id, window, cx);
                 }),
             )
-            .child(Icon::new(IconName::SquareTerminal).size(px(14.)).flex_shrink_0())
+            // Remota: globo (§6, siempre se ve si la pestaña es local o remota).
+            .child(
+                Icon::new(if remote.is_some() {
+                    IconName::Globe
+                } else {
+                    IconName::SquareTerminal
+                })
+                .size(px(14.))
+                .flex_shrink_0(),
+            )
             .child(
                 div()
                     .min_w_0()

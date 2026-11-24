@@ -4,6 +4,7 @@
 
 mod agents_panel;
 mod command_palette;
+mod connections;
 mod dock;
 mod monitor;
 mod sessions;
@@ -21,7 +22,7 @@ use kuntur_config::Settings;
 use workspace::Workspace;
 
 // Íconos que no vienen en el paquete por defecto de gpui-kit.
-gpui_kit::assets::icon_assets!(ExtraIcons, [Command, ChartColumn]);
+gpui_kit::assets::icon_assets!(ExtraIcons, [Command, ChartColumn, Server, Pencil, Trash]);
 
 /// Íconos por defecto de gpui-kit + los que agrega Kuntur.
 struct KunturAssets;

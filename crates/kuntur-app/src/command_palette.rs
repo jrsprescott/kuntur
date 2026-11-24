@@ -25,6 +25,9 @@ pub enum PaletteAction {
     Usage,
     ExportUsage,
     EditPrices,
+    Connections,
+    NewConnection,
+    Reconnect,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -43,7 +46,7 @@ const fn item(action: PaletteAction, label: &'static str, shortcut: Option<&'sta
 }
 
 /// Todas las acciones, en el orden en que se muestran.
-pub const ITEMS: [PaletteItem; 19] = [
+pub const ITEMS: [PaletteItem; 22] = [
     item(PaletteAction::NewSession, "Nueva sesión", Some("Ctrl+Shift+T")),
     item(PaletteAction::RenameSession, "Renombrar sesión", None),
     item(PaletteAction::CloseSession, "Cerrar sesión", Some("Ctrl+Shift+W")),
@@ -67,6 +70,13 @@ pub const ITEMS: [PaletteItem; 19] = [
     item(PaletteAction::Usage, "Uso de agentes", Some("Ctrl+Shift+U")),
     item(PaletteAction::ExportUsage, "Uso de agentes: exportar CSV", None),
     item(PaletteAction::EditPrices, "Uso de agentes: editar precios", None),
+    item(PaletteAction::Connections, "Conexiones SSH", Some("Ctrl+Shift+O")),
+    item(PaletteAction::NewConnection, "Conexiones SSH: nueva", None),
+    item(
+        PaletteAction::Reconnect,
+        "Sesión remota: reconectar",
+        Some("Ctrl+Shift+R"),
+    ),
 ];
 
 /// Minúsculas y sin tildes; la puntuación cuenta como espacio.
@@ -256,6 +266,19 @@ mod tests {
         p.clear();
         p.insert("terminal ocultar");
         assert_eq!(p.selected_action(), Some(PaletteAction::ToggleDock));
+    }
+
+    #[test]
+    fn conexiones_y_reconectar_se_encuentran() {
+        let mut p = PaletteState::new();
+        p.insert("ssh");
+        assert_eq!(p.selected_action(), Some(PaletteAction::Connections));
+        p.clear();
+        p.insert("nueva conexion");
+        assert_eq!(p.selected_action(), Some(PaletteAction::NewConnection));
+        p.clear();
+        p.insert("reconectar");
+        assert_eq!(p.selected_action(), Some(PaletteAction::Reconnect));
     }
 
     #[test]

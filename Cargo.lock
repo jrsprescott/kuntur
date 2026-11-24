@@ -4217,6 +4217,7 @@ dependencies = [
  "kuntur-agents",
  "kuntur-config",
  "kuntur-files",
+ "kuntur-ssh",
  "kuntur-term",
  "kuntur-usage",
  "smol",

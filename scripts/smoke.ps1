@@ -16,6 +16,8 @@
   .\scripts\smoke.ps1 -Sessions 1 -Usage 30 -Theme dark -Out target\smoke-usage.png
 .EXAMPLE
   .\scripts\smoke.ps1 -Sessions 2 -Commands 'cd C:\Windows' -Dock reopen -DockCommands 'Get-Location' -Out target\smoke-dock.png
+.EXAMPLE
+  .\scripts\smoke.ps1 -Sessions 1 -Connections list -Out target\smoke-conexiones.png
 #>
 param(
     [string[]]$Commands = @('Write-Host rojo -ForegroundColor Red; Write-Host verde -ForegroundColor Green', 'Get-ChildItem | Select-Object -First 5'),
@@ -40,6 +42,10 @@ param(
     [ValidateSet('', 'open', 'reopen')][string]$Dock = '',
     # Comandos que se escriben en la terminal acoplada (desde dentro de la app, como -Commands).
     [string[]]$DockCommands = @(),
+    # Gestor de conexiones SSH con conexiones SINTÉTICAS (dominios .test, 127.0.0.1): 'list' abre el
+    # panel, 'form' el formulario de edición y 'remote' una pestaña remota a un puerto sin servidor
+    # (muestra el error y la franja "Desconectado · Reconectar"). Nunca usa ~/.ssh ni credenciales.
+    [ValidateSet('', 'list', 'form', 'remote')][string]$Connections = '',
     # Pantalla donde se abre la ventana, contando de izquierda a derecha desde 0. Por defecto, la de
     # más a la derecha que NO sea la principal (en la PC del usuario: el monitor Teros), para no
     # interrumpir lo que pasa en la principal. La ventana se abre sin tomar el foco.
@@ -99,6 +105,7 @@ if ($Panel) { $smokeEnv.KUNTUR_SMOKE_PANEL = $Panel }
 if ($Usage) { $smokeEnv.KUNTUR_SMOKE_USAGE = $Usage }
 if ($Dock) { $smokeEnv.KUNTUR_SMOKE_DOCK = $Dock }
 if ($Dock -and $DockCommands.Count -gt 0) { $smokeEnv.KUNTUR_SMOKE_DOCK_INPUT = ($DockCommands -join '\n') }
+if ($Connections) { $smokeEnv.KUNTUR_SMOKE_CONNECTIONS = $Connections }
 foreach ($k in $smokeEnv.Keys) { Set-Item "Env:$k" $smokeEnv[$k] }
 $p = Start-Process $exe -PassThru
 foreach ($k in $smokeEnv.Keys) { Remove-Item "Env:$k" }

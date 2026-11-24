@@ -99,9 +99,19 @@ impl Workspace {
         if entry.value.dock.is_some() {
             return;
         }
-        let cwd = start_dir(entry.value.view.read(cx).cwd(), self.home.as_deref());
-        let opts = Self::pane_options(entry.value.shell.clone(), cwd);
-        let view = self.new_terminal(opts, window, cx);
+        let view = match &entry.value.remote {
+            // Remota (F6): otro canal en la misma conexión, en la carpeta de la principal; sin volver
+            // a autenticar.
+            Some(r) => {
+                let (session, cwd) = (r.session.clone(), r.main.cwd());
+                self.new_remote_terminal(&session, cwd, window, cx).0
+            }
+            None => {
+                let cwd = start_dir(entry.value.view.read(cx).cwd(), self.home.as_deref());
+                let opts = Self::pane_options(entry.value.shell.clone(), cwd);
+                self.new_terminal(opts, window, cx)
+            }
+        };
         let events = cx.subscribe_in(&view, window, |this, view, ev: &TerminalEvent, window, cx| match ev {
             TerminalEvent::TitleChanged => cx.notify(),
             TerminalEvent::Exited => this.dock_exited(view, window, cx),
@@ -232,6 +242,7 @@ impl Workspace {
                 }
                 cx.notify();
             }))
+            .children(self.render_remote_banner(id, cx))
             .child(main)
             .children(dock)
             .into_any_element()
@@ -240,16 +251,18 @@ impl Workspace {
     fn render_dock(&self, id: u64, dock: Entity<TerminalView>, ratio: f32, cx: &mut Context<Self>) -> AnyElement {
         let c = &self.colors;
         let (border, accent) = (c.border, c.accent);
-        let shell = self
-            .sessions
-            .get(id)
-            .and_then(|e| e.value.shell.clone())
-            .map(|s| short_title(&s))
-            .unwrap_or_else(|| "PowerShell".into());
-        let cwd = dock
-            .read(cx)
-            .cwd()
-            .map(|p| kuntur_files::display_path(&p, self.home.as_deref()));
+        let remote = self.remote_label(id);
+        let shell = remote.clone().unwrap_or_else(|| {
+            self.sessions
+                .get(id)
+                .and_then(|e| e.value.shell.clone())
+                .map(|s| short_title(&s))
+                .unwrap_or_else(|| "PowerShell".into())
+        });
+        let cwd = dock.read(cx).cwd().map(|p| match remote {
+            Some(_) => p.display().to_string(),
+            None => kuntur_files::display_path(&p, self.home.as_deref()),
+        });
         let hover = c.hover;
 
         // Separador: línea de 1 px en una franja de 5 px que se toma con el mouse.

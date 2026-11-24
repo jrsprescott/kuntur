@@ -6,10 +6,22 @@
 - Rama principal `main`: **Fases 1 y 2** (terminal real + sesiones, temas, paleta, persistencia). Estable.
 - Rama **`fase/f3-v5`**: Fase 3 (diseño v5) **terminada** (`docs/plans/f3-resultados.md`).
 - Rama de trabajo **`fase/f4-acoplada`** (sale de `fase/f3-v5`): Fase 4 · Terminal acoplada **terminada** (`docs/plans/f4-resultados.md`); faltan las pruebas manuales ⏳ del usuario. La **siguiente fase es F5** (agentes exactos, alertas y auditoría), que se empieza desde esta rama.
+- Rama **`fase/f6-ssh`** (sale de `fase/f4-acoplada`): Fase 6 · SSH y conexiones **terminada** (`docs/plans/f6-resultados.md`); faltan las pruebas manuales ⏳ contra un servidor real. Se trabajó en paralelo a F5: al integrar, revisar los ganchos en `workspace.rs` (lista en `f6-resultados.md`).
 - Planes: `docs/plans/README.md` (hoja de ruta), `docs/plans/2026-11-23-f3-v5-agentes-y-uso.md` y `docs/plans/2026-11-23-f4-terminal-acoplada.md`.
 - Diseño de referencia: `docs/PLAN.md` ("Cambios de la v4") y la simulación `docs/simulacion/index.html`.
 - **Especificación del usuario** (adoptada el 2026-11-23): `docs/ESPECIFICACION.md`, con las decisiones tomadas (se mantiene GPUI, costo estimado, spike de `wry`…). La hoja de ruta pasó a 11 fases (nueva F8 · Vista previa y diff).
 - **Decisión pendiente:** panel izquierdo con agentes arriba + árbol abajo a la vez (especificación §3) o el botón "Archivos" que alterna (actual). Se aplica en F7.
+
+## Fase 6: SSH y conexiones
+| Parte | Estado |
+|---|---|
+| `kuntur-term`: trait `Transport` (PTY local o remoto) y `Pane::with_transport` | ✅ con pruebas |
+| `kuntur-ssh` (`russh` 0.65 con `ring`): known_hosts, ssh-agent de Windows → llaves → contraseña, secretos en el Administrador de credenciales (solo con "recordar"), diálogos en la terminal, segundo canal, reconexión, agentes del servidor | ✅ con pruebas de integración contra un servidor `russh` en proceso |
+| Gestor de conexiones (botón de ícono, Ctrl+Shift+O, paleta), pestañas remotas, acoplada remota, franja "Desconectado · Reconectar" (Ctrl+Shift+R), restaurar sesiones remotas | ✅ capturas con conexiones sintéticas |
+| Guía de OSC 7 para bash/zsh/fish/PowerShell | ✅ `docs/osc7-remoto.md` |
+| Conexión a un servidor real, ssh-agent real, `sudo apt upgrade` | ⏳ lista manual en `f6-resultados.md` |
+
+Pruebas de humo: `.\scripts\smoke.ps1 -Sessions 1 -Connections list|form|remote` (conexiones **sintéticas**; nunca `~/.ssh` ni credenciales reales).
 
 ## Fase 4: terminal acoplada
 | Parte | Estado |
