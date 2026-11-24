@@ -102,7 +102,8 @@ texts! {
     SidePanelIcons => "Íconos", "Icons";
     Marquee => "Desplazar el título de la pestaña", "Scroll the tab title";
     // ── Barra de título ──
-    TipPanelFull => "Panel completo (Ctrl+Shift+B)", "Full panel (Ctrl+Shift+B)";
+    BrandTip => "Kuntur Terminal IA Agente · ver el proyecto en GitHub", "Kuntur Terminal IA Agente · view the project on GitHub";
+    TipPanelFull =>"Panel completo (Ctrl+Shift+B)", "Full panel (Ctrl+Shift+B)";
     TipPanelCompact => "Panel compacto (Ctrl+Shift+B)", "Compact panel (Ctrl+Shift+B)";
     TipNewSession => "Nueva sesión (Ctrl+Shift+T)", "New session (Ctrl+Shift+T)";
     TipCloseSession => "Cerrar sesión (Ctrl+Shift+W)", "Close session (Ctrl+Shift+W)";

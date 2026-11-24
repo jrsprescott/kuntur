@@ -139,7 +139,12 @@ impl Workspace {
                             .child(
                                 icon_button("toggle-panel", IconName::PanelLeft, c, panel_tip)
                                     .on_click(cx.listener(|this, _, _, cx| this.toggle_sidebar(cx))),
-                            ),
+                            )
+                            // Ajustes v0.2.1: identidad (ícono + nombre) centrada sobre el panel completo.
+                            .when(self.settings.sidebar == SidebarMode::Full, |this| {
+                                this.child(render_brand(c))
+                                    .child(div().w(px(ICON_BUTTON)).flex_shrink_0())
+                            }),
                     )
                     .child(
                         h_flex()
@@ -390,6 +395,48 @@ impl Workspace {
             )
             .into_any_element()
     }
+}
+
+/// Ícono de Kuntur (el mismo de `assets/kuntur.ico`, en PNG de 64 px).
+static LOGO: std::sync::LazyLock<Arc<gpui_kit::Image>> = std::sync::LazyLock::new(|| {
+    Arc::new(gpui_kit::Image::from_bytes(
+        gpui_kit::ImageFormat::Png,
+        include_bytes!("../../../../assets/kuntur-64.png").to_vec(),
+    ))
+});
+
+/// Página del proyecto.
+fn project_url() -> String {
+    format!("https://github.com/{}", kuntur_update::REPO)
+}
+
+/// Identidad en la barra (ajustes v0.2.1): ícono y nombre; un clic abre el proyecto en GitHub.
+fn render_brand(c: &UiColors) -> Stateful<Div> {
+    let (hover, muted, text) = (c.hover, c.muted, c.text);
+    h_flex()
+        .id("brand")
+        .flex_1()
+        .min_w_0()
+        .h(px(TAB_HEIGHT))
+        .justify_center()
+        .items_center()
+        .gap(px(7.))
+        .rounded(px(7.))
+        .cursor_pointer()
+        // Sin esto, la barra de título trataría el clic como arrastre de la ventana.
+        .occlude()
+        .text_color(muted)
+        .hover(move |s| s.bg(hover).text_color(text))
+        .tooltip(|window, cx| Tooltip::new(crate::i18n::t(crate::i18n::T::BrandTip)).build(window, cx))
+        .on_click(|_, _, cx| cx.open_url(&project_url()))
+        .child(img(LOGO.clone()).size(px(18.)).flex_shrink_0().rounded(px(4.)))
+        .child(
+            div()
+                .text_size(px(13.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .whitespace_nowrap()
+                .child("Kuntur"),
+        )
 }
 
 /// Insignia de alertas sin ver: contador sobre ámbar (el color de "esperando").
