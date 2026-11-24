@@ -3,6 +3,7 @@
 > Última actualización: 2026-11-23. Léela primero al retomar en otra PC (o pídele a Claude Code que la lea).
 
 ## Dónde está cada cosa
+- **Rama integrada `integracion/f5-f9`** (sale de `fase/f5-agentes`): une por merge F5, F6, F8, F9 y F7 con todas sus funciones; 349 pruebas, clippy y fmt en verde, capturas de cada fase revisadas. Conflictos, atajos y pendientes en `docs/plans/integracion-f5-f9.md`. Es la rama desde la que conviene seguir.
 - Rama principal `main`: **Fases 1 y 2** (terminal real + sesiones, temas, paleta, persistencia). Estable.
 - Rama **`fase/f3-v5`**: Fase 3 (diseño v5) **terminada** (`docs/plans/f3-resultados.md`).
 - Rama **`fase/f4-acoplada`** (sale de `fase/f3-v5`): Fase 4 · Terminal acoplada **terminada** (`docs/plans/f4-resultados.md`); faltan las pruebas manuales ⏳ del usuario.
