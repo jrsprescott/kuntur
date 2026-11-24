@@ -10,6 +10,7 @@ pub mod pane;
 pub mod paste;
 pub mod screen;
 pub mod size;
+pub mod transport;
 
 pub use cwd::CwdScanner;
 pub use emulator::{Emulator, EventSink, SelectionKind};
@@ -20,6 +21,7 @@ pub use pane::{Pane, PaneOptions};
 pub use paste::paste_bytes;
 pub use screen::{CellView, Screen};
 pub use size::GridSize;
+pub use transport::{LocalPty, Transport};
 
 // Tipos de alacritty que la UI necesita, sin depender de ese crate directamente.
 pub use alacritty_terminal::index::Side;

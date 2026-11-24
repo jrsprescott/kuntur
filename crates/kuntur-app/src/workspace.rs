@@ -544,6 +544,7 @@ impl Workspace {
                 name: e.name.clone(),
                 shell: e.value.shell.clone(),
                 dock_ratio: e.value.dock_state.saved_ratio(),
+                ..Default::default()
             })
             .collect();
         if let Some(path) = &self.config_path {
