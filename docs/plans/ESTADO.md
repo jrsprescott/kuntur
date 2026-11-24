@@ -3,8 +3,8 @@
 > Última actualización: 2026-11-23. Léela primero al retomar en otra PC (o pídele a Claude Code que la lea).
 
 ## Dónde está cada cosa
-- **Rama integrada `integracion/f5-f9`** (sale de `fase/f5-agentes`): une por merge F5, F6, F8, F9 y F7 con todas sus funciones; 349 pruebas, clippy y fmt en verde, capturas de cada fase revisadas. Conflictos, atajos y pendientes en `docs/plans/integracion-f5-f9.md`. Es la rama desde la que conviene seguir.
-- Rama principal `main`: **Fases 1 y 2** (terminal real + sesiones, temas, paleta, persistencia). Estable.
+- **Rama principal `main`: Fases 1 a 9 integradas** (avanzada el 2026-11-23 a `integracion/f5-f9`, sin conflictos: *fast-forward*). 349 pruebas, clippy y fmt en verde, capturas de cada fase revisadas. Conflictos de la integración, atajos y pendientes en `docs/plans/integracion-f5-f9.md`. **Es la rama desde la que se sigue** (próximas: F10 · MCP y comandos, F11 · pulido y publicación).
+- Las ramas `integracion/f5-f9` y `fase/*` quedan como historia de cada fase (no hace falta trabajar en ellas).
 - Rama **`fase/f3-v5`**: Fase 3 (diseño v5) **terminada** (`docs/plans/f3-resultados.md`).
 - Rama **`fase/f4-acoplada`** (sale de `fase/f3-v5`): Fase 4 · Terminal acoplada **terminada** (`docs/plans/f4-resultados.md`); faltan las pruebas manuales ⏳ del usuario.
 - Rama de trabajo **`fase/f5-agentes`** (sale de `fase/f4-acoplada`): **Fase 5 terminada** (`docs/plans/f5-resultados.md`, con el detalle en `f5a-resultados.md` y `f5b-resultados.md`). F5a: catálogo configurable, abrir agentes con un clic, agentes de la acoplada, alertas y auditoría. F5b: `kuntur-hook.exe` + named pipe, OSC 7501, estado exacto (trabajando / pide permiso / espera respuesta / terminó), subagentes con su acción, Permitir / Rechazar desde la fila, worktree por agente (la acoplada arranca ahí), "Enviar a terminal", anillo de Claude por su línea de estado e instalador de ganchos con confirmación. Faltan las pruebas manuales ⏳ del usuario (sobre todo **instalar los ganchos** y probar con `claude` real). Pendiente: auditoría desde los hooks.
