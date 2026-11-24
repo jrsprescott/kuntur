@@ -6,9 +6,16 @@ Spanish, are in [`docs/plans/`](docs/plans/).
 
 ## [Unreleased]
 
-### In progress
-- **F10 · MCP and commands:** per-session MCP servers with an icon button, catalog, enable/disable per tab,
-  generated MCP config for each agent CLI, "Test" status, model/effort/permissions and custom commands.
+### Added (F10 · MCP and commands)
+- New `kuntur-mcp` crate: MCP server catalog (`[[mcp]]`, stdio or http) and profiles (`[[mcp_perfiles]]`) in
+  `config.toml`; secrets only by name, values in the Windows Credential Manager ("Kuntur MCP").
+- MCP manager per tab (plug icon button, Ctrl+Shift+M or the palette): enable/disable servers, apply profiles
+  with model/effort/permissions, enter missing secrets and "Test" (launch/connect + `initialize`, 15 s max).
+- When an agent is launched, the MCP config for that session is generated for its CLI and never touches the
+  global one: Claude Code (`--mcp-config`), Codex (`-c mcp_servers.…`) and OpenCode (`OPENCODE_CONFIG`); a per-session
+  temporary folder is removed when the tab closes.
+- Screenshots written by an MCP (`${KUNTUR_SALIDA}` / `KUNTUR_MCP_SALIDA`) open by themselves in the preview.
+- Custom commands with a shortcut (`[[comandos]]`, per session or global, Ctrl+Shift+key or a modified F key).
 
 ### Added (F11 · polish and release)
 - MSI installer (WiX v3, `cargo wix`): `kuntur.exe` and `kuntur-hook.exe` in `Program Files\Kuntur`, Start menu
@@ -21,6 +28,11 @@ Spanish, are in [`docs/plans/`](docs/plans/).
 
 ### Changed
 - Blue theme: darker gradient end and lighter muted/accent/state colors to meet WCAG AA contrast.
+- Lower idle CPU: the 2 s agent/RAM monitor only redraws the window when something visible changed (agents,
+  their state and elapsed time, the RAM shown in MB, badges, folder, remote state) and reads every 5 s while the
+  window is not focused (alerts still arrive). The files panel no longer redraws when a folder re-read is unchanged.
+- The Connections panel and the MCP manager are exclusive; Ctrl+Shift+M inside Connections opens the MCP manager
+  and Ctrl+Shift+O inside the MCP manager opens Connections.
 
 ## F9 · Shell integration and completion
 - OSC 133 marks from the PowerShell startup script; command blocks with a thin mark (red on error).
