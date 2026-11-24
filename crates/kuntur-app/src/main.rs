@@ -2,6 +2,7 @@
 // En release no abre una consola negra extra.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod agent_icons;
 mod agents_panel;
 mod clipboard_image;
 mod command_palette;
@@ -52,6 +53,10 @@ struct KunturAssets;
 
 impl AssetSource for KunturAssets {
     fn load(&self, path: &str) -> Result<Option<Cow<'static, [u8]>>> {
+        // Ajustes v0.2.1: íconos de marca de los agentes (`agents/…`).
+        if let Some(bytes) = agent_icons::asset(path) {
+            return Ok(Some(Cow::Borrowed(bytes)));
+        }
         match gpui_kit::assets::Assets.load(path) {
             Ok(Some(bytes)) => Ok(Some(bytes)),
             _ => ExtraIcons.load(path),
@@ -61,6 +66,9 @@ impl AssetSource for KunturAssets {
     fn list(&self, path: &str) -> Result<Vec<SharedString>> {
         let mut all = gpui_kit::assets::Assets.list(path)?;
         all.extend(ExtraIcons.list(path)?);
+        if agent_icons::PREFIX.starts_with(path) {
+            all.extend(agent_icons::paths().map(SharedString::from));
+        }
         Ok(all)
     }
 }

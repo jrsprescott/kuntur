@@ -16,6 +16,7 @@ use kuntur_usage::{Period, Summary, UsageRecord, pct_change, summarize};
 use super::files_panel::empty_note;
 use super::side_panel::brand;
 use super::*;
+use crate::i18n::{T, t};
 use crate::usage_format::{
     change, compact, cost_detail, duration, folder_name, heat_levels, no_change_note, providers, range, share,
     thousands, usd, versus,
@@ -89,8 +90,22 @@ fn provider_color(provider: &str, c: &UiColors) -> Hsla {
         "Google" => brand(0x4285f4),
         "DeepSeek" => brand(0x4d6bfe),
         "Qwen" => brand(0x8b5cf6),
+        // Ajustes v0.2.1: modelos en la PC (LM Studio, Ollama…).
+        "Local" => c.ok,
         _ => c.muted,
     }
+}
+
+/// Etiqueta chica junto a un nombre ("no instalado", "local").
+fn tag(text: &'static str, c: &UiColors) -> Div {
+    div()
+        .px(px(5.))
+        .rounded(px(4.))
+        .bg(c.hover)
+        .text_size(px(10.5))
+        .text_color(c.muted)
+        .whitespace_nowrap()
+        .child(text)
 }
 
 fn agent_color(kind: AgentKind, c: &UiColors) -> Hsla {
@@ -694,10 +709,13 @@ impl Workspace {
                 String::new()
             };
             let color = agent_color(kind, c);
+            // Ajustes v0.2.1: su historial se conserva aunque ya no esté instalado; se marca. Mientras
+            // no llegó la primera lectura de instalados (lista vacía) no se marca nada.
+            let gone = !self.installed.is_empty() && !self.usage_installed(kind);
             h_flex()
                 .gap(px(10.))
                 .items_center()
-                .child(self.usage_badge(kind, 22., 6.))
+                .child(self.usage_badge(kind, 22., 6.).when(gone, |b| b.opacity(0.45)))
                 .child(
                     v_flex()
                         .flex_1()
@@ -707,7 +725,13 @@ impl Workspace {
                             h_flex()
                                 .justify_between()
                                 .text_size(px(12.5))
-                                .child(div().text_color(c.text).child(kind.name()))
+                                .child(
+                                    h_flex()
+                                        .gap(px(6.))
+                                        .items_center()
+                                        .child(div().text_color(c.text).child(kind.name()))
+                                        .when(gone, |this| this.child(tag(t(T::UsageNotInstalled), c))),
+                                )
                                 .child(
                                     div()
                                         .text_color(c.muted)
@@ -756,18 +780,27 @@ impl Workspace {
             .child(num("Turnos".into(), 60.))
             .child(num("Costo".into(), 84.));
         let rows = s.models.iter().take(MAX_MODELS).map(|m| {
+            // Ajustes v0.2.1: los modelos servidos en la PC (LM Studio, Ollama…) cuestan cero.
+            let local = kuntur_usage::is_local_model(&m.model);
             h_flex()
                 .text_size(px(12.5))
                 .py(px(3.))
                 .child(
-                    div()
+                    h_flex()
                         .flex_1()
                         .min_w_0()
-                        .whitespace_nowrap()
-                        .overflow_hidden()
-                        .text_ellipsis()
-                        .text_color(c.text)
-                        .child(m.model.clone()),
+                        .gap(px(6.))
+                        .items_center()
+                        .child(
+                            div()
+                                .min_w_0()
+                                .whitespace_nowrap()
+                                .overflow_hidden()
+                                .text_ellipsis()
+                                .text_color(c.text)
+                                .child(m.model.clone()),
+                        )
+                        .when(local, |this| this.child(tag(t(T::UsageLocal), c))),
                 )
                 .child(num(compact(m.input), 76.).text_color(c.muted))
                 .child(num(compact(m.output), 76.).text_color(c.muted))

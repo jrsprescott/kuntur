@@ -103,6 +103,9 @@ const TOP_TASKS: usize = 10;
 /// Proveedor según el prefijo del modelo. Si el nombre no lo dice, mira un prefijo `proveedor/`
 /// (como los de OpenCode: `anthropic/claude-…`).
 pub fn provider_of(model: &str) -> &'static str {
+    if crate::pricing::is_local_model(model) {
+        return "Local";
+    }
     let lower = model.to_ascii_lowercase();
     let (vendor, name) = match lower.rsplit_once('/') {
         Some((vendor, name)) => (vendor, name),
@@ -448,6 +451,10 @@ mod tests {
     #[test]
     fn proveedor_por_prefijo_del_modelo() {
         assert_eq!(provider_of("claude-opus-4-7"), "Anthropic");
+        // Modelos servidos en la PC (LM Studio, Ollama…): "Local", aunque el nombre sea de otra marca.
+        assert_eq!(provider_of("lmstudio/qwen2.5-coder-7b"), "Local");
+        assert_eq!(provider_of("ollama/deepseek-r1:8b"), "Local");
+        assert_eq!(provider_of("qwen2.5-coder-7b"), "Qwen");
         assert_eq!(provider_of("anthropic/claude-sonnet-4"), "Anthropic");
         assert_eq!(provider_of("gpt-5.1-codex"), "OpenAI");
         assert_eq!(provider_of("o3"), "OpenAI");

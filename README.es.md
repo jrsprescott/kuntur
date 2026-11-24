@@ -155,3 +155,7 @@ La documentación del proyecto está en [`docs/`](docs/), empezando por [`docs/p
 Con licencia [Apache License, Version 2.0](LICENSE-APACHE) o [MIT](LICENSE-MIT), a tu elección. Salvo que indiques lo
 contrario, toda contribución que envíes para incluirla en Kuntur, según la define la licencia Apache-2.0, tendrá esa
 misma doble licencia, sin términos ni condiciones adicionales.
+
+Los logos de los agentes y de los proveedores de IA vienen de [Lobe Icons](https://github.com/lobehub/lobe-icons)
+(MIT; ver `crates/kuntur-app/assets/agents/LICENSE-lobe-icons.txt`). Los logos son marcas de sus respectivos dueños y
+se usan solo para identificar cada herramienta; eso no implica relación ni respaldo de esas empresas.
