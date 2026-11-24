@@ -260,12 +260,29 @@ pub fn parse_ollama_ps(body: &str) -> HashSet<String> {
 
 // ── Lectura del disco (servidor apagado) ─────────────────────────────────────
 
-/// Carpetas de modelos de LM Studio (la actual y la de versiones viejas).
+/// Carpetas de modelos de LM Studio: la que eligió el usuario (`downloadsFolder` de
+/// `~/.lmstudio/settings.json`), la de siempre y la de versiones viejas.
 pub fn lmstudio_dirs(home: &Path) -> Vec<PathBuf> {
-    vec![
-        home.join(".lmstudio").join("models"),
-        home.join(".cache").join("lm-studio").join("models"),
-    ]
+    let settings = std::fs::read_to_string(home.join(".lmstudio").join("settings.json")).ok();
+    let mut dirs: Vec<PathBuf> = settings
+        .as_deref()
+        .and_then(lmstudio_downloads_folder)
+        .into_iter()
+        .collect();
+    dirs.push(home.join(".lmstudio").join("models"));
+    dirs.push(home.join(".cache").join("lm-studio").join("models"));
+    dirs
+}
+
+/// `downloadsFolder` de la configuración de LM Studio (solo esa clave: el archivo tiene otros datos,
+/// como tokens, que no se leen ni se guardan).
+pub fn lmstudio_downloads_folder(settings_json: &str) -> Option<PathBuf> {
+    let v: Value = serde_json::from_str(settings_json).ok()?;
+    v.get("downloadsFolder")?
+        .as_str()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(PathBuf::from)
 }
 
 /// Modelos de LM Studio en `root/<publicador>/<repo>/<archivo>.gguf` (sin proyectores de visión
@@ -824,6 +841,26 @@ mod tests {
     }
 
     #[test]
+    fn carpeta_de_modelos_elegida_en_lm_studio() {
+        let s = r#"{"downloadsFolder":"D:\\Modelos","hfDownloadToken":"no-se-lee","otra":1}"#;
+        assert_eq!(lmstudio_downloads_folder(s), Some(PathBuf::from(r"D:\Modelos")));
+        assert_eq!(lmstudio_downloads_folder(r#"{"downloadsFolder":"  "}"#), None);
+        assert_eq!(lmstudio_downloads_folder("no es json"), None);
+        // La elegida va primero, después las de siempre.
+        let home = tmp("home-settings");
+        std::fs::create_dir_all(home.join(".lmstudio")).unwrap();
+        let custom = home.join("mis-modelos");
+        std::fs::write(
+            home.join(".lmstudio").join("settings.json"),
+            json!({ "downloadsFolder": custom.to_string_lossy() }).to_string(),
+        )
+        .unwrap();
+        let dirs = lmstudio_dirs(&home);
+        assert_eq!(dirs[0], custom);
+        assert_eq!(dirs[1], home.join(".lmstudio").join("models"));
+    }
+
+    #[test]
     fn lm_studio_instalado_con_servidor_apagado_lee_el_disco() {
         let home = tmp("home-lms");
         let repo = home.join(".lmstudio").join("models").join("demo-pub").join("Demo-GGUF");
@@ -900,5 +937,26 @@ mod tests {
             path: None,
         };
         assert_eq!(short_name(&m), "coder");
+    }
+
+    /// Comprobación manual en la PC real (no imprime nombres de modelos, solo cantidades). Nunca
+    /// ejecuta `lms ls` ni inicia servidores.
+    /// `cargo test -p kuntur-agents --lib detecta_lo_instalado -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "lee la PC real: solo a mano"]
+    fn detecta_lo_instalado_en_esta_pc() {
+        let home = std::env::var_os("USERPROFILE")
+            .or_else(|| std::env::var_os("HOME"))
+            .map(PathBuf::from)
+            .expect("carpeta personal");
+        for s in detect_now(&home) {
+            eprintln!(
+                "{}: instalado={} servidor={} modelos={}",
+                s.provider.name(),
+                s.installed,
+                s.server,
+                s.models.len()
+            );
+        }
     }
 }
