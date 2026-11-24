@@ -39,7 +39,13 @@ param(
     # su carpeta). 'reopen' además la oculta y la vuelve a mostrar: el historial debe seguir ahí.
     [ValidateSet('', 'open', 'reopen')][string]$Dock = '',
     # Comandos que se escriben en la terminal acoplada (desde dentro de la app, como -Commands).
-    [string[]]$DockCommands = @()
+    [string[]]$DockCommands = @(),
+    # Pantalla donde se abre la ventana, contando de izquierda a derecha desde 0. Por defecto, la de
+    # más a la derecha que NO sea la principal (en la PC del usuario: el monitor Teros), para no
+    # interrumpir lo que pasa en la principal. La ventana se abre sin tomar el foco.
+    [int]$Display = -1,
+    # Permite usar la pantalla principal (solo si se pide explícitamente).
+    [switch]$AllowPrimary
 )
 $ErrorActionPreference = 'Stop'
 $root = Resolve-Path (Join-Path $PSScriptRoot '..')
@@ -55,9 +61,22 @@ public static class KunturSmoke {
   [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr h, out RECT r);
   [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr h, IntPtr hdc, uint flags);
   [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
 }
 "@
 [KunturSmoke]::SetProcessDPIAware() | Out-Null
+
+# Pantalla de la prueba: nunca la principal salvo -AllowPrimary (ahí el usuario puede estar jugando).
+Add-Type -AssemblyName System.Windows.Forms
+$screens = @([System.Windows.Forms.Screen]::AllScreens | Sort-Object { $_.Bounds.X })
+if ($Display -lt 0) {
+    $Display = -1
+    for ($i = $screens.Count - 1; $i -ge 0; $i--) { if (-not $screens[$i].Primary) { $Display = $i; break } }
+    if ($Display -lt 0) { throw 'No hay otra pantalla además de la principal: usa -AllowPrimary si de verdad quieres abrirla ahí.' }
+}
+if ($Display -ge $screens.Count) { throw "No existe la pantalla $Display (hay $($screens.Count))." }
+if ($screens[$Display].Primary -and -not $AllowPrimary) { throw "La pantalla $Display es la principal: usa -AllowPrimary para abrir la ventana ahí." }
 
 # Lanzar Kuntur como desde el menú Inicio: sin variables heredadas de la herramienta que corre la prueba.
 # - NO_COLOR hace que PowerShell quite los colores.
@@ -68,8 +87,9 @@ Get-ChildItem Env: | Where-Object { $_.Name -eq 'NO_COLOR' -or $_.Name -like 'CL
     Remove-Item "Env:$($_.Name)"
 }
 $smokeEnv = @{
-    KUNTUR_CONFIG      = (Join-Path $root 'target\smoke-config.toml')
-    KUNTUR_SMOKE_INPUT = ($Commands -join '\n')
+    KUNTUR_CONFIG        = (Join-Path $root 'target\smoke-config.toml')
+    KUNTUR_SMOKE_INPUT   = ($Commands -join '\n')
+    KUNTUR_SMOKE_DISPLAY = "$Display"
 }
 if ($Sessions -gt 0) { $smokeEnv.KUNTUR_SMOKE_SESSIONS = "$Sessions" }
 if ($Theme) { $smokeEnv.KUNTUR_SMOKE_THEME = $Theme }
@@ -87,6 +107,12 @@ foreach ($k in $saved.Keys) { Set-Item "Env:$k" $saved[$k] }
 $deadline = (Get-Date).AddSeconds(20)
 while ((Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 300; $p.Refresh(); if ($p.MainWindowHandle -ne 0) { break } }
 if ($p.MainWindowHandle -eq 0) { Stop-Process -Id $p.Id -Force; throw 'Kuntur no abrió ventana' }
+# Comprobar que se abrió en la pantalla pedida y sin quitarle el foco a lo que el usuario usa.
+$wr = New-Object KunturSmoke+RECT; [KunturSmoke]::GetWindowRect($p.MainWindowHandle, [ref]$wr) | Out-Null
+$cxw = [int](($wr.L + $wr.R) / 2); $cyw = [int](($wr.T + $wr.B) / 2); $sb = $screens[$Display].Bounds
+$enPantalla = $cxw -ge $sb.Left -and $cxw -lt $sb.Right -and $cyw -ge $sb.Top -and $cyw -lt $sb.Bottom
+"Pantalla $Display ($($sb.Width)x$($sb.Height) en x=$($sb.X)): ventana $(if ($enPantalla) { 'dentro' } else { "FUERA (centro $cxw,$cyw)" }); foco: $(if ([KunturSmoke]::GetForegroundWindow() -eq $p.MainWindowHandle) { 'Kuntur lo TOMÓ' } else { 'no lo tomó' })"
+if (-not $enPantalla) { Stop-Process -Id $p.Id -Force; throw 'La ventana no se abrió en la pantalla pedida.' }
 # La acoplada se abre después de los comandos de la principal y escribe los suyos; 'reopen' la oculta
 # y la vuelve a mostrar (~2 s más).
 $dockWait = 0

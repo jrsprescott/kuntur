@@ -48,6 +48,36 @@ fn config_path() -> Option<PathBuf> {
         .or_else(Settings::default_path)
 }
 
+/// Pruebas de humo: `KUNTUR_SMOKE_DISPLAY=n` abre la ventana en la pantalla n (contando de
+/// izquierda a derecha desde 0) y **sin tomar el foco**, para no interrumpir lo que el usuario hace
+/// en la pantalla principal (por ejemplo, un juego a pantalla completa).
+fn smoke_window(options: &mut WindowOptions, cx: &App) {
+    let Some(index) = std::env::var("KUNTUR_SMOKE_DISPLAY")
+        .ok()
+        .and_then(|v| v.trim().parse::<usize>().ok())
+    else {
+        return;
+    };
+    options.focus = false;
+    let mut displays = cx.displays();
+    displays.sort_by(|a, b| {
+        a.bounds()
+            .origin
+            .x
+            .partial_cmp(&b.bounds().origin.x)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    if let Some(display) = displays.get(index) {
+        let id = display.id();
+        options.display_id = Some(id);
+        options.window_bounds = Some(WindowBounds::Windowed(Bounds::centered(
+            Some(id),
+            size(px(1536.), px(1000.)),
+            cx,
+        )));
+    }
+}
+
 fn main() {
     let config = config_path();
     let settings = config.as_deref().map(Settings::load).unwrap_or_default();
@@ -62,7 +92,7 @@ fn main() {
         })
         .detach();
 
-        let options = WindowOptions {
+        let mut options = WindowOptions {
             titlebar: Some(TitlebarOptions {
                 title: Some("Kuntur".into()),
                 ..TitleBar::title_bar_options()
@@ -70,6 +100,7 @@ fn main() {
             window_min_size: Some(size(px(480.), px(320.))),
             ..TitleBar::window_options()
         };
+        smoke_window(&mut options, cx);
         gpui_kit::open_window(options, cx, |window, cx| {
             cx.new(|cx| Workspace::new(window, cx, settings, config))
         })
