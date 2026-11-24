@@ -144,6 +144,33 @@ impl TerminalView {
         });
     }
 
+    /// Pega texto sin Enter (respeta bracketed paste), tras `delay` si la terminal recién se abre.
+    /// "Enviar a terminal" (F5b): el comando queda escrito para revisarlo; nunca se ejecuta solo.
+    pub fn paste_text(&self, text: String, delay: std::time::Duration) {
+        let pane = self.pane.clone();
+        std::thread::spawn(move || {
+            if !delay.is_zero() {
+                std::thread::sleep(delay);
+            }
+            let _ = pane.paste(&text);
+        });
+    }
+
+    /// Escribe bytes tal cual (respuesta a un pedido de permiso, por clic del usuario).
+    pub fn write_bytes(&self, bytes: &[u8]) {
+        let _ = self.pane.write(bytes);
+    }
+
+    /// Texto seleccionado con el mouse, si hay.
+    pub fn selection_text(&self) -> Option<String> {
+        self.pane.with_emulator(|e| e.selection_text())
+    }
+
+    /// Último estado de agente informado por OSC 7501 (se entrega una vez).
+    pub fn take_agent_signal(&self) -> Option<kuntur_term::AgentSignal> {
+        self.pane.take_agent_signal()
+    }
+
     pub fn set_palette(&mut self, palette: Palette, background: Hsla, cx: &mut Context<Self>) {
         self.palette = palette;
         self.background = background;

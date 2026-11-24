@@ -18,6 +18,10 @@
   .\scripts\smoke.ps1 -Sessions 2 -Audit -AuditQuery 'cargo' -Badges -Out target\smoke-audit.png
 .EXAMPLE
   .\scripts\smoke.ps1 -Sessions 2 -Commands 'cd C:\Windows' -Dock reopen -DockCommands 'Get-Location' -Out target\smoke-dock.png
+.EXAMPLE
+  .\scripts\smoke.ps1 -Sessions 3 -Panel full -AgentEvents scripts\smoke-agentes.jsonl -Out target\smoke-exacto.png
+.EXAMPLE
+  .\scripts\smoke.ps1 -Sessions 1 -HooksInstall -Theme white -Out target\smoke-ganchos.png
 #>
 param(
     [string[]]$Commands = @('Write-Host rojo -ForegroundColor Red; Write-Host verde -ForegroundColor Green', 'Get-ChildItem | Select-Object -First 5'),
@@ -51,6 +55,14 @@ param(
     [string]$Launch = '',
     # Configuración de prueba alternativa (por defecto target\smoke-config.toml). Nunca la real.
     [string]$Config = '',
+    # Eventos SINTÉTICOS de agentes (líneas JSON, "pane": "#1" = sesión 1, "#1d" = su acoplada) que
+    # la app manda por su named pipe real a los 3 s. Nunca se abre un agente real.
+    [string]$AgentEvents = '',
+    # "Clic" en "Enviar a terminal" del comando sugerido de la sesión n (a los 7 s; usar con -AgentEvents).
+    [int]$SendSuggestion = 0,
+    # Abre "Instalar ganchos de Claude Code" contra target\smoke-claude-settings.json (se crea con un
+    # ejemplo si no existe). Nunca contra ~/.claude: la prueba no pulsa "Instalar".
+    [switch]$HooksInstall,
     # Pantalla donde se abre la ventana, contando de izquierda a derecha desde 0. Por defecto, la de
     # más a la derecha que NO sea la principal (en la PC del usuario: el monitor Teros), para no
     # interrumpir lo que pasa en la principal. La ventana se abre sin tomar el foco.
@@ -61,7 +73,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = Resolve-Path (Join-Path $PSScriptRoot '..')
 Push-Location $root
-try { cargo build -p kuntur-app --release -q } finally { Pop-Location }
+try { cargo build -p kuntur-app -p kuntur-hook --release -q } finally { Pop-Location }
 $exe = Join-Path $root 'target\release\kuntur.exe'
 
 Add-Type -AssemblyName System.Drawing
@@ -113,6 +125,16 @@ if ($Badges) { $smokeEnv.KUNTUR_SMOKE_BADGES = '1' }
 if ($Launch) { $smokeEnv.KUNTUR_SMOKE_LAUNCH = $Launch }
 if ($Config) { $smokeEnv.KUNTUR_CONFIG = (Resolve-Path $Config).Path }
 if ($Dock) { $smokeEnv.KUNTUR_SMOKE_DOCK = $Dock }
+if ($AgentEvents) { $smokeEnv.KUNTUR_SMOKE_AGENT_EVENTS = (Resolve-Path $AgentEvents).Path }
+if ($SendSuggestion -gt 0) { $smokeEnv.KUNTUR_SMOKE_SEND_SUGGESTION = "$SendSuggestion" }
+if ($HooksInstall) {
+    $claudeSettings = Join-Path $root 'target\smoke-claude-settings.json'
+    if (-not (Test-Path $claudeSettings)) {
+        Set-Content -Path $claudeSettings -Encoding utf8 -Value '{ "model": "opus", "hooks": { "PreToolUse": [ { "matcher": "Bash", "hooks": [ { "type": "command", "command": "mi-script.sh" } ] } ] } }'
+    }
+    $smokeEnv.KUNTUR_SMOKE_HOOKS_INSTALL = '1'
+    $smokeEnv.KUNTUR_CLAUDE_SETTINGS = $claudeSettings
+}
 if ($Dock -and $DockCommands.Count -gt 0) { $smokeEnv.KUNTUR_SMOKE_DOCK_INPUT = ($DockCommands -join '\n') }
 foreach ($k in $smokeEnv.Keys) { Set-Item "Env:$k" $smokeEnv[$k] }
 $p = Start-Process $exe -PassThru
@@ -133,6 +155,9 @@ if (-not $enPantalla) { Stop-Process -Id $p.Id -Force; throw 'La ventana no se a
 $dockWait = 0
 if ($Dock) { $dockWait = 5 + $DockCommands.Count }
 if ($Dock -eq 'reopen') { $dockWait += 3 }
+# Los eventos sintéticos salen a los 3 s (más sus demoras).
+if ($AgentEvents) { $dockWait += 3 }
+if ($SendSuggestion -gt 0) { $dockWait += 3 }
 Start-Sleep -Seconds ($WaitSec + $Commands.Count + $dockWait)
 
 $r = New-Object KunturSmoke+RECT; [KunturSmoke]::GetClientRect($p.MainWindowHandle, [ref]$r) | Out-Null

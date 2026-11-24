@@ -3775,6 +3775,7 @@ dependencies = [
 name = "kuntur-agents"
 version = "0.1.0"
 dependencies = [
+ "kuntur-hook",
  "kuntur-usage",
  "sysinfo 0.40.4",
 ]
@@ -3789,8 +3790,10 @@ dependencies = [
  "kuntur-audit",
  "kuntur-config",
  "kuntur-files",
+ "kuntur-hook",
  "kuntur-term",
  "kuntur-usage",
+ "serde_json",
  "smol",
  "sysinfo 0.40.4",
  "tauri-winrt-notification",
@@ -3824,6 +3827,15 @@ name = "kuntur-files"
 version = "0.1.0"
 dependencies = [
  "jiff",
+]
+
+[[package]]
+name = "kuntur-hook"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

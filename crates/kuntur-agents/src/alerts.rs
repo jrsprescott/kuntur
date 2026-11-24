@@ -4,6 +4,7 @@
 
 use std::collections::HashMap;
 
+use crate::exact::ExactState;
 use crate::running::AgentState;
 
 /// Lecturas seguidas en "esperando" (cada 2 s) antes de avisar: una pausa corta del agente mientras
@@ -26,12 +27,17 @@ pub struct Observation {
     /// Id del agente en el catálogo.
     pub agent: String,
     pub state: AgentState,
+    /// Estado exacto (hooks / OSC 7501), si se conoce: entonces "esperando" es seguro y se avisa en
+    /// la primera lectura, sin esperar la confirmación de la heurística.
+    pub exact: Option<ExactState>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AlertKind {
     /// Pasó de trabajando a esperando (posible pedido de confirmación).
     Waiting,
+    /// Pide permiso para usar una herramienta (estado exacto).
+    Permission,
     /// Su proceso terminó.
     Finished,
 }
@@ -84,14 +90,19 @@ impl AlertTracker {
                         }
                         AgentState::Waiting => {
                             t.waiting_streak = t.waiting_streak.saturating_add(1);
-                            if t.armed && t.waiting_streak >= WAITING_CONFIRM {
+                            let confirm = if obs.exact.is_some() { 1 } else { WAITING_CONFIRM };
+                            if t.armed && t.waiting_streak >= confirm {
                                 // Visto o no, el cambio ya pasó: no se avisa después al cambiar de pestaña.
                                 t.armed = false;
                                 if !visible(obs.key.session) {
                                     alerts.push(Alert {
                                         key: obs.key,
                                         agent: obs.agent.clone(),
-                                        kind: AlertKind::Waiting,
+                                        kind: if obs.exact == Some(ExactState::Permission) {
+                                            AlertKind::Permission
+                                        } else {
+                                            AlertKind::Waiting
+                                        },
                                     });
                                 }
                             }
@@ -133,6 +144,7 @@ mod tests {
             },
             agent: "claude".into(),
             state,
+            exact: None,
         }
     }
 
@@ -220,5 +232,26 @@ mod tests {
         assert!(alerts[0].key.docked);
         assert_eq!(alerts[0].kind, AlertKind::Finished);
         assert_eq!(alerts[0].agent, "claude");
+    }
+
+    #[test]
+    fn con_estado_exacto_avisa_en_la_primera_lectura() {
+        let exact = |state, e| Observation {
+            exact: Some(e),
+            ..obs(2, 10, state)
+        };
+        let mut t = AlertTracker::default();
+        step(&mut t, &[exact(Working, ExactState::Working)]);
+        assert_eq!(
+            step(&mut t, &[exact(Waiting, ExactState::Permission)]),
+            [(2, AlertKind::Permission)]
+        );
+        step(&mut t, &[exact(Working, ExactState::Working)]);
+        assert_eq!(
+            step(&mut t, &[exact(Waiting, ExactState::Done)]),
+            [(2, AlertKind::Waiting)]
+        );
+        // Sin volver a trabajar, pasar de terminado a esperando respuesta no repite.
+        assert!(step(&mut t, &[exact(Waiting, ExactState::Reply)]).is_empty());
     }
 }

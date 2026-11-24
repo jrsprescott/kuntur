@@ -20,11 +20,8 @@ impl Workspace {
 
     /// Estado más urgente de los agentes de una sesión: esperando gana a trabajando.
     fn session_state(&self, id: u64, cx: &App) -> Option<AgentState> {
-        if !self.running.iter().any(|(sid, _, _)| *sid == id) {
-            return None;
-        }
-        let entry = self.sessions.iter().find(|e| e.id == id)?;
-        Some(state_for(entry.value.view.read(cx).last_output_age()))
+        // F5b: con estado exacto si hay eventos (hooks / OSC 7501); si no, por actividad.
+        self.exact_session_state(id, cx)
     }
 
     pub(super) fn render_title_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {

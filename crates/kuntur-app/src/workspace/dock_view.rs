@@ -30,6 +30,7 @@ impl Workspace {
                 args: Vec::new(),
                 cwd: None,
                 size,
+                env: Vec::new(),
             },
             None => PaneOptions::default_shell(size),
         };
@@ -39,18 +40,22 @@ impl Workspace {
 
     /// Vista de terminal con el tema y la fuente actuales.
     pub(super) fn new_terminal(
-        &self,
-        opts: PaneOptions,
+        &mut self,
+        mut opts: PaneOptions,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Entity<TerminalView> {
+        // F5b: `KUNTUR_PIPE` y `KUNTUR_SESSION` para los ganchos de los agentes que corran ahí.
+        let token = self.terminal_env(&mut opts);
         let palette = palette_from(&self.theme);
         let (family, size_pt, background) = (self.mono_font.clone(), self.settings.font_size, self.colors.terminal);
-        cx.new(|cx| {
+        let view = cx.new(|cx| {
             let mut v = TerminalView::new(window, cx, opts, palette.clone(), family, size_pt);
             v.set_palette(palette, background, cx);
             v
-        })
+        });
+        self.register_terminal(&view, token);
+        view
     }
 
     /// Panel que tiene el teclado ahora mismo en la sesión.
@@ -93,14 +98,16 @@ impl Workspace {
 
     /// Crea la acoplada si aún no existe: mismo shell que la sesión, en su carpeta actual (o en la
     /// personal si todavía no se conoce).
-    fn ensure_dock(&mut self, id: u64, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn ensure_dock(&mut self, id: u64, window: &mut Window, cx: &mut Context<Self>) {
         let Some(entry) = self.sessions.get(id) else {
             return;
         };
         if entry.value.dock.is_some() {
             return;
         }
-        let cwd = start_dir(entry.value.view.read(cx).cwd(), self.home.as_deref());
+        // En el worktree del agente si la sesión se abrió en uno (F5b); si no, en la carpeta actual.
+        let here = self.session_worktree(id).or_else(|| entry.value.view.read(cx).cwd());
+        let cwd = start_dir(here, self.home.as_deref());
         let opts = Self::pane_options(entry.value.shell.clone(), cwd);
         let view = self.new_terminal(opts, window, cx);
         let events = cx.subscribe_in(&view, window, |this, view, ev: &TerminalEvent, window, cx| match ev {

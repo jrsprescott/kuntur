@@ -4,6 +4,7 @@
 //! arriba, jerarquía por peso y color de texto, íconos de un solo color, color solo para estado y lo
 //! secundario al pasar el mouse.
 
+mod agents_exact;
 mod audit_view;
 mod dock_view;
 mod files_panel;
@@ -35,6 +36,7 @@ use crate::monitor::{Sample, Sampler, ShellRef, SlowSample, home_dir, slow_sampl
 use crate::sessions::{SessionList, next_default_name, short_title};
 use crate::terminal_view::{TerminalEvent, TerminalView};
 use crate::theme_bridge::{FALLBACK_MONO, FALLBACK_UI, UiColors, apply_to_kit, palette_from, pick_font};
+use agents_exact::ExactAgents;
 use audit_view::AuditState;
 use dock_view::DockDrag;
 use files_panel::FilesState;
@@ -111,6 +113,8 @@ pub struct Workspace {
     /// Vista "Auditoría" (también ocupa el área central).
     audit: AuditState,
     home: Option<PathBuf>,
+    /// F5b: estado exacto por hooks / OSC 7501, worktrees, instalador de ganchos.
+    exact: ExactAgents,
     _monitor: Task<()>,
     _activation: Subscription,
 }
@@ -176,6 +180,7 @@ impl Workspace {
             usage: UsageState::default(),
             audit: AuditState::new(cx),
             home: home_dir(),
+            exact: ExactAgents::default(),
             _monitor: Self::spawn_monitor(cx),
             _activation: cx.observe_window_activation(window, |this, window, cx| {
                 this.window_active = window.is_window_active();
@@ -184,6 +189,7 @@ impl Workspace {
             }),
         };
         apply_to_kit(&this.theme, cx);
+        this.start_exact(window, cx);
 
         // Prueba de humo: n sesiones sin tocar la configuración guardada.
         let smoke_sessions = std::env::var("KUNTUR_SMOKE_SESSIONS")
@@ -351,6 +357,7 @@ impl Workspace {
         self.running = sample.agents;
         self.busy = sample.busy;
         self.ram = sample.ram;
+        self.poll_exact(cx);
         if let Some(slow) = slow {
             self.installed = slow.installed;
             self.codex_limits = slow.codex_limits;
@@ -372,7 +379,8 @@ impl Workspace {
 
     /// Agentes corriendo, con el nombre de su sesión y el estado por actividad de su terminal.
     fn agent_rows(&self, cx: &App) -> Vec<AgentRow> {
-        self.running
+        let rows = self
+            .running
             .iter()
             .filter_map(|(sid, docked, agent)| {
                 let entry = self.sessions.get(*sid)?;
@@ -386,9 +394,11 @@ impl Workspace {
                     pid: agent.pid,
                     state: state_for(view.read(cx).last_output_age()),
                     started_at: agent.started_at,
+                    exact: None,
                 })
             })
-            .collect()
+            .collect();
+        self.with_exact(rows)
     }
 
     fn agent_name(&self, id: &str) -> String {
@@ -416,6 +426,7 @@ impl Workspace {
                     docked: r.docked,
                     pid: r.pid,
                 },
+                exact: r.exact_state(),
                 agent: r.agent,
                 state: r.state,
             })
@@ -441,6 +452,7 @@ impl Workspace {
                 let name = self.agent_name(&alert.agent);
                 let title = match alert.kind {
                     AlertKind::Waiting => format!("{name} espera tu respuesta"),
+                    AlertKind::Permission => format!("{name} pide permiso"),
                     AlertKind::Finished => format!("{name} terminó"),
                 };
                 crate::notify::show_toast(title, format!("Sesión «{place}»"));
@@ -527,7 +539,7 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let opts = Self::pane_options(shell.clone(), None);
+        let opts = Self::pane_options(shell.clone(), self.exact.next_session_dir.clone());
         let name = name.unwrap_or_else(|| {
             let existing: Vec<&str> = self.sessions.iter().map(|e| e.name.as_str()).collect();
             next_default_name("PowerShell", &existing)
@@ -825,6 +837,10 @@ impl Workspace {
             PaletteAction::LaunchAgent(i) => self.palette.as_ref().and_then(|p| p.agents.get(i).cloned()),
             _ => None,
         };
+        let worktree_agent = match action {
+            PaletteAction::LaunchInWorktree(i) => self.palette.as_ref().and_then(|p| p.agents.get(i).cloned()),
+            _ => None,
+        };
         self.close_palette(window, cx);
         match action {
             PaletteAction::NewSession => self.new_session(window, cx),
@@ -869,6 +885,14 @@ impl Workspace {
                     self.launch_agent(&id, window, cx);
                 }
             }
+            PaletteAction::LaunchInWorktree(_) => {
+                if let Some(id) = worktree_agent {
+                    self.launch_in_worktree(&id, window, cx);
+                }
+            }
+            PaletteAction::SendSelectionToDock => self.send_selection_to_dock(window, cx),
+            PaletteAction::SendSuggestion => self.send_suggestion(window, cx),
+            PaletteAction::InstallClaudeHooks => self.open_installer(cx),
             PaletteAction::RenameSession => {}
         }
     }
@@ -1344,5 +1368,6 @@ impl Render for Workspace {
                     ),
             )
             .children(palette)
+            .children(self.render_exact_overlay(cx))
     }
 }

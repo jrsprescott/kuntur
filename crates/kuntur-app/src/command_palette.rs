@@ -33,6 +33,14 @@ pub enum PaletteAction {
     ExportAudit,
     /// Abre el agente n de `PaletteState::agents` en la sesión activa.
     LaunchAgent(usize),
+    /// Abre el agente n en un `git worktree` nuevo, en una sesión nueva (F5b).
+    LaunchInWorktree(usize),
+    /// Pega la selección de la terminal principal en la acoplada, sin Enter (F5b).
+    SendSelectionToDock,
+    /// Pega el último comando que sugirió el agente de la sesión en la acoplada, sin Enter (F5b).
+    SendSuggestion,
+    /// Muestra qué se agregará a `~/.claude/settings.json` y lo instala si el usuario confirma (F5b).
+    InstallClaudeHooks,
 }
 
 #[derive(Clone, Debug)]
@@ -51,7 +59,7 @@ const fn item(action: PaletteAction, label: &'static str, shortcut: Option<&'sta
 }
 
 /// Las acciones fijas, en el orden en que se muestran (después van las de abrir cada agente instalado).
-pub static ITEMS: [PaletteItem; 22] = [
+pub static ITEMS: [PaletteItem; 25] = [
     item(PaletteAction::NewSession, "Nueva sesión", Some("Ctrl+Shift+T")),
     item(PaletteAction::RenameSession, "Renombrar sesión", None),
     item(PaletteAction::CloseSession, "Cerrar sesión", Some("Ctrl+Shift+W")),
@@ -78,6 +86,21 @@ pub static ITEMS: [PaletteItem; 22] = [
     item(PaletteAction::Audit, "Auditoría de comandos", Some("Ctrl+Shift+A")),
     item(PaletteAction::ExportAudit, "Auditoría: exportar CSV", None),
     item(PaletteAction::RefreshAgents, "Agentes: actualizar instalados", None),
+    item(
+        PaletteAction::SendSelectionToDock,
+        "Terminal: enviar selección a la acoplada",
+        None,
+    ),
+    item(
+        PaletteAction::SendSuggestion,
+        "Terminal: enviar el comando sugerido a la acoplada",
+        None,
+    ),
+    item(
+        PaletteAction::InstallClaudeHooks,
+        "Claude Code: instalar ganchos de Kuntur",
+        None,
+    ),
 ];
 
 /// Minúsculas y sin tildes; la puntuación cuenta como espacio.
@@ -143,18 +166,21 @@ impl PaletteState {
         }
     }
 
-    /// Paleta con "Agentes: abrir <nombre>" para cada agente instalado (`(id, nombre)`).
+    /// Paleta con "Agentes: abrir <nombre>" (y "… en un worktree nuevo") para cada agente instalado
+    /// (`(id, nombre)`).
     pub fn with_agents(agents: Vec<(String, String)>) -> Self {
         let mut p = Self::new();
-        p.extra = agents
-            .iter()
-            .enumerate()
-            .map(|(i, (_, name))| PaletteItem {
-                action: PaletteAction::LaunchAgent(i),
-                label: Cow::Owned(format!("Agentes: abrir {name}")),
-                shortcut: None,
-            })
-            .collect();
+        let launch = agents.iter().enumerate().map(|(i, (_, name))| PaletteItem {
+            action: PaletteAction::LaunchAgent(i),
+            label: Cow::Owned(format!("Agentes: abrir {name}")),
+            shortcut: None,
+        });
+        let worktree = agents.iter().enumerate().map(|(i, (_, name))| PaletteItem {
+            action: PaletteAction::LaunchInWorktree(i),
+            label: Cow::Owned(format!("Agentes: abrir {name} en un worktree nuevo")),
+            shortcut: None,
+        });
+        p.extra = launch.chain(worktree).collect();
         p.agents = agents.into_iter().map(|(id, _)| id).collect();
         p
     }
@@ -301,9 +327,18 @@ mod tests {
             ("claude".into(), "Claude Code".into()),
             ("extra:aider".into(), "Aider".into()),
         ]);
-        assert_eq!(p.filtered().len(), ITEMS.len() + 2);
+        assert_eq!(p.filtered().len(), ITEMS.len() + 4);
         p.insert("abrir aider");
         assert_eq!(p.selected_action(), Some(PaletteAction::LaunchAgent(1)));
+        p.clear();
+        p.insert("worktree claude");
+        assert_eq!(p.selected_action(), Some(PaletteAction::LaunchInWorktree(0)));
+        p.clear();
+        p.insert("ganchos");
+        assert_eq!(p.selected_action(), Some(PaletteAction::InstallClaudeHooks));
+        p.clear();
+        p.insert("enviar seleccion");
+        assert_eq!(p.selected_action(), Some(PaletteAction::SendSelectionToDock));
         assert_eq!(p.agents[1], "extra:aider");
         p.clear();
         p.insert("agentes actualizar");

@@ -295,17 +295,17 @@ impl Workspace {
             .children(items)
     }
 
-    /// Fila: insignia, nombre y "sesión · estado" en tenue; a la derecha el punto y el tiempo.
+    /// Fila: insignia, nombre y "sesión · estado" (o la acción actual) en tenue; a la derecha el punto
+    /// y el tiempo. Debajo (F5b): subagentes, Permitir / Rechazar y el comando sugerido.
     fn render_agent_row(&self, r: &AgentRow, in_active: bool, now: u64, cx: &mut Context<Self>) -> AnyElement {
         let c = &self.colors;
         let sid = r.session_id;
         let hover = c.hover;
-        let state_text = match r.state {
-            AgentState::Working => "trabajando",
-            AgentState::Waiting => "esperando",
-        };
-        h_flex()
-            .id(("agent", r.pid))
+        let detail = r.detail();
+        let attention = r.needs_user();
+        let subs = r.exact.as_ref().map(|e| e.subagent_counts()).filter(|(_, n)| *n > 0);
+        let main = h_flex()
+            .id(("agent", r.key() as usize))
             .relative()
             .h(px(44.))
             .px(px(8.))
@@ -328,14 +328,30 @@ impl Workspace {
                     .flex_1()
                     .min_w_0()
                     .child(
-                        div()
-                            .text_size(px(12.5))
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(c.text)
-                            .whitespace_nowrap()
-                            .overflow_hidden()
-                            .text_ellipsis()
-                            .child(r.name().to_string()),
+                        h_flex()
+                            .min_w_0()
+                            .gap(px(6.))
+                            .child(
+                                div()
+                                    .min_w_0()
+                                    .text_size(px(12.5))
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .text_color(c.text)
+                                    .whitespace_nowrap()
+                                    .overflow_hidden()
+                                    .text_ellipsis()
+                                    .child(r.name().to_string()),
+                            )
+                            // Subagentes trabajando / total.
+                            .when_some(subs, |this, (on, n)| {
+                                this.child(
+                                    div()
+                                        .flex_shrink_0()
+                                        .text_size(px(11.))
+                                        .text_color(c.muted)
+                                        .child(format!("{on}/{n}")),
+                                )
+                            }),
                     )
                     .child(
                         h_flex()
@@ -345,9 +361,12 @@ impl Workspace {
                             .text_color(c.muted)
                             .whitespace_nowrap()
                             .overflow_hidden()
+                            // Con la acción a continuación, la sesión no se encoge a "Pow…".
                             .child(
                                 div()
                                     .min_w_0()
+                                    .max_w(px(96.))
+                                    .when(r.exact.is_some(), |this| this.flex_shrink_0())
                                     .overflow_hidden()
                                     .text_ellipsis()
                                     .child(r.session_name.clone()),
@@ -356,14 +375,18 @@ impl Workspace {
                             // En la acoplada no cabe todo: "acoplada" (que distingue la fila) reemplaza
                             // la palabra del estado, que sigue en el punto de color, los filtros y el
                             // tooltip del modo compacto. "esperando" sí se muestra (se colorea en ámbar).
+                            // Con la acción actual ("Bash · npm test") la fila dice qué hace; sin
+                            // eventos, el estado por actividad.
                             .child(
                                 div()
-                                    .flex_shrink_0()
-                                    .when(r.state == AgentState::Waiting, |this| this.text_color(c.warn))
-                                    .child(match (r.docked, r.state) {
-                                        (true, AgentState::Working) => "acoplada",
-                                        (true, AgentState::Waiting) => "acoplada, esperando",
-                                        _ => state_text,
+                                    .min_w_0()
+                                    .overflow_hidden()
+                                    .text_ellipsis()
+                                    .when(attention, |this| this.text_color(c.warn))
+                                    .child(match (r.docked, r.exact.is_some(), r.state) {
+                                        (true, false, AgentState::Working) => "acoplada".to_string(),
+                                        (true, false, AgentState::Waiting) => "acoplada, esperando".to_string(),
+                                        _ => detail,
                                     }),
                             ),
                     ),
@@ -375,9 +398,22 @@ impl Workspace {
                     .items_center()
                     .text_size(px(11.))
                     .text_color(c.muted)
-                    .child(format_elapsed(now.saturating_sub(r.started_at)))
+                    .child(format_elapsed(
+                        now.saturating_sub(r.exact.as_ref().map_or(r.started_at, |e| e.since)),
+                    ))
                     .child(state_dot(c, r.state, 7.)),
-            )
+            );
+        let extras = self.render_row_extras(r, cx);
+        if extras.is_empty() {
+            return main.into_any_element();
+        }
+        v_flex()
+            .rounded(px(8.))
+            .when(r.exact_state() == Some(kuntur_agents::ExactState::Permission), |this| {
+                this.bg(c.warn.opacity(0.08))
+            })
+            .child(main)
+            .children(extras)
             .into_any_element()
     }
 
@@ -448,9 +484,12 @@ impl Workspace {
         let Some(agent) = self.catalog.get(id) else {
             return Empty.into_any_element();
         };
-        let limits = (agent.usage == Some(AgentKind::Codex))
-            .then_some(self.codex_limits.as_ref())
-            .flatten();
+        // Codex: sus registros; Claude Code: su línea de estado (F5b, con los ganchos instalados).
+        let limits = match agent.usage {
+            Some(AgentKind::Codex) => self.codex_limits.as_ref(),
+            Some(AgentKind::ClaudeCode) => self.exact.claude_limits.as_ref(),
+            _ => None,
+        };
         let pct = ring_pct(limits);
         let action = if agent.ide {
             "IDE · clic: abrir en la carpeta de la sesión"
@@ -496,18 +535,9 @@ impl Workspace {
             .map(|r| {
                 let sid = r.session_id;
                 let is_active = Some(sid) == active;
-                let tip: SharedString = format!(
-                    "{} · {} · {}",
-                    r.name(),
-                    r.place(),
-                    match r.state {
-                        AgentState::Working => "trabajando",
-                        AgentState::Waiting => "esperando",
-                    }
-                )
-                .into();
+                let tip: SharedString = format!("{} · {} · {}", r.name(), r.place(), r.detail()).into();
                 div()
-                    .id(("compact-agent", r.pid))
+                    .id(("compact-agent", r.key() as usize))
                     .relative()
                     .w(px(PANEL_COMPACT))
                     .h(px(38.))

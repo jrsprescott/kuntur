@@ -9,8 +9,10 @@ use alacritty_terminal::event::Event;
 use alacritty_terminal::term::TermMode;
 use portable_pty::{Child, CommandBuilder, MasterPty, native_pty_system};
 
-use crate::cwd::CwdScanner;
+use crate::agent_signal::{AgentSignal, parse_7501};
+use crate::cwd::cwd_from_osc;
 use crate::emulator::Emulator;
+use crate::osc::OscScanner;
 use crate::paste::paste_bytes;
 use crate::size::GridSize;
 
@@ -21,6 +23,8 @@ pub struct PaneOptions {
     pub args: Vec<String>,
     pub cwd: Option<PathBuf>,
     pub size: GridSize,
+    /// Variables de entorno extra para el programa (p. ej. `KUNTUR_PIPE`, `KUNTUR_SESSION`).
+    pub env: Vec<(String, String)>,
 }
 
 impl PaneOptions {
@@ -43,6 +47,7 @@ impl PaneOptions {
             ],
             cwd: None,
             size,
+            env: Vec::new(),
         }
     }
 }
@@ -78,6 +83,7 @@ pub struct Pane {
     pid: Option<u32>,
     cwd: Arc<Mutex<Option<PathBuf>>>,
     last_output: Arc<Mutex<Instant>>,
+    agent_signal: Arc<Mutex<Option<AgentSignal>>>,
 }
 
 impl Pane {
@@ -100,6 +106,9 @@ impl Pane {
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
         cmd.env("TERM_PROGRAM", "Kuntur");
+        for (key, value) in &opts.env {
+            cmd.env(key, value);
+        }
 
         let child = pair.slave.spawn_command(cmd)?;
         let pid = child.process_id();
@@ -113,8 +122,10 @@ impl Pane {
         let clipboard = Arc::new(Mutex::new(None));
         let cwd = Arc::new(Mutex::new(None));
         let last_output = Arc::new(Mutex::new(Instant::now()));
+        let agent_signal = Arc::new(Mutex::new(None));
 
         {
+            let agent_signal = agent_signal.clone();
             let (emulator, writer, exited, title, clipboard, cwd, last_output) = (
                 emulator.clone(),
                 writer.clone(),
@@ -126,17 +137,22 @@ impl Pane {
             );
             thread::Builder::new().name("kuntur-pty-lector".into()).spawn(move || {
                 let mut buf = vec![0u8; 64 * 1024];
-                let mut scanner = CwdScanner::new();
+                let mut scanner = OscScanner::new();
                 loop {
                     let n = match reader.read(&mut buf) {
                         Ok(0) | Err(_) => break,
                         Ok(n) => n,
                     };
                     *last_output.lock().unwrap() = Instant::now();
-                    // Antes del emulador y sin tocar los bytes: solo mira si pasó una carpeta nueva.
-                    if let Some(dir) = scanner.feed(&buf[..n]) {
-                        *cwd.lock().unwrap() = Some(PathBuf::from(dir));
-                    }
+                    // Antes del emulador y sin tocar los bytes: carpeta nueva (OSC 7 / 9;9) y estado de
+                    // un agente (OSC 7501).
+                    scanner.feed(&buf[..n], |payload| {
+                        if let Some(dir) = cwd_from_osc(payload) {
+                            *cwd.lock().unwrap() = Some(PathBuf::from(dir));
+                        } else if let Some(signal) = parse_7501(payload) {
+                            *agent_signal.lock().unwrap() = Some(signal);
+                        }
+                    });
                     let events = {
                         let mut emu = emulator.lock().unwrap();
                         emu.feed(&buf[..n]);
@@ -173,6 +189,7 @@ impl Pane {
             pid,
             cwd,
             last_output,
+            agent_signal,
         })
     }
 
@@ -219,6 +236,11 @@ impl Pane {
         self.cwd.lock().unwrap().clone()
     }
 
+    /// Último estado de agente informado por OSC 7501 desde la llamada anterior (y lo olvida).
+    pub fn take_agent_signal(&self) -> Option<AgentSignal> {
+        self.agent_signal.lock().unwrap().take()
+    }
+
     /// Tiempo desde la última salida del programa.
     pub fn last_output_age(&self) -> Duration {
         self.last_output.lock().unwrap().elapsed()
@@ -258,6 +280,7 @@ mod tests {
             args: vec!["/c".into(), "echo hola-kuntur".into()],
             cwd: None,
             size: GridSize::new(80, 24),
+            env: Vec::new(),
         };
         let pane = Pane::spawn(opts, || {}).expect("no se pudo abrir el PTY");
         assert!(wait_for(&pane, "hola-kuntur"));
@@ -270,6 +293,7 @@ mod tests {
             args: vec!["/q".into(), "/k".into(), "prompt $G".into()],
             cwd: None,
             size: GridSize::new(80, 24),
+            env: Vec::new(),
         };
         let pane = Pane::spawn(opts, || {}).unwrap();
         pane.write(b"echo teclado-ok\r").unwrap();
@@ -294,6 +318,7 @@ mod tests {
             args: vec!["/c".into(), "echo \x1b]9;9;C:\\Windows\x07listo-osc".into()],
             cwd: None,
             size: GridSize::new(80, 24),
+            env: Vec::new(),
         };
         let pane = Pane::spawn(opts, || {}).unwrap();
         assert!(pane.pid().is_some_and(|p| p > 0));
@@ -355,6 +380,7 @@ mod tests {
             ],
             cwd: None,
             size: GridSize::new(80, 24),
+            env: Vec::new(),
         };
         let pane = Pane::spawn(opts, || {}).unwrap();
         assert!(wait_for(&pane, "PATHLEN="), "PowerShell no respondió");
@@ -366,5 +392,28 @@ mod tests {
         });
         let recibido: usize = linea.trim().trim_start_matches("PATHLEN=").parse().unwrap();
         assert_eq!(recibido, esperado, "el PATH del hijo no coincide con el de Kuntur");
+    }
+
+    #[test]
+    fn pasa_variables_y_lee_osc_7501() {
+        let opts = PaneOptions {
+            program: "cmd.exe".into(),
+            args: vec![
+                "/c".into(),
+                "echo VAR=%KUNTUR_PRUEBA%& echo \x1b]7501;state=permission;agent=claude\x07listo-7501".into(),
+            ],
+            cwd: None,
+            size: GridSize::new(80, 24),
+            env: vec![("KUNTUR_PRUEBA".into(), "valor-123".into())],
+        };
+        let pane = Pane::spawn(opts, || {}).unwrap();
+        assert!(wait_for(&pane, "VAR=valor-123"));
+        assert!(wait_for(&pane, "listo-7501"));
+        let signal = pane.take_agent_signal().expect("llegó la señal");
+        assert_eq!(signal.state, crate::agent_signal::SignalState::Permission);
+        assert_eq!(signal.agent.as_deref(), Some("claude"));
+        assert!(pane.take_agent_signal().is_none(), "se entrega una sola vez");
+        let screen: Vec<String> = pane.with_emulator(|e| (0..24).map(|r| e.line_text(r)).collect());
+        assert!(!screen.iter().any(|l| l.contains("state=")), "{screen:?}");
     }
 }

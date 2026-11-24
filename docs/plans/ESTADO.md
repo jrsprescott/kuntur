@@ -6,11 +6,14 @@
 - Rama principal `main`: **Fases 1 y 2** (terminal real + sesiones, temas, paleta, persistencia). Estable.
 - Rama **`fase/f3-v5`**: Fase 3 (diseño v5) **terminada** (`docs/plans/f3-resultados.md`).
 - Rama **`fase/f4-acoplada`** (sale de `fase/f3-v5`): Fase 4 · Terminal acoplada **terminada** (`docs/plans/f4-resultados.md`); faltan las pruebas manuales ⏳ del usuario.
-- Rama de trabajo **`fase/f5-agentes`** (sale de `fase/f4-acoplada`): **F5a terminada** (`docs/plans/f5a-resultados.md`): catálogo configurable (Kimi, DeepSeek, Antigravity y `[[agentes]]` en `config.toml`), clic en un agente instalado = abrirlo, agentes de la acoplada, alertas (insignia + notificación de Windows, `alertas = true`) y auditoría (crate `kuntur-audit`, vista con búsqueda/filtros/CSV). **Siguiente: F5b** (hooks + named pipe, OSC 7501, estado exacto, permitir desde la fila, subagentes, worktree por agente, línea de estado de Claude). Plan: `docs/plans/2026-11-23-f5-agentes-alertas-auditoria.md`.
+- Rama de trabajo **`fase/f5-agentes`** (sale de `fase/f4-acoplada`): **Fase 5 terminada** (`docs/plans/f5-resultados.md`, con el detalle en `f5a-resultados.md` y `f5b-resultados.md`). F5a: catálogo configurable, abrir agentes con un clic, agentes de la acoplada, alertas y auditoría. F5b: `kuntur-hook.exe` + named pipe, OSC 7501, estado exacto (trabajando / pide permiso / espera respuesta / terminó), subagentes con su acción, Permitir / Rechazar desde la fila, worktree por agente (la acoplada arranca ahí), "Enviar a terminal", anillo de Claude por su línea de estado e instalador de ganchos con confirmación. Faltan las pruebas manuales ⏳ del usuario (sobre todo **instalar los ganchos** y probar con `claude` real). Pendiente: auditoría desde los hooks.
 - Planes: `docs/plans/README.md` (hoja de ruta), `docs/plans/2026-11-23-f3-v5-agentes-y-uso.md` y `docs/plans/2026-11-23-f4-terminal-acoplada.md`.
 - Diseño de referencia: `docs/PLAN.md` ("Cambios de la v4") y la simulación `docs/simulacion/index.html`.
 - **Especificación del usuario** (adoptada el 2026-11-23): `docs/ESPECIFICACION.md`, con las decisiones tomadas (se mantiene GPUI, costo estimado, spike de `wry`…). La hoja de ruta pasó a 11 fases (nueva F8 · Vista previa y diff).
 - **Decisión pendiente:** panel izquierdo con agentes arriba + árbol abajo a la vez (especificación §3) o el botón "Archivos" que alterna (actual). Se aplica en F7.
+
+## Fase 5b: agentes exactos
+Pruebas de humo: `.\scripts\smoke.ps1 -Sessions 3 -Panel full -AgentEvents scripts\smoke-agentes.jsonl` (eventos **sintéticos** por el named pipe real: subagentes, Permitir/Rechazar, comando sugerido, anillo de Claude), `-SendSuggestion 3` ("Enviar a terminal" a la acoplada, sin ejecutar) y `-HooksInstall` (instalador contra `target\smoke-claude-settings.json`; nunca `~/.claude`). `kuntur-hook.exe` se compila junto a `kuntur.exe` (`cargo build -p kuntur-app -p kuntur-hook --release`); los ganchos instalados apuntan al que está junto a `kuntur.exe`.
 
 ## Fase 5a: agentes configurables, alertas y auditoría
 Pruebas de humo: `.\scripts\smoke.ps1 -Sessions 2 -Audit -AuditQuery 'git' -Badges` (auditoría con datos **sintéticos** e insignias de prueba) y `-Config target\smoke-agentes.toml -Launch 'extra:ping'` (agente extra de prueba con `ping`; el archivo vive en `target\`, ver `f5a-resultados.md`). Las pruebas nunca muestran notificaciones de Windows.
@@ -58,7 +61,7 @@ Decisión pendiente ya tomada: la tarjeta "Tokens de entrada" **incluye la cach�
 git clone https://github.com/jrsprescott/kuntur.git
 cd kuntur
 git switch fase/f4-acoplada
-cargo test --workspace            # ~150 pruebas
+cargo test --workspace            # ~220 pruebas
 cargo build -p kuntur-app --release
 .\target\release\kuntur.exe       # o doble clic
 .\scripts\smoke.ps1               # prueba de humo: captura target\smoke.png y mide RAM

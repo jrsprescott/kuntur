@@ -7,4 +7,5 @@ publish.workspace = true
 
 [dependencies]
 kuntur-usage = { path = "../kuntur-usage" }
+kuntur-hook = { path = "../kuntur-hook" }
 sysinfo = { workspace = true }

@@ -1,7 +1,7 @@
 //! Lógica del panel de agentes (sin GPUI): filas, filtro Todos / Esperando / Trabajando, búsqueda,
 //! tiempos y textos del anillo de límites. El `Workspace` la dibuja.
 
-use kuntur_agents::AgentState;
+use kuntur_agents::{AgentState, ExactState, PaneAgent};
 use kuntur_usage::codex::Limits;
 
 use crate::command_palette::matches;
@@ -21,6 +21,9 @@ pub struct AgentRow {
     pub state: AgentState,
     /// Segundos Unix en que arrancó.
     pub started_at: u64,
+    /// Estado exacto (hooks / OSC 7501), acción, subagentes y sugerencias, si llegan eventos. Sin
+    /// eventos, `state` sale de la heurística por actividad.
+    pub exact: Option<PaneAgent>,
 }
 
 impl AgentRow {
@@ -31,6 +34,48 @@ impl AgentRow {
     /// "web" o "web · acoplada".
     pub fn place(&self) -> String {
         place(&self.session_name, self.docked)
+    }
+
+    /// Clave estable de la fila: el PID del agente, o (sin proceso conocido, solo por eventos) la
+    /// terminal.
+    pub fn key(&self) -> u64 {
+        if self.pid != 0 {
+            self.pid as u64
+        } else {
+            (1 << 40) | (self.session_id << 1) | self.docked as u64
+        }
+    }
+
+    pub fn exact_state(&self) -> Option<ExactState> {
+        self.exact.as_ref().map(|e| e.state)
+    }
+
+    /// Texto del estado: el exacto si se conoce ("pide permiso", "espera respuesta", "terminó"…).
+    pub fn state_label(&self) -> &'static str {
+        match (self.exact_state(), self.state) {
+            (Some(e), _) => e.label(),
+            (None, AgentState::Working) => "trabajando",
+            (None, AgentState::Waiting) => "esperando",
+        }
+    }
+
+    /// Lo que se ve en la segunda línea después de la sesión: la acción actual mientras trabaja
+    /// ("Bash · npm test") o el estado.
+    pub fn detail(&self) -> String {
+        match &self.exact {
+            Some(e) if e.state == ExactState::Working => {
+                e.action.clone().unwrap_or_else(|| e.state.label().to_string())
+            }
+            _ => self.state_label().to_string(),
+        }
+    }
+
+    /// ¿El estado pide atención del usuario (permiso o respuesta)? Se muestra en ámbar.
+    pub fn needs_user(&self) -> bool {
+        match self.exact_state() {
+            Some(e) => matches!(e, ExactState::Permission | ExactState::Reply),
+            None => self.state == AgentState::Waiting,
+        }
     }
 }
 
@@ -171,6 +216,7 @@ mod tests {
             pid: 10,
             state,
             started_at: 0,
+            exact: None,
         }
     }
 
@@ -274,5 +320,38 @@ mod tests {
         assert_eq!(window_label(10_080), "semanal");
         assert_eq!(window_label(2_880), "2 d");
         assert_eq!(window_label(45), "45 min");
+    }
+
+    #[test]
+    fn textos_con_estado_exacto() {
+        use kuntur_agents::ExactTracker;
+        use kuntur_hook::{EventKind, HookEvent};
+        let mut r = row("web", "claude", AgentState::Working);
+        assert_eq!((r.state_label(), r.detail().as_str()), ("trabajando", "trabajando"));
+        let mut t = ExactTracker::default();
+        let ev = |kind, tool: Option<&str>, detail: Option<&str>| HookEvent {
+            pane: "k1".into(),
+            kind,
+            tool: tool.map(String::from),
+            detail: detail.map(String::from),
+            ..HookEvent::default()
+        };
+        t.apply(&ev(EventKind::PreTool, Some("Bash"), Some("npm test")), 1);
+        r.exact = t.get("k1").cloned();
+        assert_eq!(r.detail(), "Bash · npm test");
+        assert!(!r.needs_user());
+        t.apply(&ev(EventKind::Permission, Some("Bash"), Some("rm -rf x")), 2);
+        r.exact = t.get("k1").cloned();
+        assert_eq!(r.detail(), "pide permiso");
+        assert!(r.needs_user());
+        t.apply(&ev(EventKind::Stop, None, None), 3);
+        r.exact = t.get("k1").cloned();
+        assert_eq!(r.state_label(), "terminó");
+        assert!(!r.needs_user());
+        // Clave: el PID, o la terminal si el agente solo se conoce por eventos.
+        assert_eq!(r.key(), 10);
+        r.pid = 0;
+        r.docked = true;
+        assert_ne!(r.key(), row("web", "claude", AgentState::Working).key());
     }
 }

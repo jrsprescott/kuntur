@@ -5,30 +5,11 @@
 //! Terminadas en BEL (`0x07`) o ST (`ESC \`). El escáner no altera los bytes: solo mira el flujo
 //! antes de que llegue al emulador, y guarda estado porque una secuencia puede partirse entre lecturas.
 
-/// Largo máximo de un OSC que se guarda; los más largos (p. ej. OSC 52 con un portapapeles grande)
-/// se ignoran sin acumular memoria.
-const MAX_OSC: usize = 4096;
-
-const ESC: u8 = 0x1b;
-const BEL: u8 = 0x07;
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-enum State {
-    #[default]
-    Ground,
-    /// Se vio `ESC`.
-    Esc,
-    /// Dentro de `ESC ]`, guardando el contenido.
-    Osc,
-    /// Dentro de un OSC se vio `ESC`: si sigue `\` es el terminador ST.
-    OscEsc,
-}
+use crate::osc::OscScanner;
 
 #[derive(Default)]
 pub struct CwdScanner {
-    state: State,
-    buf: Vec<u8>,
-    overflow: bool,
+    osc: OscScanner,
 }
 
 impl CwdScanner {
@@ -39,65 +20,28 @@ impl CwdScanner {
     /// Procesa un trozo de salida y devuelve la última carpeta completa encontrada en él.
     pub fn feed(&mut self, bytes: &[u8]) -> Option<String> {
         let mut found = None;
-        for &b in bytes {
-            match self.state {
-                State::Ground => {
-                    if b == ESC {
-                        self.state = State::Esc;
-                    }
-                }
-                State::Esc => self.after_esc(b),
-                State::Osc => match b {
-                    BEL => {
-                        found = self.finish().or(found);
-                        self.state = State::Ground;
-                    }
-                    ESC => self.state = State::OscEsc,
-                    _ if self.buf.len() < MAX_OSC => self.buf.push(b),
-                    _ => self.overflow = true,
-                },
-                State::OscEsc => {
-                    if b == b'\\' {
-                        found = self.finish().or(found);
-                        self.state = State::Ground;
-                    } else {
-                        // OSC interrumpido: ese ESC empieza otra secuencia.
-                        self.after_esc(b);
-                    }
-                }
+        self.osc.feed(bytes, |payload| {
+            if let Some(p) = cwd_from_osc(payload) {
+                found = Some(p);
             }
-        }
+        });
         found
     }
+}
 
-    fn after_esc(&mut self, b: u8) {
-        self.state = match b {
-            b']' => {
-                self.buf.clear();
-                self.overflow = false;
-                State::Osc
-            }
-            ESC => State::Esc,
-            _ => State::Ground,
-        };
-    }
-
-    fn finish(&mut self) -> Option<String> {
-        if self.overflow {
-            return None;
-        }
-        let payload = String::from_utf8_lossy(&self.buf);
-        let path = if let Some(rest) = payload.strip_prefix("9;9;") {
-            let rest = rest.trim();
-            let unquoted = rest.strip_prefix('"').and_then(|r| r.strip_suffix('"')).unwrap_or(rest);
-            Some(unquoted.to_string())
-        } else if let Some(url) = payload.strip_prefix("7;") {
-            path_from_file_url(url.trim())
-        } else {
-            None
-        };
-        path.filter(|p| !p.is_empty())
-    }
+/// Carpeta de un OSC 9;9 o OSC 7 (contenido sin `ESC ]` ni terminador); `None` para otros.
+pub fn cwd_from_osc(payload: &[u8]) -> Option<String> {
+    let payload = String::from_utf8_lossy(payload);
+    let path = if let Some(rest) = payload.strip_prefix("9;9;") {
+        let rest = rest.trim();
+        let unquoted = rest.strip_prefix('"').and_then(|r| r.strip_suffix('"')).unwrap_or(rest);
+        Some(unquoted.to_string())
+    } else if let Some(url) = payload.strip_prefix("7;") {
+        path_from_file_url(url.trim())
+    } else {
+        None
+    };
+    path.filter(|p| !p.is_empty())
 }
 
 /// `file://host/C:/ruta%20x` → `C:\ruta x`; `file://host/home/x` → `/home/x`.
