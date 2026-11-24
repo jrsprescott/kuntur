@@ -6,6 +6,7 @@ mod agents_panel;
 mod command_palette;
 mod connections;
 mod dock;
+mod file_menu;
 mod i18n;
 mod idle;
 mod keynav;
@@ -28,7 +29,19 @@ use workspace::Workspace;
 // Íconos que no vienen en el paquete por defecto de gpui-kit.
 gpui_kit::assets::icon_assets!(
     ExtraIcons,
-    [Command, ChartColumn, ScrollText, Server, Pencil, Trash, Download, Plug]
+    [
+        Command,
+        ChartColumn,
+        ScrollText,
+        Server,
+        Pencil,
+        Trash,
+        Download,
+        Plug,
+        FileCode,
+        FileImage,
+        FileArchive
+    ]
 );
 
 /// Íconos por defecto de gpui-kit + los que agrega Kuntur.

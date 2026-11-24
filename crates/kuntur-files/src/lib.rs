@@ -11,12 +11,15 @@ use std::path::Path;
 pub mod fs;
 pub mod memory;
 pub mod path;
+pub mod share;
 pub mod transfer;
+pub mod tree;
 
 pub use fs::{FileSystem, LocalFs};
 pub use memory::MemoryFs;
 pub use path::{PathStyle, agent_dir, conflict_name, location_label, posix_quote_all};
 pub use transfer::{Conflict, Direction, Job, JobId, JobState, Queue, Summary, Transfers};
+pub use tree::{DirState, Tree, TreeRow, parent_row};
 
 use jiff::Timestamp;
 use jiff::tz::TimeZone;

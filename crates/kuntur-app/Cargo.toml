@@ -41,6 +41,8 @@ kuntur-mcp = { path = "../kuntur-mcp" }
 wry = { workspace = true }
 # Ajustes v0.2: idioma del sistema (Windows, Linux y Mac).
 sys-locale = "0.3"
+# Ajustes v0.2: "Eliminar" del árbol de archivos va a la Papelera (Windows, Linux y Mac).
+trash = "5"
 
 [target.'cfg(windows)'.dependencies]
 # Notificaciones de Windows (alertas, F5).

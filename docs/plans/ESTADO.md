@@ -20,6 +20,17 @@
 - Rama **`fase/f7-archivos`** (sale de `fase/f6-ssh`): Fase 7 · Archivos remotos y transferencias **terminada** (`docs/plans/f7-resultados.md`); faltan las pruebas manuales ⏳ contra un servidor real.
 - **Decisión pendiente (sigue abierta tras F7):** panel izquierdo con agentes arriba + árbol abajo a la vez (especificación §3) o el botón "Archivos" que alterna (actual, se mantuvo en F7 sin cambios).
 
+## Ajustes v0.2 · paso 2: árbol de archivos y menú tipo VS Code (rama `ajustes/v0.2-arbol`)
+Plan: `docs/plans/2026-11-24-ajustes-v0.2.md` (secciones 5 y 6).
+| Parte | Estado |
+|---|---|
+| `kuntur-files`: `tree.rs` (raíz, desplegadas, filas aplanadas con profundidad, carga perezosa, relectura de lo visible, fila madre), `path.rs` (`is_within`, `relative`), `share.rs` (enlace de GitHub, `usuario@host:ruta`) | ✅ con pruebas (`MemoryFs`) |
+| Árbol en el panel: chevron que gira, sangría con guías, ícono por tipo, clic despliega, ←/→/↑/↓/Enter, Esc vuelve a la terminal, plegar todo | ✅ compila; sin captura (esta PC tiene un solo monitor) |
+| Menú (`file_menu.rs`, es/en, sin "Diff This"): Nuevo archivo/carpeta y Cambiar nombre en línea, Eliminar (local a la Papelera con `trash`; remoto "ADVERTENCIA: Eliminar esto"), Copiar ruta / relativa, Cortar/Copiar/Pegar (mismo sistema = renombrar; local↔remoto por la cola), Mostrar en el gestor de archivos, Abrir en la terminal integrada, Agregar al chat / Claude Code: Agregar al chat, Descargar/Subir esto, Compartir ▸ (GitHub / `usuario@host:ruta`), Abrir en vista previa de imágenes (hasta 12 imágenes en la vista previa), Agregar como proyecto Python | ✅ con pruebas de la lógica |
+| Buscar en la carpeta…, Abrir línea de tiempo | ⏳ en gris "(próximamente)" |
+| Portapapeles del sistema (copiar en Kuntur y pegar en el Explorador, y al revés), selección múltiple, arrastrar dentro del árbol | ⏳ pendiente |
+| Pruebas manuales | ⏳ lista en el plan (§ Pruebas manuales) |
+
 ## Fase 10: MCP y comandos (rama `fase/f10-mcp`)
 | Parte | Estado |
 |---|---|
