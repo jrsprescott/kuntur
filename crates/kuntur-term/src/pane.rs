@@ -206,6 +206,12 @@ impl Pane {
                                 OscEvent::Mark(mark) => {
                                     emu.feed(&chunk[fed..end]);
                                     fed = end;
+                                    // Volvió el prompt: si un programa que se cerró mal dejó el
+                                    // mouse encendido, se apaga (si no, el shell recibe sus
+                                    // movimientos como texto).
+                                    if mark == crate::shell::ShellMark::PromptStart {
+                                        emu.mouse_off_if_on();
+                                    }
                                     shell.lock().unwrap().apply(mark, emu.cursor_abs());
                                 }
                                 OscEvent::Agent(signal) => *agent_signal.lock().unwrap() = Some(signal),
@@ -407,6 +413,46 @@ mod transport_tests {
         assert!(
             rec.killed.load(Ordering::SeqCst),
             "cerrar el panel cierra el transporte"
+        );
+    }
+
+    /// Ajustes v0.2.2: un programa a pantalla completa activa el mouse y se cierra mal (sin
+    /// apagarlo); cuando el shell vuelve a mostrar el prompt (OSC 133;A), Kuntur lo apaga.
+    #[test]
+    fn al_volver_el_prompt_se_apaga_el_mouse_que_quedo_encendido() {
+        let rec = Arc::new(Recorder::default());
+        let salida = b"\x1b[?1003h\x1b[?1006hprograma\r\n\x1b]133;A\x1b\\PS C:\\> \x1b]133;B\x1b\\".to_vec();
+        let pane = Pane::with_transport(
+            rec,
+            Box::new(std::io::Cursor::new(salida)),
+            GridSize::new(80, 24),
+            || {},
+        )
+        .unwrap();
+        assert!(wait(|| pane.has_exited()));
+        assert!(pane.with_emulator(|e| e.contains_text("PS C:")));
+        assert_eq!(
+            pane.with_emulator(|e| e.mouse_mode().report),
+            crate::mouse::MouseReporting::Off
+        );
+    }
+
+    /// Sin marca de prompt (un programa sigue corriendo), el mouse que pidió se respeta.
+    #[test]
+    fn sin_prompt_el_mouse_del_programa_se_respeta() {
+        let rec = Arc::new(Recorder::default());
+        let salida = b"\x1b[?1003h\x1b[?1006hhtop corriendo".to_vec();
+        let pane = Pane::with_transport(
+            rec,
+            Box::new(std::io::Cursor::new(salida)),
+            GridSize::new(80, 24),
+            || {},
+        )
+        .unwrap();
+        assert!(wait(|| pane.has_exited()));
+        assert_eq!(
+            pane.with_emulator(|e| e.mouse_mode().report),
+            crate::mouse::MouseReporting::Motion
         );
     }
 }

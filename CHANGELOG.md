@@ -6,6 +6,20 @@ Spanish, are in [`docs/plans/`](docs/plans/).
 
 ## [Unreleased]
 
+## [0.2.2] — SSH más limpio y seguro
+
+### Fixed
+- **SSH: mouse movements showing up as text** (`^[[<35;37;51M…`) after reconnecting. A full-screen program on the
+  server (htop, vim, claude…) could leave mouse tracking, the alternate screen or a hidden cursor on when the
+  connection dropped; the reconnected shell then received every mouse move as text. Kuntur now resets the terminal
+  modes when an SSH connection drops and before it (re)connects (nothing is sent to the server).
+- **Local tabs:** when the shell shows its prompt again (OSC 133), mouse tracking left on by a program that exited
+  badly is turned off.
+
+### Security
+- SSH passwords and key passphrases are wiped from memory right after use (`zeroize`), including what was typed but
+  not sent. They were already never written to disk (only to the Windows Credential Manager with "Remember").
+
 ## [0.2.1] — íconos e IA local
 
 ### Added

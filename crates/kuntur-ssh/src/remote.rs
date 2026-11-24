@@ -205,6 +205,9 @@ impl RemoteTerminal {
             return;
         }
         *self.last_error.lock().unwrap() = Some(err.to_string());
+        // Ajustes v0.2.2: si se cortó con un programa a pantalla completa abierto, el aviso y el
+        // historial vuelven a la pantalla principal, con el mouse apagado.
+        self.console.output(kuntur_term::MODES_RESET.to_vec());
         self.console.print(&format!(
             "{RED}{what}: {err}{RESET}\n{DIM}Enter o Ctrl+Shift+R para reintentar · Ctrl+Shift+W cierra la pestaña.{RESET}\n"
         ));
@@ -213,6 +216,10 @@ impl RemoteTerminal {
 
     async fn run(self: Arc<Self>) {
         let target = self.session.target.clone();
+        // Ajustes v0.2.2: la pestaña puede venir de una conexión anterior con un programa a pantalla
+        // completa que dejó el mouse, la pantalla alterna o el cursor oculto: estado limpio antes de
+        // conectar (no se envía nada al servidor; solo lo procesa la terminal de Kuntur).
+        self.console.output(kuntur_term::MODES_RESET.to_vec());
         self.console
             .print(&format!("{DIM}Conectando a {}…{RESET}\n", target.destination()));
         let conn = match self.session.connection(&self.console).await {

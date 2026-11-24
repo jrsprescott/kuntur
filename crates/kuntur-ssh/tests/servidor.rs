@@ -189,6 +189,12 @@ impl server::Handler for TestServer {
             session.close(channel)?;
             return Ok(());
         }
+        // "tui": como un programa a pantalla completa que pide todo movimiento del mouse (y la
+        // conexión se cae antes de que lo apague).
+        if data.starts_with(b"tui") {
+            Self::prompt(session, channel, "[?1049h[?1003h[?1006h");
+            return Ok(());
+        }
         // Eco como un shell: lo escrito y, con Enter, un "prompt" nuevo. "cd X" informa OSC 7.
         let text = String::from_utf8_lossy(data).replace('\r', "\r\n");
         Self::prompt(session, channel, &text);
@@ -447,6 +453,11 @@ fn conexion_caida_avisa_y_enter_reconecta_en_la_misma_carpeta() {
     assert!(!screen(&pane).contains("Contraseña"), "usa la recordada");
     pane.write(b"cd /srv/app\r").unwrap();
     wait("carpeta", || term.cwd().as_deref() == Some("/srv/app"));
+    // Un programa a pantalla completa activa el mouse y la conexión se cae con él abierto.
+    pane.write(b"tui\r").unwrap();
+    wait("mouse encendido", || {
+        pane.with_emulator(|e| e.mouse_mode().report) == kuntur_term::MouseReporting::Motion
+    });
 
     // El servidor corta la conexión.
     let handle = srv.seen.handles.lock().unwrap()[0].clone();
@@ -462,6 +473,11 @@ fn conexion_caida_avisa_y_enter_reconecta_en_la_misma_carpeta() {
     pane.write(b"\r").unwrap();
     wait_text(&pane, "shell-en:/srv/app");
     wait("reconectada", || term.state() == LinkState::Connected);
+    // Ajustes v0.2.2: la conexión nueva no hereda el mouse ni la pantalla alterna de la anterior.
+    pane.with_emulator(|e| {
+        assert_eq!(e.mouse_mode().report, kuntur_term::MouseReporting::Off);
+        assert!(!e.mode().contains(kuntur_term::TermMode::ALT_SCREEN));
+    });
     assert_eq!(srv.seen.auths.load(Ordering::SeqCst), 2);
 }
 
