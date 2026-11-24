@@ -417,6 +417,11 @@ impl Workspace {
             self.close_mcp(window, cx);
             return;
         }
+        // Ctrl+Shift+O pasa directo a Conexiones (que cierra este panel).
+        if m.control && m.shift && !m.alt && key == "o" {
+            self.open_connections(window, cx);
+            return;
+        }
         let Some(input) = self.mcp.input.as_mut() else {
             if key == "escape" {
                 self.close_mcp(window, cx);

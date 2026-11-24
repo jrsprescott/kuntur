@@ -110,11 +110,15 @@ param(
     # SIN Enter la línea que se usaría para abrir Claude Code con el MCP de la sesión (nunca lo ejecuta).
     [ValidateSet('', 'list', 'probar', 'linea')][string]$Mcp = '',
     # Pantalla donde se abre la ventana, contando de izquierda a derecha desde 0. Por defecto, la de
-    # más a la derecha que NO sea la principal (en la PC del usuario: el monitor Teros), para no
+    # más a la derecha que NO sea la principal (en la PC del usuario: el monitor secundario), para no
     # interrumpir lo que pasa en la principal. La ventana se abre sin tomar el foco.
     [int]$Display = -1,
     # Permite usar la pantalla principal (solo si se pide explícitamente).
-    [switch]$AllowPrimary
+    [switch]$AllowPrimary,
+    # Medición (F11): tiempo hasta la primera ventana (sondeo cada 10 ms), memoria privada, CPU en
+    # reposo durante -IdleSec segundos después de la captura y RAM de los procesos hijos (shells).
+    [switch]$Measure,
+    [int]$IdleSec = 10
 )
 $ErrorActionPreference = 'Stop'
 $root = Resolve-Path (Join-Path $PSScriptRoot '..')
@@ -207,12 +211,15 @@ if ($Mcp) {
     $smokeEnv.KUNTUR_SMOKE_MCP_FAKE = (Join-Path $root 'target\release\kuntur-mcp-falso.exe')
 }
 foreach ($k in $smokeEnv.Keys) { Set-Item "Env:$k" $smokeEnv[$k] }
+$clock = [System.Diagnostics.Stopwatch]::StartNew()
 $p = Start-Process $exe -PassThru
 foreach ($k in $smokeEnv.Keys) { Remove-Item "Env:$k" }
 foreach ($k in $saved.Keys) { Set-Item "Env:$k" $saved[$k] }
 
 $deadline = (Get-Date).AddSeconds(20)
-while ((Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 300; $p.Refresh(); if ($p.MainWindowHandle -ne 0) { break } }
+$poll = if ($Measure) { 10 } else { 300 }
+while ((Get-Date) -lt $deadline) { Start-Sleep -Milliseconds $poll; $p.Refresh(); if ($p.MainWindowHandle -ne 0) { break } }
+$startupMs = $clock.ElapsedMilliseconds
 if ($p.MainWindowHandle -eq 0) { Stop-Process -Id $p.Id -Force; throw 'Kuntur no abrió ventana' }
 # Comprobar que se abrió en la pantalla pedida y sin quitarle el foco a lo que el usuario usa.
 $wr = New-Object KunturSmoke+RECT; [KunturSmoke]::GetWindowRect($p.MainWindowHandle, [ref]$wr) | Out-Null
@@ -253,6 +260,18 @@ $g.ReleaseHdc($hdc); $g.Dispose()
 New-Item -ItemType Directory -Force -Path (Split-Path $Out) | Out-Null
 $bmp.Save($Out, [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
 
+if ($Measure) {
+    # CPU en reposo: tiempo de CPU consumido mientras nadie toca la app (los shells ya terminaron sus comandos).
+    $p.Refresh(); $cpu0 = $p.TotalProcessorTime; $wall = [System.Diagnostics.Stopwatch]::StartNew()
+    Start-Sleep -Seconds $IdleSec
+    $p.Refresh(); $cpuMs = ($p.TotalProcessorTime - $cpu0).TotalMilliseconds; $wallMs = $wall.ElapsedMilliseconds
+    $children = @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$($p.Id)")
+    $childMB = [Math]::Round((($children | Measure-Object WorkingSetSize -Sum).Sum) / 1MB)
+    "Arranque hasta la primera ventana: $startupMs ms"
+    "CPU en reposo ($IdleSec s): $([Math]::Round(100 * $cpuMs / $wallMs, 2)) % de un núcleo ($([Math]::Round($cpuMs)) ms de CPU)"
+    "Memoria privada de Kuntur: $([Math]::Round($p.PrivateMemorySize64 / 1MB)) MB"
+    "Procesos hijos: $($children.Count) ($((($children | ForEach-Object { $_.Name }) | Sort-Object -Unique) -join ', ')): $childMB MB en total"
+}
 $p.Refresh(); $ram = [Math]::Round($p.WorkingSet64 / 1MB)
 Stop-Process -Id $p.Id -Force
 "Captura: $Out"

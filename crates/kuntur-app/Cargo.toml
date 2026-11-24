@@ -4,6 +4,18 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
+license.workspace = true
+authors.workspace = true
+description.workspace = true
+repository.workspace = true
+build = "build.rs"
+
+# Instalador MSI (F11): `cargo wix -p kuntur-app` con WiX Toolset v3; fuente en `wix/main.wxs`.
+[package.metadata.wix]
+upgrade-guid = "56DDC03F-821A-4FEC-A00A-9EE8EE53A2A4"
+path-guid = "6F6EC565-487D-4053-888B-AF292506E901"
+license = false
+eula = false
 
 [[bin]]
 name = "kuntur"
@@ -31,3 +43,9 @@ wry = { workspace = true }
 [target.'cfg(windows)'.dependencies]
 # Notificaciones de Windows (alertas, F5).
 tauri-winrt-notification = "0.8.1"
+# F11: ¿está registrado el AppUserModelID del instalador? (registro de Windows, solo lectura)
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Registry"] }
+
+[build-dependencies]
+# F11: ícono de la app incrustado en kuntur.exe (recurso 1: GPUI lo usa para la ventana).
+embed-resource = "3"

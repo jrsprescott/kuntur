@@ -4708,6 +4708,7 @@ dependencies = [
 name = "kuntur-app"
 version = "0.1.0"
 dependencies = [
+ "embed-resource",
  "gpui-kit",
  "jiff",
  "kuntur-agents",
@@ -4725,6 +4726,7 @@ dependencies = [
  "smol",
  "sysinfo 0.40.4",
  "tauri-winrt-notification",
+ "windows-sys 0.61.2",
  "wry",
 ]
 

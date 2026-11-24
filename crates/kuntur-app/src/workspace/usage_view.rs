@@ -258,6 +258,24 @@ impl Workspace {
         }
     }
 
+    /// Teclado con la vista abierta (F11): ←/→ cambian el período, Ctrl+S exporta el CSV, Esc
+    /// cierra. Devuelve `false` para lo demás (atajos globales).
+    pub(super) fn on_usage_key(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        let m = ev.keystroke.modifiers;
+        let key = ev.keystroke.key.to_ascii_lowercase();
+        if key == "escape" && !m.modified() {
+            self.close_usage(window, cx);
+        } else if let Some(forward) = crate::keynav::horizontal(&key, m.modified()) {
+            let next = crate::keynav::cycle(&Period::ALL, self.usage.period, forward);
+            self.set_usage_period(next, cx);
+        } else if key == "s" && m.control && !m.shift && !m.alt {
+            self.export_usage(cx);
+        } else {
+            return false;
+        }
+        true
+    }
+
     /// "Exportar CSV": pide dónde guardar y escribe los registros del período elegido.
     pub(super) fn export_usage(&mut self, cx: &mut Context<Self>) {
         let (Some(records), Some(summary)) = (self.usage.records.clone(), self.usage.summary.clone()) else {
