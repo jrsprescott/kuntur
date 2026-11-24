@@ -1,8 +1,10 @@
 name: CI
 
+# Una sola ejecución por commit: `push` solo en main y en las etiquetas; las ramas de trabajo pasan
+# por su pull request (antes corrían dos veces y el trabajo de macOS se quedaba sin máquina).
 on:
   push:
-    branches: [main, "fase/**", "integracion/**", "ajustes/**"]
+    branches: [main]
     tags: ["v*"]
   pull_request:
 
