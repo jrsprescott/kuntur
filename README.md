@@ -1,10 +1,10 @@
-# Kuntur
+# Kuntur Terminal IA Agente
 
 **English** · [Español](README.es.md)
 
 > **Status: early preview (0.1).** Usable day to day on Windows 11, but expect rough edges. Feedback is welcome.
 
-**Kuntur** (*condor* in Quechua) is a lightweight terminal for Windows, written in Rust, built for working with
+**Kuntur Terminal IA Agente** — *Kuntur* means *condor* in Quechua — is a lightweight terminal for Windows, written in Rust, built for working with
 AI coding agents on the command line (Claude Code, Codex, OpenCode, Qwen, Gemini…). Like a condor seeing the whole
 valley from above, you see every session at a glance and what each agent is doing right now.
 
