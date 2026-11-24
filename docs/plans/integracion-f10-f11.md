@@ -7,7 +7,7 @@ Rama `integracion/f10-f11`, creada desde `origin/main` (`4088f10`, F1–F9). Las
 | base | `main` | `4088f10` | — | 349 |
 | 1 | `fase/f10-mcp` | `bbaff27` | `965e222` | 388 |
 | 2 | `fase/f11-publicacion` | `b575e5d` | `004c7f8` | 394 |
-| 3 | corrección de CPU en reposo | — | (commit propio) | 400 |
+| 3 | corrección de CPU en reposo | — | `041835f` (commit propio) | 400 |
 
 En cada paso: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings` y `cargo test --workspace` sin errores ni advertencias. No se tocaron `main` ni las ramas `fase/*`.
 
