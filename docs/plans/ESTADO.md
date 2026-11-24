@@ -2,6 +2,21 @@
 
 > Última actualización: 2026-11-24. Léela primero al retomar en otra PC (o pídele a Claude Code que la lea).
 
+## Para retomar (2026-11-24, al cambiar de PC)
+- **Publicadas:** 0.2.0 y 0.2.1 (Releases de GitHub). El actualizador de la app avisa de las versiones nuevas.
+- **En curso: 0.2.2** — PR #4 (rama `fix/v0.2.2-ssh`): estado limpio de la terminal al cortar/reconectar SSH
+  (evita `^[[<35;…M` en el shell), mouse apagado al volver el prompt en pestañas locales y contraseñas SSH con
+  `zeroize`. Pruebas y clippy en verde. Pasos que faltan:
+  1. Integrar el PR #4 en GitHub (Merge) cuando la CI esté en verde.
+  2. `git switch main && git pull`, luego `.\scripts\msi.ps1 -Check` (WiX v3.14 con la variable `WIX` y
+     `cargo install cargo-wix --version 0.3.9 --locked`). El script compila con las rutas de la PC reemplazadas
+     y se niega a armar el MSI si quedan.
+  3. Publicar `v0.2.2` como versión preliminar con el MSI y su SHA-256 en la nota (ver la de la 0.2.1).
+- **Firma:** solicitud enviada a SignPath Foundation; esperar su respuesta (ver `docs/FIRMA.md`). Al aprobar:
+  secretos `SIGNPATH_API_TOKEN` y `SIGNPATH_ORGANIZATION_ID` en GitHub y sacar la siguiente versión firmada.
+- **Privacidad:** las capturas para docs se sacan con `scripts\smoke.ps1` en carpetas neutras (`cd C:\Windows; cls`),
+  nunca con la carpeta del usuario a la vista; las pruebas de humo no leen modelos locales reales.
+
 ## Dónde está cada cosa
 - **Versión 0.2.0 — Ajustes v0.2** (en `main` desde el PR #1; **publicada**: release `v0.2.0`): Configuración (Ctrl+,) con temas en círculos, idioma es/en y notificaciones configurables; árbol de archivos y menú contextual tipo VS Code; título del agente en la pestaña con marquesina; imágenes como Warp (Ctrl+V); aviso de actualización con descarga verificada; firma preparada (`docs/FIRMA.md`); acceso directo en el escritorio; binarios sin rutas de la PC. Resultados y pendientes: `docs/plans/ajustes-v0.2-resultados.md`.
 - **Versión 0.2.1 — íconos e IA local** (rama `ajustes/v0.2.1`, PR a `main`): ícono nuevo del cóndor, ícono y nombre en la barra (clic → GitHub), íconos de marca de los agentes, sección "IA local" (LM Studio, Ollama, Jan, llama.cpp) con "OpenCode con este modelo", y en Uso "no instalado" y modelos locales a US$ 0. Plan y estado: `docs/plans/2026-11-24-ajustes-v0.2.1.md`.
