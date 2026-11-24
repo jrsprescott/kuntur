@@ -116,7 +116,8 @@ pub enum Period { Today, Days7, Days30, Year, All }   // 1 / 7 / 30 / 365 días 
 - Abajo: fila de **agentes instalados** (íconos 28 px con la letra/color del catálogo) con **anillo de progreso** alrededor cuando hay porcentaje real (Codex: `latest_limits().primary_pct`; Claude: cuando exista el puente de línea de estado, fase posterior) y tooltip "Codex · 5 h: 12 % · semanal: 44 %"; sin dato → sin anillo y tooltip "sin datos de límite".
 - Debajo: **"Archivos"** (ícono `Folder`): alterna el contenido del panel a un explorador de la carpeta actual de la sesión activa (carpetas primero, tamaño y fecha en tenue, ↑ subir, clic en carpeta entra, doble clic en archivo lo abre con la app de Windows, clic derecho copia la ruta). Sin carpeta conocida: "Carpeta desconocida (abre un shell PowerShell)".
 
-### Task 9: Vista "Uso de agentes"
+### Task 9: Vista "Uso de agentes" ✅
+> Hecha el 2026-11-23: `kuntur-usage/src/{chart,export,synthetic}.rs`, `kuntur-app/src/usage_format.rs`, `kuntur-app/src/workspace/usage_view.rs`. Diferencias con lo de abajo: barras con `div` (no `canvas`) para tener tooltip por barra; el % de cambio solo aparece si el historial cubre el período anterior completo; la caché de lectura es "releer si pasó más de 1 min" (la importación incremental real es la Task 9b).
 - Botón de ícono arriba a la derecha (`ChartColumn` o similar de Lucide): **abre la vista y la cierra al volver a pulsarlo** (§4); acción en la paleta; Esc vuelve a la terminal. Ocupa el área central.
 - Botón de ícono **Tema** al lado (§4): menú Blue / Dark / White con el actual marcado; guarda la preferencia (ya existe `set_theme` + `persist`).
 - Cabecera "Uso de agentes" + rango de fechas en tenue + selector **Hoy / 7 días / 30 días / 1 año / Todo** (`Period::ALL`, `label()`; ✅ modelo y pruebas hechos).
@@ -137,7 +138,7 @@ pub enum Period { Today, Days7, Days30, Year, All }   // 1 / 7 / 30 / 365 días 
 
 ### Task 10: Indicador de RAM y aceptación
 - Abajo a la derecha, texto tenue "Kuntur · 62 MB" (memoria de trabajo del proceso, `sysinfo`, cada 2 s). Sin barra de estado completa: solo una línea de 22 px con la carpeta actual a la izquierda y la RAM a la derecha.
-- `scripts/smoke.ps1`: `-Usage` (abre la vista de uso) y variable `KUNTUR_USAGE_ROOT` para apuntar los lectores a datos **sintéticos** de prueba en `target\smoke-usage\` (generados por el propio script), para no mostrar datos reales en capturas.
+- `scripts/smoke.ps1`: `-Usage hoy|7|30|ano|todo` abre la vista de uso con datos **sintéticos** (✅ hecho). Cambio respecto del plan original: en lugar de archivos generados por el script en `target\smoke-usage\`, la app genera los registros en memoria con `kuntur_usage::synthetic` cuando existe `KUNTUR_SMOKE_USAGE` (determinista, cubre 420 días y 4 agentes; nunca toca el historial real).
 - Capturas a revisar: pestañas con 3 sesiones (Blue/Dark/White), panel de agentes vacío, "Archivos", vista de uso con datos sintéticos.
 - `docs/plans/f3-resultados.md` con la lista manual (incluye abrir `claude`/`codex`/`opencode` en sesiones y ver la lista de agentes y los filtros).
 - CI verde y push de la rama `fase/f3-v5`.

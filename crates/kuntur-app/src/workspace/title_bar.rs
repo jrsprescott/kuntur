@@ -1,5 +1,5 @@
 //! Barra de título (34 px): botón del panel · pestañas de sesiones · `+` · espacio de arrastre ·
-//! "Uso de agentes" y acciones · botones de Windows.
+//! botones de ícono (Tema, Uso de agentes, Acciones) · botones de Windows.
 
 use gpui_kit::component::TitleBar;
 use kuntur_agents::AgentState;
@@ -85,7 +85,15 @@ impl Workspace {
                             .flex_shrink_0()
                             .gap(px(2.))
                             .pr(px(4.))
-                            .child(usage_button(c))
+                            .child(
+                                icon_button("theme", IconName::Palette, c, "Tema: Blue · Dark · White")
+                                    .on_click(cx.listener(|this, _, window, cx| this.toggle_theme_menu(window, cx))),
+                            )
+                            .child(
+                                icon_button("usage", IconName::ChartColumn, c, "Uso de agentes (Ctrl+Shift+U)")
+                                    .when(self.usage.open, |this| this.bg(c.surface_2).text_color(c.text))
+                                    .on_click(cx.listener(|this, _, window, cx| this.toggle_usage(window, cx))),
+                            )
                             .child(
                                 icon_button("command", IconName::Command, c, "Acciones (Ctrl+Shift+P)")
                                     .on_click(cx.listener(|this, _, window, cx| this.toggle_palette(window, cx))),
@@ -185,23 +193,6 @@ impl Workspace {
             )
             .into_any_element()
     }
-}
-
-/// "Uso de agentes": visible pero apagado hasta que exista la vista (Task 9).
-fn usage_button(c: &UiColors) -> impl IntoElement {
-    div()
-        .id("usage")
-        .size(px(ICON_BUTTON))
-        .flex_shrink_0()
-        .rounded(px(7.))
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_color(c.muted)
-        .opacity(0.45)
-        .occlude()
-        .tooltip(|window, cx| Tooltip::new("Uso de agentes · próximamente").build(window, cx))
-        .child(Icon::new(IconName::ChartColumn).size(px(16.)))
 }
 
 /// Punto de estado: trabajando = acento, esperando = ámbar.

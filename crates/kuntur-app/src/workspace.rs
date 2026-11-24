@@ -7,6 +7,7 @@
 mod files_panel;
 mod side_panel;
 mod title_bar;
+mod usage_view;
 
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -27,6 +28,7 @@ use crate::sessions::{SessionList, next_default_name, short_title};
 use crate::terminal_view::{TerminalEvent, TerminalView};
 use crate::theme_bridge::{FALLBACK_MONO, FALLBACK_UI, UiColors, apply_to_kit, palette_from, pick_font};
 use files_panel::FilesState;
+use usage_view::UsageState;
 
 /// Panel izquierdo compacto (solo íconos) y completo.
 const PANEL_COMPACT: f32 = 56.0;
@@ -79,6 +81,8 @@ pub struct Workspace {
     /// Memoria de trabajo de Kuntur (bytes).
     ram: Option<u64>,
     files: FilesState,
+    /// Vista "Uso de agentes" (ocupa el área central mientras está abierta).
+    usage: UsageState,
     home: Option<PathBuf>,
     _monitor: Task<()>,
 }
@@ -119,6 +123,7 @@ impl Workspace {
             codex_limits: None,
             ram: None,
             files: FilesState::default(),
+            usage: UsageState::default(),
             home: home_dir(),
             _monitor: Self::spawn_monitor(cx),
         };
@@ -184,6 +189,14 @@ impl Workspace {
                 }
                 _ => this.settings.sidebar = SidebarMode::Full,
             }
+        }
+
+        // Prueba de humo: vista de uso abierta con datos SINTÉTICOS (nunca el historial real) y el
+        // período pedido ("hoy", "7", "30", "ano", "todo").
+        if let Ok(period) = std::env::var("KUNTUR_SMOKE_USAGE") {
+            this.config_path = None;
+            this.usage.set_initial_period(&period);
+            this.open_usage(window, cx);
         }
         this
     }
@@ -313,6 +326,7 @@ impl Workspace {
     fn new_session(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.add_session(None, None, window, cx);
         self.persist();
+        self.usage.open = false;
         self.focus_active(window, cx);
     }
 
@@ -336,15 +350,23 @@ impl Workspace {
         cx.notify();
     }
 
+    /// Activa una sesión y la muestra: si la vista de uso estaba abierta, vuelve a la terminal
+    /// (también al hacer clic en la pestaña que ya estaba activa).
     fn activate(&mut self, id: u64, window: &mut Window, cx: &mut Context<Self>) {
-        if self.sessions.activate(id) {
+        let was_usage = std::mem::take(&mut self.usage.open);
+        if self.sessions.activate(id) || was_usage {
             self.focus_active(window, cx);
             cx.notify();
         }
     }
 
-    /// Lleva el teclado a la terminal activa (y el panel Archivos a su carpeta).
+    /// Lleva el teclado a la terminal activa (y el panel Archivos a su carpeta). Con la vista de
+    /// uso abierta, el teclado queda en la ventana (Esc la cierra) y no en la terminal oculta.
     fn focus_active(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.usage.open {
+            window.focus(&self.focus, cx);
+            return;
+        }
         if let Some(e) = self.sessions.active() {
             e.value.view.update(cx, |v, cx| v.focus(window, cx));
         }
@@ -567,8 +589,27 @@ impl Workspace {
             PaletteAction::FontBigger => self.set_font_size(self.settings.font_size + FONT_STEP, cx),
             PaletteAction::FontSmaller => self.set_font_size(self.settings.font_size - FONT_STEP, cx),
             PaletteAction::FontReset => self.set_font_size(Settings::default().font_size, cx),
+            PaletteAction::Usage => self.toggle_usage(window, cx),
+            PaletteAction::ExportUsage => {
+                self.open_usage(window, cx);
+                self.export_usage(cx);
+            }
             PaletteAction::RenameSession => {}
         }
+    }
+
+    /// Botón de tema (§4 de la especificación): abre la paleta filtrada en los temas, con el actual
+    /// marcado; volver a pulsarlo la cierra. Elegir uno lo aplica y lo guarda.
+    fn toggle_theme_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.palette.is_some() {
+            self.close_palette(window, cx);
+            return;
+        }
+        self.open_palette(window, cx);
+        if let Some(p) = self.palette.as_mut() {
+            p.insert("Tema");
+        }
+        cx.notify();
     }
 
     /// ¿La acción describe el estado actual? (tema y panel en uso: se marcan con ✓).
@@ -579,6 +620,7 @@ impl Workspace {
             PaletteAction::RailIcons => self.settings.sidebar == SidebarMode::Icons,
             PaletteAction::PanelAgents => self.panel == PanelView::Agents,
             PaletteAction::PanelFiles => self.panel == PanelView::Files,
+            PaletteAction::Usage => self.usage.open,
             _ => false,
         }
     }
@@ -629,6 +671,7 @@ impl Workspace {
     }
 
     fn cycle(&mut self, forward: bool, window: &mut Window, cx: &mut Context<Self>) {
+        self.usage.open = false;
         if forward {
             self.sessions.next();
         } else {
@@ -652,6 +695,11 @@ impl Workspace {
             return;
         }
         let m = ev.keystroke.modifiers;
+        if self.usage.open && ev.keystroke.key == "escape" && !m.modified() {
+            self.close_usage(window, cx);
+            cx.stop_propagation();
+            return;
+        }
         if !m.control || m.alt || m.platform {
             return;
         }
@@ -668,12 +716,14 @@ impl Workspace {
             (true, "b") => self.toggle_sidebar(cx),
             (true, "e") => self.toggle_files(cx),
             (true, "p") => self.toggle_palette(window, cx),
+            (true, "u") => self.toggle_usage(window, cx),
             (_, "=" | "+") => self.set_font_size(self.settings.font_size + FONT_STEP, cx),
             (false, "-") => self.set_font_size(self.settings.font_size - FONT_STEP, cx),
             (false, "0") => self.set_font_size(Settings::default().font_size, cx),
             (false, d) if d.len() == 1 && ('1'..='9').contains(&d.chars().next().unwrap_or('0')) => {
                 let n = d.parse::<usize>().unwrap_or(1);
                 if self.sessions.activate_index(n - 1) {
+                    self.usage.open = false;
                     self.focus_active(window, cx);
                     cx.notify();
                 }
@@ -988,7 +1038,13 @@ impl Render for Workspace {
                             .flex_1()
                             .min_w_0()
                             .h_full()
-                            .child(div().flex_1().min_h_0().children(active))
+                            .child(div().flex_1().min_h_0().map(|this| {
+                                if self.usage.open {
+                                    this.child(self.render_usage(cx))
+                                } else {
+                                    this.children(active)
+                                }
+                            }))
                             .child(self.render_status_line(cx)),
                     ),
             )

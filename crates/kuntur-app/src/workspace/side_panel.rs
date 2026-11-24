@@ -15,12 +15,12 @@ const INSTALLED_TILE: f32 = 32.0;
 const INSTALLED_BADGE: f32 = 24.0;
 
 /// Color de marca 0xRRGGBB → GPUI.
-fn brand(color: u32) -> Hsla {
+pub(super) fn brand(color: u32) -> Hsla {
     rgb(color).into()
 }
 
 /// Insignia de un agente: letra en su color sobre un fondo tenue de ese color.
-fn badge(kind: AgentKind, size: f32, radius: f32) -> Div {
+pub(super) fn badge(kind: AgentKind, size: f32, radius: f32) -> Div {
     let (letter, color) = kuntur_agents::info(kind).map_or(('?', 0x888888), |i| (i.letter, i.color));
     let color = brand(color);
     div()

@@ -21,6 +21,19 @@ pub struct Totals {
     pub agent_time_secs: u64,
 }
 
+impl Totals {
+    /// Tokens de entrada de la tarjeta: entrada + caché (lectura y escritura).
+    pub fn input_with_cache(&self) -> u64 {
+        self.input + self.cache_read + self.cache_write
+    }
+
+    /// Porcentaje de la entrada (con caché) que vino de la caché; `None` si no hubo entrada.
+    pub fn cache_share(&self) -> Option<f64> {
+        let all = self.input_with_cache();
+        (all > 0).then(|| (self.cache_read + self.cache_write) as f64 / all as f64 * 100.0)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ModelRow {
     pub model: String,
@@ -46,10 +59,14 @@ pub struct Summary {
     /// Fin exclusivo del período: comienzo de mañana en la zona local.
     pub end: i64,
     pub totals: Totals,
-    /// Mismo largo inmediatamente antes (para el % de cambio). `None` en `All`.
+    /// Mismo largo inmediatamente antes (para el % de cambio). `None` en `All` y cuando el
+    /// historial no llega hasta el inicio de ese período anterior.
     pub previous: Option<Totals>,
     /// Un elemento por día local del período, con los días vacíos en cero: (día, entrada, salida).
     pub by_day: Vec<(Date, u64, u64)>,
+    /// (entrada, salida) por hora local del día (0–23), sumando todos los días del período: en
+    /// "Hoy" son las barras del gráfico.
+    pub by_hour: [(u64, u64); 24],
     /// Turnos por día de la semana (lunes = 0) y hora local.
     pub heatmap: [[u64; 24]; 7],
     /// Ordenado por entrada + salida, de mayor a menor.
@@ -145,6 +162,11 @@ pub fn summarize(records: &[UsageRecord], period: Period, now: i64, tz: &TimeZon
     let start = day_start(first_day, tz);
 
     let current: Vec<&UsageRecord> = records.iter().filter(|r| r.ts >= start && r.ts < end).collect();
+    // Solo se compara si el historial cubre el período anterior completo: si el registro más viejo
+    // es posterior a su inicio (historial recortado, como los 30 días que guarda Claude Code por
+    // defecto), el % de cambio sería engañoso.
+    let oldest = records.iter().map(|r| r.ts).min();
+    let previous_range = previous_range.filter(|&(from, _)| oldest.is_some_and(|o| o <= from));
     let previous = previous_range.map(|(from, to)| {
         let prev: Vec<&UsageRecord> = records.iter().filter(|r| r.ts >= from && r.ts < to).collect();
         totals(&prev)
@@ -153,12 +175,16 @@ pub fn summarize(records: &[UsageRecord], period: Period, now: i64, tz: &TimeZon
     // Por día y mapa de calor (zona local).
     let mut per_day: HashMap<Date, (u64, u64)> = HashMap::new();
     let mut heatmap = [[0u64; 24]; 7];
+    let mut by_hour = [(0u64, 0u64); 24];
     for r in &current {
         let z = zoned(r.ts, tz);
         let day = per_day.entry(z.date()).or_default();
         day.0 += r.input;
         day.1 += r.output;
-        heatmap[z.weekday().to_monday_zero_offset() as usize][z.hour() as usize] += 1;
+        let hour = z.hour() as usize;
+        by_hour[hour].0 += r.input;
+        by_hour[hour].1 += r.output;
+        heatmap[z.weekday().to_monday_zero_offset() as usize][hour] += 1;
     }
     let mut by_day = Vec::new();
     let mut day = first_day;
@@ -177,6 +203,7 @@ pub fn summarize(records: &[UsageRecord], period: Period, now: i64, tz: &TimeZon
         totals: totals(&current),
         previous,
         by_day,
+        by_hour,
         heatmap,
         models: models(&current),
         agents: agents(&current),
@@ -504,6 +531,9 @@ mod tests {
         assert_eq!(s.end, ts("2026-11-24T00:00:00-05:00"));
         assert_eq!((s.totals.input, s.totals.output, s.totals.turns), (30, 3, 2));
         assert_eq!(s.by_day, vec![(date("2026-11-23"), 30, 3)]);
+        assert_eq!(s.by_hour[0], (10, 1));
+        assert_eq!(s.by_hour[11], (20, 2));
+        assert_eq!(s.by_hour.iter().map(|h| h.0).sum::<u64>(), 30);
         let prev = s.previous.expect("ayer es el período anterior");
         assert_eq!((prev.input, prev.output, prev.turns), (100, 10, 1));
     }
@@ -515,6 +545,8 @@ mod tests {
             rec("a", "claude-x", "2025-11-24T00:00:00-05:00", 5, 5),
             // Un minuto antes: pertenece al año anterior.
             rec("b", "claude-x", "2025-11-23T23:59:00-05:00", 7, 7),
+            // El historial llega al inicio del año anterior: se puede comparar.
+            rec("d", "claude-x", "2024-11-24T00:00:00-05:00", 0, 0),
             rec("c", "claude-x", "2026-11-23T08:00:00-05:00", 1, 1),
         ];
         let s = summarize(&records, Period::Year, now(), &lima());
@@ -522,6 +554,38 @@ mod tests {
         assert_eq!(s.by_day.len(), 365);
         assert_eq!(s.totals.turns, 2);
         assert_eq!(s.previous.expect("año anterior").input, 7);
+    }
+
+    #[test]
+    fn sin_historial_completo_no_se_compara() {
+        // 7 días: el período anterior empieza el 10 nov a las 00:00 (UTC-5).
+        let parcial = vec![
+            rec("a", "claude-x", "2026-11-22T08:00:00-05:00", 100, 10),
+            rec("b", "claude-x", "2026-11-12T08:00:00-05:00", 5, 1),
+        ];
+        assert_eq!(summarize(&parcial, Period::Days7, now(), &lima()).previous, None);
+
+        let completo = vec![
+            rec("a", "claude-x", "2026-11-22T08:00:00-05:00", 100, 10),
+            rec("b", "claude-x", "2026-11-12T08:00:00-05:00", 5, 1),
+            rec("c", "claude-x", "2026-11-10T00:00:00-05:00", 1, 1),
+        ];
+        let prev = summarize(&completo, Period::Days7, now(), &lima()).previous;
+        assert_eq!(prev.map(|p| p.input), Some(6));
+        assert_eq!(summarize(&[], Period::Days7, now(), &lima()).previous, None);
+    }
+
+    #[test]
+    fn la_entrada_de_la_tarjeta_incluye_la_cache() {
+        let t = Totals {
+            input: 25,
+            cache_read: 60,
+            cache_write: 15,
+            ..Totals::default()
+        };
+        assert_eq!(t.input_with_cache(), 100);
+        assert_eq!(t.cache_share(), Some(75.0));
+        assert_eq!(Totals::default().cache_share(), None);
     }
 
     #[test]

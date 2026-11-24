@@ -70,9 +70,7 @@ pub struct UiColors {
     pub text: Hsla,
     pub muted: Hsla,
     pub accent: Hsla,
-    /// Estados: listo / esperando / error.
-    /// `ok` viene del tema pero aún no tiene uso en la interfaz.
-    #[allow(dead_code)]
+    /// Estados: listo / esperando / error (también: sube / baja en las tarjetas de uso).
     pub ok: Hsla,
     pub warn: Hsla,
     pub error: Hsla,

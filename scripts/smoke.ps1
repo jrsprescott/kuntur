@@ -12,6 +12,8 @@
   .\scripts\smoke.ps1 -Sessions 2 -Theme white -Palette -PaletteQuery 'tema' -Out target\smoke-palette.png
 .EXAMPLE
   .\scripts\smoke.ps1 -Sessions 1 -Panel files -Out target\smoke-files.png
+.EXAMPLE
+  .\scripts\smoke.ps1 -Sessions 1 -Usage 30 -Theme dark -Out target\smoke-usage.png
 #>
 param(
     [string[]]$Commands = @('Write-Host rojo -ForegroundColor Red; Write-Host verde -ForegroundColor Green', 'Get-ChildItem | Select-Object -First 5'),
@@ -28,7 +30,9 @@ param(
     [string]$PaletteQuery = '',
     [switch]$PaletteRename,
     # Panel izquierdo: completo, compacto (solo íconos) o en "Archivos". Vacío = el de la configuración.
-    [ValidateSet('', 'full', 'compact', 'files')][string]$Panel = ''
+    [ValidateSet('', 'full', 'compact', 'files')][string]$Panel = '',
+    # Abre "Uso de agentes" con datos SINTÉTICOS (nunca el historial real) en ese período.
+    [ValidateSet('', 'hoy', '7', '30', 'ano', 'todo')][string]$Usage = ''
 )
 $ErrorActionPreference = 'Stop'
 $root = Resolve-Path (Join-Path $PSScriptRoot '..')
@@ -65,6 +69,7 @@ if ($Theme) { $smokeEnv.KUNTUR_SMOKE_THEME = $Theme }
 if ($Palette -or $PaletteQuery -or $PaletteRename) { $smokeEnv.KUNTUR_SMOKE_PALETTE = $(if ($PaletteRename) { 'rename' } else { '1' }) }
 if ($PaletteQuery) { $smokeEnv.KUNTUR_SMOKE_PALETTE_QUERY = $PaletteQuery }
 if ($Panel) { $smokeEnv.KUNTUR_SMOKE_PANEL = $Panel }
+if ($Usage) { $smokeEnv.KUNTUR_SMOKE_USAGE = $Usage }
 foreach ($k in $smokeEnv.Keys) { Set-Item "Env:$k" $smokeEnv[$k] }
 $p = Start-Process $exe -PassThru
 foreach ($k in $smokeEnv.Keys) { Remove-Item "Env:$k" }

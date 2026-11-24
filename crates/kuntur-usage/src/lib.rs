@@ -2,15 +2,29 @@
 //! agregaciones por período para la vista "Uso de agentes". Sin UI: la app lo llama en un hilo aparte.
 
 pub mod aggregate;
+pub mod chart;
 pub mod claude;
 pub mod codex;
+pub mod export;
 pub mod model;
 pub mod opencode;
+pub mod synthetic;
 
 pub use aggregate::{ModelRow, Summary, TaskRow, Totals, pct_change, provider_of, summarize};
 pub use model::{AgentKind, Period, UsageRecord};
 
 use std::path::{Path, PathBuf};
+
+/// Todo el historial local de los agentes con lector (Claude Code, Codex y OpenCode) bajo la
+/// carpeta personal `home`. Lo que falte o no se pueda leer simplemente no aporta registros.
+pub fn load_local(home: &Path) -> Vec<UsageRecord> {
+    let mut all = claude::read_dir(&home.join(".claude").join("projects"));
+    all.extend(codex::read_dir(&home.join(".codex").join("sessions")));
+    all.extend(opencode::read_db(
+        &home.join(".local").join("share").join("opencode").join("opencode.db"),
+    ));
+    all
+}
 
 /// Archivos bajo `root` (recursivo) cuyo nombre termina en alguno de `suffixes`, en orden estable.
 /// Una carpeta inexistente o ilegible da una lista vacía.

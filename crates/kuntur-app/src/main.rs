@@ -8,6 +8,7 @@ mod monitor;
 mod sessions;
 mod terminal_view;
 mod theme_bridge;
+mod usage_format;
 mod workspace;
 
 use std::borrow::Cow;
