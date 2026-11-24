@@ -237,6 +237,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        not(windows),
+        ignore = "rutas de Windows y comillas de PowerShell (autocompletado en bash/zsh pendiente)"
+    )]
     fn ruta_absoluta_y_relativa() {
         let t = tree("abs");
         let word = format!("{}\\proy", t.display());
@@ -255,6 +259,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        not(windows),
+        ignore = "rutas de Windows y comillas de PowerShell (autocompletado en bash/zsh pendiente)"
+    )]
     fn entrecomilla_si_hay_espacios() {
         let t = tree("comillas");
         let word = format!("{}\\Prog", t.display());

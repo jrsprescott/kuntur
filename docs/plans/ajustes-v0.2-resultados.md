@@ -39,4 +39,6 @@ MSI que las tenga) y los tooltips de la barra de título están en español e in
 - Árbol: portapapeles del sistema (copiar en Kuntur y pegar en el Explorador), selección múltiple, arrastrar dentro
   del árbol; "Buscar en la carpeta" y "Abrir línea de tiempo".
 - Traducir al inglés el resto de la interfaz (paleta, Uso, Auditoría, Conexiones, MCP).
-- Ver los trabajos `linux` y `macos` de la CI en GitHub.
+- Linux/Mac: la CI compila todo y pasa las pruebas de los crates sin interfaz; el autocompletado en gris (F9) sigue
+  pensado para PowerShell (rutas con `\` y comillas simples): 3 pruebas se saltan fuera de Windows hasta adaptarlo a
+  bash/zsh.
