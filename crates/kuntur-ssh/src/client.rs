@@ -8,6 +8,7 @@ use std::time::Duration;
 use russh::client::{self, AuthResult, Handle, KeyboardInteractiveAuthResponse};
 use russh::keys::{HashAlg, PrivateKey, PrivateKeyWithHashAlg, PublicKeyOrCertificate};
 use russh::{ChannelMsg, MethodKind};
+use zeroize::Zeroizing;
 
 use crate::auth::{AuthStep, SshTarget, auth_plan, display_key, passphrase_account, password_account};
 use crate::commands::{detect_agents_command, parse_agents};
@@ -345,7 +346,7 @@ async fn try_key_file(
 
     let account = passphrase_account(path);
     if target.remember
-        && let Some(saved) = ctx.secrets.get(&account)
+        && let Some(saved) = ctx.secrets.get(&account).map(Zeroizing::new)
     {
         match russh::keys::decode_secret_key(&text, Some(&saved)) {
             Ok(key) => return auth_with_key(handle, target, key).await,
@@ -354,7 +355,12 @@ async fn try_key_file(
     }
     let shown = display_key(path, ctx.home.as_deref());
     for _ in 0..TRIES {
-        let Some(pass) = console.ask(&format!("Passphrase de la llave {shown}: "), true).await else {
+        // Se borra de la memoria al terminar cada intento (ajustes v0.2.2).
+        let Some(pass) = console
+            .ask(&format!("Passphrase de la llave {shown}: "), true)
+            .await
+            .map(Zeroizing::new)
+        else {
             return Ok(false);
         };
         if pass.is_empty() {
@@ -391,7 +397,7 @@ async fn try_password(
 ) -> anyhow::Result<bool> {
     let account = password_account(target);
     if target.remember
-        && let Some(saved) = ctx.secrets.get(&account)
+        && let Some(saved) = ctx.secrets.get(&account).map(Zeroizing::new)
     {
         if password_attempt(handle, target, &saved).await? {
             return Ok(true);
@@ -402,6 +408,7 @@ async fn try_password(
         let Some(pass) = console
             .ask(&format!("Contraseña de {}: ", target.destination()), true)
             .await
+            .map(Zeroizing::new)
         else {
             anyhow::bail!("autenticación cancelada");
         };

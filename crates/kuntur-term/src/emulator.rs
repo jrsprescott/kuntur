@@ -12,6 +12,17 @@ use crate::mouse::{MouseMode, MouseReporting};
 use crate::shell::AbsPoint;
 use crate::size::GridSize;
 
+/// Apaga el seguimiento del mouse (1000 clics, 1002 arrastre, 1003 todo movimiento) y sus formatos
+/// (1005, 1006 SGR, 1015). Un programa que se cierra mal (o una conexión que se corta) puede dejarlo
+/// encendido, y entonces cada movimiento del mouse le llega al shell como texto (`ESC[<35;…M`).
+pub const MOUSE_OFF: &[u8] = b"\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1005l\x1b[?1006l\x1b[?1015l";
+
+/// Estado limpio para una conexión nueva (ajustes v0.2.2): mouse apagado, sin avisos de foco ni
+/// bracketed paste (el shell nuevo los vuelve a pedir si los usa), pantalla principal, teclas de
+/// cursor y teclado numérico normales, cursor visible y colores por defecto. Como `reset`, pero sin
+/// borrar la pantalla ni el historial.
+pub const MODES_RESET: &[u8] = b"\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1005l\x1b[?1006l\x1b[?1015l\x1b[?1004l\x1b[?2004l\x1b[?1049l\x1b[?1l\x1b>\x1b[?25h\x1b[0m";
+
 /// Recibe los eventos que emite el emulador (respuestas a la terminal, portapapeles, título…).
 #[derive(Clone, Default)]
 pub struct EventSink(Arc<Mutex<Vec<Event>>>);
@@ -66,6 +77,16 @@ impl Emulator {
     /// Procesa bytes que llegan del programa (salida del PTY).
     pub fn feed(&mut self, bytes: &[u8]) {
         self.parser.advance(&mut self.term, bytes);
+    }
+
+    /// Apaga el seguimiento del mouse si un programa lo dejó encendido. Se usa al volver el prompt
+    /// del shell (OSC 133;A): ahí ningún programa lo pidió. Devuelve si estaba encendido.
+    pub fn mouse_off_if_on(&mut self) -> bool {
+        if self.mouse_mode().report == MouseReporting::Off {
+            return false;
+        }
+        self.feed(MOUSE_OFF);
+        true
     }
 
     pub fn resize(&mut self, size: GridSize) {
@@ -235,6 +256,33 @@ pub struct InputLine {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn el_estado_limpio_apaga_el_mouse_y_la_pantalla_alterna() {
+        let mut emu = Emulator::new(GridSize::new(20, 4));
+        // Un programa (htop, vim, claude…) pide pantalla alterna y todo movimiento del mouse en SGR.
+        emu.feed(b"\x1b[?1049h\x1b[?1003h\x1b[?1006h\x1b[?2004h\x1b[?25l");
+        assert_eq!(emu.mouse_mode().report, MouseReporting::Motion);
+        assert!(emu.mode().contains(TermMode::ALT_SCREEN));
+        emu.feed(MODES_RESET);
+        let m = emu.mode();
+        assert_eq!(emu.mouse_mode().report, MouseReporting::Off);
+        assert!(!emu.mouse_mode().sgr);
+        assert!(!m.contains(TermMode::ALT_SCREEN));
+        assert!(!m.contains(TermMode::BRACKETED_PASTE));
+        assert!(m.contains(TermMode::SHOW_CURSOR));
+    }
+
+    #[test]
+    fn apaga_el_mouse_solo_si_quedo_encendido() {
+        let mut emu = Emulator::new(GridSize::new(20, 4));
+        assert!(!emu.mouse_off_if_on(), "sin mouse no hace nada");
+        emu.feed(b"\x1b[?1002h\x1b[?1006h");
+        assert_eq!(emu.mouse_mode().report, MouseReporting::Drag);
+        assert!(emu.mouse_off_if_on());
+        assert_eq!(emu.mouse_mode().report, MouseReporting::Off);
+        assert!(!emu.mouse_mode().sgr);
+    }
 
     #[test]
     fn escribe_texto_plano() {

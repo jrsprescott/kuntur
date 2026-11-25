@@ -25,9 +25,11 @@ const MAX_LINE: usize = 1024;
 
 impl LineEditor {
     pub fn new(secret: bool) -> Self {
+        // Con `Drop` no se puede usar `..Self::default()`: los campos van uno por uno.
         Self {
+            buf: String::new(),
             secret,
-            ..Self::default()
+            in_escape: false,
         }
     }
 
@@ -76,7 +78,8 @@ impl LineEditor {
                 // Ctrl+U: borra toda la línea.
                 '\u{15}' => {
                     let n = self.buf.chars().count();
-                    self.buf.clear();
+                    // Borra también la memoria (puede ser una contraseña).
+                    zeroize::Zeroize::zeroize(&mut self.buf);
                     if !self.secret {
                         for _ in 0..n {
                             echo.extend_from_slice(b"\x08 \x08");
@@ -96,6 +99,13 @@ impl LineEditor {
             }
         }
         (echo, None)
+    }
+}
+
+/// Lo escrito y no enviado (por ejemplo, una contraseña a medias) se borra de la memoria.
+impl Drop for LineEditor {
+    fn drop(&mut self) {
+        zeroize::Zeroize::zeroize(&mut self.buf);
     }
 }
 

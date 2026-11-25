@@ -18,7 +18,7 @@ pub mod transport;
 
 pub use agent_signal::{AgentSignal, SignalState, parse_7501};
 pub use cwd::{CwdScanner, OscEvent};
-pub use emulator::{Emulator, EventSink, InputLine, SelectionKind};
+pub use emulator::{Emulator, EventSink, InputLine, MODES_RESET, MOUSE_OFF, SelectionKind};
 pub use keys::{Key, Mods, encode_key};
 pub use links::{Link, LinkKind, LinkSpan, link_at, links_in_row};
 pub use mouse::{MouseAction, MouseButtonKind, MouseMode, MouseReport, MouseReporting, encode_mouse};
