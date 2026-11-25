@@ -1,19 +1,23 @@
 # Estado del proyecto — nota de traspaso
 
-> Última actualización: 2026-11-24. Léela primero al retomar en otra PC (o pídele a Claude Code que la lea).
+> Última actualización: 2026-11-25. Léela primero al retomar en otra PC (o pídele a Claude Code que la lea).
 
-## Para retomar (2026-11-24, al cambiar de PC)
-- **Publicadas:** 0.2.0 y 0.2.1 (Releases de GitHub). El actualizador de la app avisa de las versiones nuevas.
-- **En curso: 0.2.2** — PR #4 (rama `fix/v0.2.2-ssh`): estado limpio de la terminal al cortar/reconectar SSH
-  (evita `^[[<35;…M` en el shell), mouse apagado al volver el prompt en pestañas locales y contraseñas SSH con
-  `zeroize`. Pruebas y clippy en verde. Pasos que faltan:
-  1. Integrar el PR #4 en GitHub (Merge) cuando la CI esté en verde.
-  2. `git switch main && git pull`, luego `.\scripts\msi.ps1 -Check` (WiX v3.14 con la variable `WIX` y
-     `cargo install cargo-wix --version 0.3.9 --locked`). El script compila con las rutas de la PC reemplazadas
-     y se niega a armar el MSI si quedan.
-  3. Publicar `v0.2.2` como versión preliminar con el MSI y su SHA-256 en la nota (ver la de la 0.2.1).
-- **Firma:** solicitud enviada a SignPath Foundation; esperar su respuesta (ver `docs/FIRMA.md`). Al aprobar:
-  secretos `SIGNPATH_API_TOKEN` y `SIGNPATH_ORGANIZATION_ID` en GitHub y sacar la siguiente versión firmada.
+## Para retomar (2026-11-25)
+- **Publicadas:** 0.2.0, 0.2.1 y **0.2.2** (Releases de GitHub, preliminares). El actualizador de la app avisa de
+  las versiones nuevas. La 0.2.2 salió del merge del PR #4 (`5f49edd`); MSI SHA-256
+  `8FB8703C995B625015A6BB6775A78AA7E1FDEA0C27443779C84945F398E34BE3`.
+- **PR #5** (rama `fix/msi-ps51`): `scripts\msi.ps1` usaba `[Encoding]::Latin1`, que no existe en Windows
+  PowerShell 5.1 (solo en PowerShell 7): fallaba al revisar los binarios después de compilar. Integrarlo.
+- **En curso** (rama `mejora/v0.2.3-memoria-chats`): memoria y lectura de Uso y Auditoría (solo 30 días, lectura
+  por líneas, `Arc` compartidos, se liberan al cerrar), clic en una tarea de Uso reanuda el chat, columna "Chat"
+  en Auditoría y menú del clic derecho en las pestañas (Renombrar…, Cerrar). Detalle y mediciones en el
+  CHANGELOG (Unreleased). Medidor: `cargo run --release -p kuntur-audit --example medir_memoria` (solo imprime
+  totales, nunca comandos ni rutas).
+- **Firma:** SignPath Foundation **rechazó** la solicitud (2026-11-25): el programa pide visibilidad pública
+  (estrellas, forks, colaboradores, menciones externas); se puede volver a postular cuando el proyecto la tenga.
+  Mientras tanto las versiones salen **sin firma** (SmartScreen: "Editor desconocido"; el actualizador igual
+  verifica el SHA-256). Todo queda listo para firmar (`docs/FIRMA.md`, `msi.ps1 -Sign`): si se aprueba o se paga
+  un certificado, cargar los secretos `SIGNPATH_API_TOKEN` y `SIGNPATH_ORGANIZATION_ID` en GitHub.
 - **Privacidad:** las capturas para docs se sacan con `scripts\smoke.ps1` en carpetas neutras (`cd C:\Windows; cls`),
   nunca con la carpeta del usuario a la vista; las pruebas de humo no leen modelos locales reales.
 

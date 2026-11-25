@@ -59,10 +59,12 @@ param(
     [switch]$Palette,
     [string]$PaletteQuery = '',
     [switch]$PaletteRename,
+    # -TabMenu abre el menú del clic derecho de la pestaña activa (Renombrar…, Cerrar pestaña).
+    [switch]$TabMenu,
     # Panel izquierdo: completo, compacto (solo íconos) o en "Archivos". Vacío = el de la configuración.
     [ValidateSet('', 'full', 'compact', 'files')][string]$Panel = '',
     # Abre "Uso de agentes" con datos SINTÉTICOS (nunca el historial real) en ese período.
-    [ValidateSet('', 'hoy', '7', '30', 'ano', 'todo')][string]$Usage = '',
+    [ValidateSet('', 'hoy', '7', '30')][string]$Usage = '',
     # Terminal acoplada de la primera sesión, abierta después de los comandos de la principal (hereda
     # su carpeta). 'reopen' además la oculta y la vuelve a mostrar: el historial debe seguir ahí.
     [ValidateSet('', 'open', 'reopen')][string]$Dock = '',
@@ -183,6 +185,7 @@ if ($Sessions -gt 0) { $smokeEnv.KUNTUR_SMOKE_SESSIONS = "$Sessions" }
 if ($Theme) { $smokeEnv.KUNTUR_SMOKE_THEME = $Theme }
 if ($Palette -or $PaletteQuery -or $PaletteRename) { $smokeEnv.KUNTUR_SMOKE_PALETTE = $(if ($PaletteRename) { 'rename' } else { '1' }) }
 if ($PaletteQuery) { $smokeEnv.KUNTUR_SMOKE_PALETTE_QUERY = $PaletteQuery }
+if ($TabMenu) { $smokeEnv.KUNTUR_SMOKE_TAB_MENU = '1' }
 if ($Panel) { $smokeEnv.KUNTUR_SMOKE_PANEL = $Panel }
 if ($Usage) { $smokeEnv.KUNTUR_SMOKE_USAGE = $Usage }
 if ($Audit -or $AuditQuery) { $smokeEnv.KUNTUR_SMOKE_AUDIT = $(if ($AuditQuery) { $AuditQuery } else { ' ' }) }

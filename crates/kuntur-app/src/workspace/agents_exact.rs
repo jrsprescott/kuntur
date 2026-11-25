@@ -338,8 +338,8 @@ impl Workspace {
             );
             return;
         }
-        self.usage.open = false;
-        self.audit.open = false;
+        self.hide_usage();
+        self.hide_audit();
         self.sessions.activate(session);
         let existed = self.sessions.get(session).is_some_and(|e| e.value.dock.is_some());
         if let Some(e) = self.sessions.get_mut(session) {

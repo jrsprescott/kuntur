@@ -110,17 +110,17 @@ pub fn versus(period: Period) -> &'static str {
     match period {
         Period::Today => "vs. ayer",
         Period::Days7 => "vs. 7 días anteriores",
-        Period::Days30 => "vs. 30 días anteriores",
-        Period::Year => "vs. año anterior",
-        Period::All => "",
+        // Nunca hay período anterior: Kuntur solo lee los últimos 30 días.
+        Period::Days30 => "",
     }
 }
 
-/// Texto de la tarjeta cuando no hay % de cambio: en "Todo" no hay período anterior; sin
-/// historial que lo cubra, no se puede comparar; con historial pero sin uso, se dice eso.
+/// Texto de la tarjeta cuando no hay % de cambio: en "30 días" no hay período anterior (solo se
+/// leen 30 días); sin historial que lo cubra, no se puede comparar; con historial pero sin uso, se
+/// dice eso.
 pub fn no_change_note(period: Period, has_previous: bool) -> &'static str {
     match (period, has_previous) {
-        (Period::All, _) => "Todo el historial",
+        (Period::Days30, _) => "últimos 30 días",
         (_, false) => "sin datos para comparar",
         (_, true) => "sin uso en el período anterior",
     }
@@ -256,7 +256,6 @@ mod tests {
         assert_eq!(range(&summary(Period::Today), &lima()), "23 nov 2026");
         assert_eq!(range(&summary(Period::Days7), &lima()), "17 – 23 nov 2026");
         assert_eq!(range(&summary(Period::Days30), &lima()), "25 oct 2026 – 23 nov 2026");
-        assert_eq!(range(&summary(Period::Year), &lima()), "24 nov 2025 – 23 nov 2026");
     }
 
     #[test]
@@ -278,11 +277,11 @@ mod tests {
 
     #[test]
     fn texto_sin_cambio() {
-        assert_eq!(no_change_note(Period::All, false), "Todo el historial");
+        assert_eq!(no_change_note(Period::Days30, false), "últimos 30 días");
         assert_eq!(no_change_note(Period::Days7, false), "sin datos para comparar");
         assert_eq!(no_change_note(Period::Today, true), "sin uso en el período anterior");
         assert_eq!(versus(Period::Today), "vs. ayer");
-        assert_eq!(versus(Period::All), "");
+        assert_eq!(versus(Period::Days30), "");
     }
 
     #[test]

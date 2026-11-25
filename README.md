@@ -64,9 +64,9 @@ Download `kuntur-<version>-x86_64.msi` from the project's Releases page and run 
 `kuntur-hook.exe` in `C:\Program Files\Kuntur` and adds **Kuntur** to the Start menu and the desktop. Uninstall from *Settings →
 Apps*; your settings in `%APPDATA%\Kuntur` are kept.
 
-**Code signing:** Windows releases are signed through the SignPath Foundation — free code signing provided by
-[SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/). Until the
-first signed release, SmartScreen may show "Unknown publisher". See [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md)
+**Code signing:** Windows releases are **not signed yet**, so SmartScreen may show "Unknown publisher" (*More info →
+Run anyway*). Each release note lists the installer's SHA-256, and the in-app updater verifies it before installing.
+The signing pipeline is ready for when a certificate is available; see [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md)
 (signing and privacy policy).
 
 Requirements: Windows 11 x64 (tested; Windows 10 1809+ should work, since it has ConPTY), a GPU with DirectX 11/12. Recommended font: Cascadia Mono

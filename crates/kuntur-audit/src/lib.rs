@@ -15,6 +15,7 @@ pub mod synthetic;
 pub use cache::{AuditCache, Sources};
 pub use filter::{AuditFilter, filter, period_start};
 pub use kuntur_usage::{AgentKind, Period};
+pub use kuntur_usage::{WINDOW_DAYS, window_start};
 pub use model::{AuditRecord, LOCAL_HOST, dedup};
 
 use std::path::{Path, PathBuf};
@@ -43,6 +44,22 @@ pub(crate) fn files_under(root: &Path, suffixes: &[&str]) -> Vec<PathBuf> {
     }
     out.sort();
     out
+}
+
+/// Llama a `f` con cada línea de `reader`, de a una y con un mismo búfer: nunca tiene el archivo
+/// entero en memoria (los historiales de Claude Code pasan de varios MB). Una línea que no es UTF-8
+/// válido se lee con reemplazos; la lectura termina en el primer error de E/S.
+pub(crate) fn for_each_line(mut reader: impl std::io::BufRead, mut f: impl FnMut(&str)) {
+    let mut buf = Vec::with_capacity(64 * 1024);
+    loop {
+        buf.clear();
+        match reader.read_until(b'\n', &mut buf) {
+            Ok(0) | Err(_) => break,
+            Ok(_) => {}
+        }
+        let line = String::from_utf8_lossy(&buf);
+        f(line.trim_end_matches(['\n', '\r']));
+    }
 }
 
 /// Segundos Unix de una fecha ISO 8601 (`2026-11-20T10:00:00.000Z`).

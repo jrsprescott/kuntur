@@ -2,9 +2,14 @@
 //! `kuntur-usage`): cada archivo de origen se guarda con su huella (tamaño + fecha de modificación) y
 //! al refrescar solo se releen los nuevos o cambiados; los que desaparecieron se olvidan. La app
 //! conserva la caché mientras está abierta, así reabrir "Auditoría" no relee todo el historial.
+//!
+//! Solo guarda la ventana de los últimos 30 días (`since`): un archivo que no cambió desde antes
+//! no se abre, y los comandos que van quedando fuera se sueltan. Los comandos se guardan en `Arc`:
+//! la lista que muestra la vista los comparte con la caché en vez de copiarlos.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::UNIX_EPOCH;
 
 use crate::model::{AuditRecord, dedup};
@@ -43,6 +48,11 @@ enum Kind {
 
 type Fingerprint = (u64, u128);
 
+/// Segundos Unix de la última modificación de una huella.
+fn modified_secs(fp: Fingerprint) -> i64 {
+    i64::try_from(fp.1 / 1_000_000_000).unwrap_or(i64::MAX)
+}
+
 fn fingerprint(path: &Path) -> Option<Fingerprint> {
     let meta = std::fs::metadata(path).ok()?;
     let modified = meta
@@ -55,7 +65,9 @@ fn fingerprint(path: &Path) -> Option<Fingerprint> {
 
 #[derive(Default)]
 pub struct AuditCache {
-    files: HashMap<PathBuf, (Fingerprint, Vec<AuditRecord>)>,
+    files: HashMap<PathBuf, (Fingerprint, Vec<Arc<AuditRecord>>)>,
+    /// Huella del índice de títulos de Codex: si cambia, se releen sus rollouts (cambió un título).
+    codex_index: Option<Fingerprint>,
 }
 
 impl AuditCache {
@@ -63,13 +75,19 @@ impl AuditCache {
         Self::default()
     }
 
-    /// Relee lo nuevo o cambiado de `sources` y olvida lo que ya no existe.
-    pub fn refresh(&mut self, sources: &Sources) -> RefreshStats {
+    /// Relee lo nuevo o cambiado de `sources` desde `since` (segundos Unix) y olvida lo que ya no
+    /// existe o quedó fuera de la ventana.
+    pub fn refresh(&mut self, sources: &Sources, since: i64) -> RefreshStats {
         let units: Vec<(PathBuf, Kind)> = claude::files(&sources.claude_root)
             .into_iter()
             .map(|p| (p, Kind::Claude))
             .chain(codex::files(&sources.codex_root).into_iter().map(|p| (p, Kind::Codex)))
             .collect();
+        let index = kuntur_usage::codex::titles_path(&sources.codex_root).and_then(|p| fingerprint(&p));
+        let titles_changed = index != self.codex_index;
+        self.codex_index = index;
+        // Solo se leen si hay rollouts de Codex que releer.
+        let mut codex_titles: Option<HashMap<String, String>> = None;
         let mut stats = RefreshStats {
             scanned: units.len(),
             ..RefreshStats::default()
@@ -77,25 +95,39 @@ impl AuditCache {
         let mut seen = HashSet::with_capacity(units.len());
         for (path, kind) in units {
             let Some(fp) = fingerprint(&path) else { continue };
+            // Sin cambios desde antes de la ventana: no puede traer comandos de la ventana.
+            if modified_secs(fp) < since {
+                continue;
+            }
             seen.insert(path.clone());
-            if self.files.get(&path).is_some_and(|(known, _)| *known == fp) {
+            let stale = kind == Kind::Codex && titles_changed;
+            if !stale
+                && let Some((known, records)) = self.files.get_mut(&path)
+                && *known == fp
+            {
+                records.retain(|r| r.ts >= since);
                 continue;
             }
             let records = match kind {
-                Kind::Claude => claude::read_file(&path),
-                Kind::Codex => codex::read_file(&path),
+                Kind::Claude => claude::read_file(&path, since),
+                Kind::Codex => {
+                    let titles = codex_titles.get_or_insert_with(|| kuntur_usage::codex::titles(&sources.codex_root));
+                    codex::read_file(&path, since, titles)
+                }
             };
             stats.reread += 1;
-            self.files.insert(path, (fp, records));
+            self.files
+                .insert(path, (fp, records.into_iter().map(Arc::new).collect()));
         }
         let before = self.files.len();
         self.files.retain(|p, _| seen.contains(p));
         stats.removed = before - self.files.len();
+        self.files.shrink_to_fit();
         stats
     }
 
-    /// Todos los comandos, sin repetidos y del más nuevo al más viejo.
-    pub fn records(&self) -> Vec<AuditRecord> {
+    /// Todos los comandos, sin repetidos y del más nuevo al más viejo (comparten memoria con la caché).
+    pub fn records(&self) -> Vec<Arc<AuditRecord>> {
         dedup(self.files.values().flat_map(|(_, r)| r.iter().cloned()).collect())
     }
 }
@@ -127,14 +159,14 @@ mod tests {
         std::fs::write(day.join("rollout-1.jsonl"), CODEX).unwrap();
 
         let mut cache = AuditCache::new();
-        let first = cache.refresh(&sources);
+        let first = cache.refresh(&sources, i64::MIN);
         let r1 = cache.records();
         // Nada cambió: no relee nada.
-        let second = cache.refresh(&sources);
+        let second = cache.refresh(&sources, i64::MIN);
         // Cambia un archivo y se borra otro.
         std::fs::write(proj.join("a.jsonl"), CLAUDE_MORE).unwrap();
         std::fs::remove_file(day.join("rollout-1.jsonl")).unwrap();
-        let third = cache.refresh(&sources);
+        let third = cache.refresh(&sources, i64::MIN);
         let r3 = cache.records();
         let _ = std::fs::remove_dir_all(&home);
 
@@ -146,7 +178,7 @@ mod tests {
                 removed: 0
             }
         );
-        let cmds: Vec<&str> = r1.iter().map(|r| r.command.as_str()).collect();
+        let cmds: Vec<&str> = r1.iter().map(|r| &*r.command).collect();
         assert_eq!(cmds, ["cargo build", "ls"]);
         assert_eq!(
             second,
@@ -164,15 +196,48 @@ mod tests {
                 removed: 1
             }
         );
-        let cmds: Vec<&str> = r3.iter().map(|r| r.command.as_str()).collect();
+        let cmds: Vec<&str> = r3.iter().map(|r| &*r.command).collect();
         assert_eq!(cmds, ["pwd", "ls"]);
     }
 
     #[test]
     fn sin_carpetas_no_falla() {
         let mut cache = AuditCache::new();
-        let stats = cache.refresh(&Sources::under_home(Path::new("Z:/no/existe")));
+        let stats = cache.refresh(&Sources::under_home(Path::new("Z:/no/existe")), i64::MIN);
         assert_eq!(stats, RefreshStats::default());
         assert!(cache.records().is_empty());
+    }
+
+    #[test]
+    fn fuera_de_la_ventana_no_se_lee_ni_se_guarda() {
+        let home = std::env::temp_dir().join(format!("kuntur-audit-ventana-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        let sources = Sources::under_home(&home);
+        let proj = sources.claude_root.join("proyecto");
+        std::fs::create_dir_all(&proj).unwrap();
+        std::fs::write(proj.join("a.jsonl"), CLAUDE_MORE).unwrap();
+        let mut cache = AuditCache::new();
+        // Ventana después de la última modificación del archivo: no se abre.
+        let future = i64::try_from(
+            std::time::SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+        )
+        .unwrap()
+            + 3_600;
+        let stats = cache.refresh(&sources, future);
+        assert_eq!((stats.scanned, stats.reread), (1, 0));
+        assert!(cache.records().is_empty());
+        // Ventana que corta entre los dos comandos: solo queda el más nuevo, aun sin releer.
+        cache.refresh(&sources, i64::MIN);
+        assert_eq!(cache.records().len(), 2);
+        let cut = crate::parse_iso("2026-11-20T10:01:00Z").unwrap();
+        let stats = cache.refresh(&sources, cut);
+        let _ = std::fs::remove_dir_all(&home);
+        assert_eq!(stats.reread, 0);
+        let records = cache.records();
+        let cmds: Vec<&str> = records.iter().map(|r| &*r.command).collect();
+        assert_eq!(cmds, ["pwd"]);
     }
 }

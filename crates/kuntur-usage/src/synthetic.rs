@@ -136,9 +136,9 @@ mod tests {
     #[test]
     fn llena_todos_los_periodos_y_varios_agentes() {
         let a = records(now(), &lima());
-        let year = summarize(&a, Period::Year, now(), &lima());
-        let all = summarize(&a, Period::All, now(), &lima());
-        assert!(all.totals.turns > year.totals.turns, "Todo abarca más que 1 año");
+        let year = summarize(&a, Period::Days30, now(), &lima());
+        let week = summarize(&a, Period::Days7, now(), &lima());
+        assert!(year.totals.turns > week.totals.turns, "30 días abarca más que 7");
         assert!(year.agents.len() >= 4);
         assert!(year.models.len() >= 4);
         assert_eq!(year.top_tasks.len(), 10);

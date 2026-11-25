@@ -12,20 +12,26 @@ pub mod pricing;
 pub mod store;
 pub mod synthetic;
 
-pub use aggregate::{AgentShare, ModelRow, Summary, TaskRow, Totals, pct_change, provider_of, summarize};
-pub use model::{AgentKind, Cost, Period, UsageRecord};
+pub use aggregate::{AgentShare, ModelRow, Summary, TaskRow, Totals, pct_change, provider_of, summarize, window_start};
+pub use model::{AgentKind, Cost, Period, UsageRecord, WINDOW_DAYS};
 pub use pricing::is_local_model;
 
 use std::path::{Path, PathBuf};
 
-/// Todo el historial local de los agentes con lector (Claude Code, Codex y OpenCode) bajo la
-/// carpeta personal `home`. Lo que falte o no se pueda leer simplemente no aporta registros.
-pub fn load_local(home: &Path) -> Vec<UsageRecord> {
+/// El historial local de los agentes con lector (Claude Code, Codex y OpenCode) bajo la carpeta
+/// personal `home`, desde `since` (segundos Unix). Lo que falte o no se pueda leer simplemente no
+/// aporta registros.
+pub fn load_local(home: &Path, since: i64) -> Vec<UsageRecord> {
     let mut all = claude::read_dir(&home.join(".claude").join("projects"));
     all.extend(codex::read_dir(&home.join(".codex").join("sessions")));
     all.extend(opencode::read_db(
         &home.join(".local").join("share").join("opencode").join("opencode.db"),
     ));
+    all.retain(|r| r.ts >= since);
+    for r in &mut all {
+        r.key = None;
+    }
+    all.shrink_to_fit();
     all
 }
 

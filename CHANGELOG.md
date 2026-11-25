@@ -6,6 +6,29 @@ Spanish, are in [`docs/plans/`](docs/plans/).
 
 ## [Unreleased]
 
+### Added
+- **Usage: open a chat from "Tasks that used the most tokens".** Clicking a task opens a new tab in its project
+  folder that resumes that chat with its agent (`claude --resume`, `codex resume`, `opencode --session`); the tab is
+  named after the chat. Only plain session ids are accepted, so nothing else reaches the shell.
+- **Audit: the chat each command was used in.** A new "Chat" column (and CSV column) shows the chat title: the one
+  the user set or, if none, the one the agent generated (Claude Code `custom-title` / `ai-title`, Codex
+  `session_index.jsonl`). The search also matches chat titles.
+- **Tabs: right-click menu** with "Rename…" (the palette field, prefilled with the name the tab shows — the chat title
+  when an agent is running; Enter saves, Esc cancels) and "Close tab". Double-click still renames.
+
+### Changed
+- **Usage and Audit load at most the last 30 days.** The period selectors are Today / 7 days / 30 days ("1 year" and
+  "All" were removed); weekly and monthly chart buckets went with them.
+- **Lower memory and faster reads** (measured on a real history of 827 chats, 431 MB):
+  - Audit reads each log line by line with a reused buffer and typed JSON that skips text, tool output and written
+    files without copying them: peak memory while reading went from 49.7 MB to 5.6 MB.
+  - Audit keeps commands once (`Arc`), shared between the cache and the list, with session, chat title and folder
+    shared per file: retained memory went from 6.2 MB to 2.8 MB. Files not modified in the last 30 days are not
+    opened.
+  - Usage asks the store only for the last 30 days and drops the per-response dedup keys: 2.3 MB → 1.3 MB.
+  - Closing Usage or Audit (in any way: Esc, opening a tab, an agent, the dock…) releases their data; opening them
+    reads again through the incremental store/cache, which only re-reads changed files.
+
 ## [0.2.2] — SSH más limpio y seguro
 
 ### Fixed

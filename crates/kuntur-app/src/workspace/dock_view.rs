@@ -77,8 +77,8 @@ impl Workspace {
         let Some(id) = self.sessions.active_id() else {
             return;
         };
-        self.usage.open = false;
-        self.audit.open = false;
+        self.hide_usage();
+        self.hide_audit();
         let focused = self.focused_slot(id, window, cx);
         let outcome = match self.sessions.get_mut(id) {
             Some(e) => e.value.dock_state.toggle(focused),

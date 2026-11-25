@@ -1,17 +1,21 @@
 //! Vista "Uso de agentes" (Ctrl+Shift+U o el botón de la barra): ocupa el área central con el
-//! selector Hoy / 7 días / 30 días / 1 año / Todo, cuatro tarjetas, tokens por hora/día/semana/mes,
-//! cuándo se trabaja (día × hora), agentes, modelos y las tareas que más tokens usaron. Esc vuelve a
-//! la terminal. La lectura del historial y los cálculos corren fuera del hilo de la UI.
+//! selector Hoy / 7 días / 30 días, cuatro tarjetas, tokens por hora/día, cuándo se trabaja
+//! (día × hora), agentes, modelos y las tareas que más tokens usaron (un clic reanuda ese chat en
+//! una pestaña nueva). Esc vuelve a la terminal. La lectura del historial y los cálculos corren
+//! fuera del hilo de la UI.
+//!
+//! Memoria: solo se leen los últimos 30 días y, al cerrar la vista, se sueltan los registros y el
+//! resumen; al abrirla se vuelven a pedir al almacén incremental (`usage.db`), que solo relee los
+//! archivos que cambiaron.
 
 use std::path::Path;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
 
 use jiff::tz::TimeZone;
 use kuntur_usage::chart::bars;
 use kuntur_usage::pricing::PriceTable;
 use kuntur_usage::store::{Sources, UsageStore};
-use kuntur_usage::{Period, Summary, UsageRecord, pct_change, summarize};
+use kuntur_usage::{AgentKind, Period, Summary, TaskRow, UsageRecord, pct_change, summarize, window_start};
 
 use super::files_panel::empty_note;
 use super::side_panel::brand;
@@ -22,8 +26,6 @@ use crate::usage_format::{
     thousands, usd, versus,
 };
 
-/// Al reabrir la vista, se vuelve a leer el historial si la última lectura es más vieja que esto.
-const RELOAD_AFTER: Duration = Duration::from_secs(60);
 const CHART_HEIGHT: f32 = 150.0;
 /// Etiquetas como máximo bajo el gráfico (se muestran cada n barras).
 const MAX_LABELS: usize = 12;
@@ -35,7 +37,6 @@ pub(super) struct UsageState {
     pub(super) open: bool,
     period: Period,
     records: Option<Arc<Vec<UsageRecord>>>,
-    loaded_at: Option<Instant>,
     summary: Option<Arc<Summary>>,
     load: Option<Task<()>>,
     compute: Option<Task<()>>,
@@ -49,7 +50,6 @@ impl Default for UsageState {
             open: false,
             period: Period::Days30,
             records: None,
-            loaded_at: None,
             summary: None,
             load: None,
             compute: None,
@@ -59,13 +59,11 @@ impl Default for UsageState {
 }
 
 impl UsageState {
-    /// Período inicial para las pruebas de humo: "hoy", "7", "30", "ano" o "todo".
+    /// Período inicial para las pruebas de humo: "hoy", "7" o "30".
     pub(super) fn set_initial_period(&mut self, key: &str) {
         self.period = match key {
             "hoy" => Period::Today,
             "7" => Period::Days7,
-            "ano" | "año" => Period::Year,
-            "todo" => Period::All,
             _ => Period::Days30,
         };
     }
@@ -77,8 +75,6 @@ fn slug(period: Period) -> &'static str {
         Period::Today => "hoy",
         Period::Days7 => "7-dias",
         Period::Days30 => "30-dias",
-        Period::Year => "1-ano",
-        Period::All => "todo",
     }
 }
 
@@ -141,15 +137,35 @@ fn load_prices() -> (PriceTable, Option<String>) {
 
 /// Historial real por el almacén incremental (`usage.db`): solo se releen los archivos que
 /// cambiaron. Si la base no se puede usar, se lee todo directamente.
-fn load_real(home: &Path) -> Vec<UsageRecord> {
+fn load_real(home: &Path, since: i64) -> Vec<UsageRecord> {
     let sources = Sources::under_home(home);
     if let Some(mut store) = data_dir().and_then(|d| UsageStore::open(&d.join("usage.db")).ok())
         && store.import(&sources).is_ok()
-        && let Ok(records) = store.records()
+        && let Ok(records) = store.records_since(since)
     {
         return records;
     }
-    kuntur_usage::load_local(home)
+    kuntur_usage::load_local(home, since)
+}
+
+/// Comando del agente y argumentos para reanudar el chat `session` (`None` si el agente no tiene
+/// cómo, o si el id no es un id: solo letras, números, `-` y `_`, así nunca llega otra cosa al shell).
+fn resume_args(agent: AgentKind, session: &str) -> Option<(&'static str, Vec<String>)> {
+    let valid = !session.is_empty()
+        && session.len() <= 128
+        && session
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+    if !valid {
+        return None;
+    }
+    let id = session.to_string();
+    match agent {
+        AgentKind::ClaudeCode => Some(("claude", vec!["--resume".into(), id])),
+        AgentKind::Codex => Some(("codex", vec!["resume".into(), id])),
+        AgentKind::OpenCode => Some(("opencode", vec!["--session".into(), id])),
+        AgentKind::Qwen | AgentKind::Gemini | AgentKind::Other => None,
+    }
 }
 
 impl Workspace {
@@ -165,20 +181,29 @@ impl Workspace {
 
     pub(super) fn open_usage(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.usage.open = true;
-        self.audit.open = false;
+        self.hide_audit();
         self.usage.notice = None;
         window.focus(&self.focus, cx);
-        let stale = self.usage.loaded_at.is_none_or(|t| t.elapsed() > RELOAD_AFTER);
-        if stale && self.usage.load.is_none() {
+        if self.usage.load.is_none() {
             self.load_usage(cx);
         }
         cx.notify();
     }
 
     pub(super) fn close_usage(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.usage.open = false;
+        self.hide_usage();
         self.focus_active(window, cx);
         cx.notify();
+    }
+
+    /// Oculta la vista y suelta lo que tenía en memoria (registros, resumen y lecturas en curso).
+    /// Toda forma de cerrarla pasa por aquí; al abrirla se vuelve a leer.
+    pub(super) fn hide_usage(&mut self) {
+        self.usage.open = false;
+        self.usage.records = None;
+        self.usage.summary = None;
+        self.usage.load = None;
+        self.usage.compute = None;
     }
 
     /// Lee el historial en segundo plano (el real, por el almacén incremental) y le pone el costo
@@ -196,19 +221,26 @@ impl Workspace {
                     } else {
                         load_prices()
                     };
+                    let now = now_secs() as i64;
+                    let since = window_start(now, &TimeZone::system());
                     let mut records = if synthetic {
-                        kuntur_usage::synthetic::records(now_secs() as i64, &TimeZone::system())
+                        let mut all = kuntur_usage::synthetic::records(now, &TimeZone::system());
+                        all.retain(|r| r.ts >= since);
+                        all
                     } else {
-                        home.as_deref().map(load_real).unwrap_or_default()
+                        home.as_deref().map(|h| load_real(h, since)).unwrap_or_default()
                     };
                     prices.apply(&mut records);
                     (records, notice)
                 })
                 .await;
             let _ = this.update(cx, |w, cx| {
-                w.usage.records = Some(Arc::new(records));
-                w.usage.loaded_at = Some(Instant::now());
                 w.usage.load = None;
+                // Cerraron la vista mientras se leía: no se guarda nada.
+                if !w.usage.open {
+                    return;
+                }
+                w.usage.records = Some(Arc::new(records));
                 if notice.is_some() {
                     w.usage.notice = notice.map(Into::into);
                 }
@@ -237,10 +269,45 @@ impl Workspace {
             }
         }
         cx.open_with_system(&path);
-        // Los precios se aplican al cargar: la próxima apertura vuelve a cargar.
-        self.usage.loaded_at = None;
+        // Los precios se aplican al cargar, y cada apertura vuelve a cargar.
         self.usage.notice = Some("Se abrió pricing.toml: guarda los cambios y vuelve a abrir Uso de agentes".into());
         cx.notify();
+    }
+
+    /// Clic en una tarea: pestaña nueva en la carpeta del proyecto (si existe) que reanuda ese chat
+    /// con su agente (`claude --resume`, `codex resume`, `opencode --session`). La pestaña se llama
+    /// como el chat. Si el agente no está instalado, solo lo avisa.
+    fn open_task_chat(&mut self, task: &TaskRow, window: &mut Window, cx: &mut Context<Self>) {
+        let Some((agent_id, args)) = resume_args(task.agent, &task.session_id) else {
+            return;
+        };
+        let installed = self.installed.iter().any(|id| id == agent_id);
+        let Some(def) = self.catalog.get(agent_id).cloned().filter(|_| installed) else {
+            self.usage.notice =
+                Some(format!("{} no está instalado: no se puede abrir el chat", task.agent.name()).into());
+            cx.notify();
+            return;
+        };
+        let mut def = def;
+        def.args.extend(args);
+        let dir = task
+            .project
+            .as_deref()
+            .map(std::path::PathBuf::from)
+            .filter(|p| p.is_dir());
+        let previous_dir = std::mem::replace(&mut self.exact.next_session_dir, dir);
+        self.add_session(Some(task.title.clone()), None, None, window, cx);
+        self.exact.next_session_dir = previous_dir;
+        let Some(sid) = self.sessions.active_id() else { return };
+        let shell = self.sessions.get(sid).and_then(|e| e.value.shell.clone());
+        let line = self.agent_launch_line(sid, &def, ShellFlavor::from_program(shell.as_deref()), cx);
+        if let Some(view) = self.terminal(sid, false) {
+            // El shell recién abierto necesita un momento antes de recibir la línea.
+            view.read(cx).send_line(line, Duration::from_millis(1_500));
+        }
+        self.busy.insert((sid, false));
+        self.persist();
+        self.close_usage(window, cx);
     }
 
     /// Recalcula el resumen del período elegido (fuera del hilo de la UI); mientras tanto se ve el
@@ -552,7 +619,7 @@ impl Workspace {
                     .items_start()
                     .gap(px(18.))
                     .child(div().flex_1().min_w_0().child(self.render_models(s)))
-                    .child(div().flex_1().min_w_0().child(self.render_top_tasks(s))),
+                    .child(div().flex_1().min_w_0().child(self.render_top_tasks(s, cx))),
             )
             .into_any_element()
     }
@@ -835,9 +902,12 @@ impl Workspace {
             })
     }
 
-    fn render_top_tasks(&self, s: &Summary) -> Div {
+    fn render_top_tasks(&self, s: &Summary, cx: &mut Context<Self>) -> Div {
         let c = &self.colors;
+        let hover = c.hover;
         let rows = s.top_tasks.iter().enumerate().map(|(i, task)| {
+            let resumable = resume_args(task.agent, &task.session_id).is_some();
+            let open_task = task.clone();
             let mut details = Vec::new();
             if let Some(p) = task.project.as_deref() {
                 details.push(folder_name(p).to_string());
@@ -848,9 +918,21 @@ impl Workspace {
             details.push(task.agent.name().to_string());
             let exact: SharedString = format!("{} tokens", thousands(task.total)).into();
             h_flex()
+                .id(("task-row", i))
                 .gap(px(10.))
                 .items_center()
                 .py(px(5.))
+                .px(px(6.))
+                .mx(px(-6.))
+                .rounded(px(6.))
+                .when(resumable, |this| {
+                    this.cursor_pointer()
+                        .hover(move |s| s.bg(hover))
+                        .tooltip(|window, cx| Tooltip::new("Abrir este chat en una pestaña nueva").build(window, cx))
+                        .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
+                            this.open_task_chat(&open_task, window, cx);
+                        }))
+                })
                 .child(
                     div()
                         .w(px(16.))
@@ -978,4 +1060,36 @@ fn swatch(color: Hsla, label: &'static str) -> impl IntoElement {
         .items_center()
         .child(div().size(px(9.)).rounded(px(2.)).bg(color))
         .child(label)
+}
+
+#[cfg(test)]
+mod tests {
+    // Sin `super::*`: GPUI exporta su propio `test`, que taparía el de Rust.
+    use super::resume_args;
+    use kuntur_usage::AgentKind;
+
+    #[test]
+    fn reanudar_cada_agente() {
+        let id = "8f3c2a1e-0b4d-4c5e-9f6a-7b8c9d0e1f2a";
+        assert_eq!(
+            resume_args(AgentKind::ClaudeCode, id),
+            Some(("claude", vec!["--resume".to_string(), id.to_string()]))
+        );
+        assert_eq!(
+            resume_args(AgentKind::Codex, id),
+            Some(("codex", vec!["resume".to_string(), id.to_string()]))
+        );
+        assert_eq!(
+            resume_args(AgentKind::OpenCode, "ses_4Ab9"),
+            Some(("opencode", vec!["--session".to_string(), "ses_4Ab9".to_string()]))
+        );
+        assert_eq!(resume_args(AgentKind::Gemini, id), None);
+    }
+
+    #[test]
+    fn solo_ids_simples_llegan_al_shell() {
+        for bad in ["", "a b", "x;rm -rf ~", "$(calc)", "a`b", "id\"", "ñ", &"a".repeat(129)] {
+            assert_eq!(resume_args(AgentKind::ClaudeCode, bad), None, "{bad:?}");
+        }
+    }
 }

@@ -2,12 +2,24 @@
 //! muestran comandos reales del usuario en una captura. Determinista: la misma fecha da siempre los
 //! mismos registros.
 
+use std::sync::Arc;
+
 use kuntur_usage::AgentKind;
 
-use crate::model::{AuditRecord, LOCAL_HOST, dedup};
+use crate::model::{AuditRecord, Interner, LOCAL_HOST, dedup};
 
-/// Días hacia atrás que cubre.
+/// Días hacia atrás que cubre (la ventana de 30 días y algo más, que la vista no muestra).
 pub const DAYS: i64 = 45;
+
+/// Títulos de chats inventados.
+const CHATS: [&str; 6] = [
+    "Pagos con tarjeta en la tienda",
+    "Pruebas de la API de pagos",
+    "Arreglar el build de la app",
+    "Migrar la base de datos",
+    "Revisión del pipeline de CI",
+    "Limpieza de dependencias",
+];
 
 const CLAUDE_COMMANDS: [&str; 10] = [
     "cargo test --workspace",
@@ -51,8 +63,9 @@ impl Rng {
 }
 
 /// Comandos de los últimos `DAYS` días hasta `now` (ninguno posterior), del más nuevo al más viejo.
-pub fn records(now: i64) -> Vec<AuditRecord> {
+pub fn records(now: i64) -> Vec<Arc<AuditRecord>> {
     let mut rng = Rng(0x61_7564_6974);
+    let mut shared = Interner::default();
     let mut out = Vec::new();
     for day in 0..DAYS {
         let per_day = 2 + rng.below(9);
@@ -72,16 +85,18 @@ pub fn records(now: i64) -> Vec<AuditRecord> {
                 (AgentKind::ClaudeCode, c, tool)
             };
             let folder = FOLDERS[rng.below(FOLDERS.len() as u64) as usize];
-            out.push(AuditRecord {
+            let chat = rng.below(CHATS.len() as u64) as usize;
+            out.push(Arc::new(AuditRecord {
                 ts,
                 agent,
-                session: format!("demo-{:04x}", rng.below(0x10000)),
-                host: LOCAL_HOST.into(),
-                folder: Some(folder.into()),
+                session: shared.get(&format!("demo-{chat:04x}")),
+                chat: Some(shared.get(CHATS[chat])),
+                host: LOCAL_HOST,
+                folder: Some(shared.get(folder)),
                 command: command.into(),
-                tool: tool.into(),
-                key: Some(format!("demo-{day}-{i}")),
-            });
+                tool,
+                key: Some(format!("demo-{day}-{i}").into()),
+            }));
         }
     }
     dedup(out)

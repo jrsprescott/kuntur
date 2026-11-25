@@ -167,7 +167,7 @@ impl Workspace {
     fn connect_to(&mut self, name: &str, window: &mut Window, cx: &mut Context<Self>) {
         if self.open_remote(name, None, None, None, window, cx) {
             self.persist();
-            self.usage.open = false;
+            self.hide_usage();
             self.close_connections(window, cx);
         }
     }

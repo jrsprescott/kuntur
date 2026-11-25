@@ -251,8 +251,8 @@ impl Workspace {
                 view.read(cx).send_line(line, delay);
             }
             w.busy.insert((session, docked));
-            w.usage.open = false;
-            w.audit.open = false;
+            w.hide_usage();
+            w.hide_audit();
             w.sessions.activate(session);
             w.focus_active(window, cx);
         });

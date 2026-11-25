@@ -10,13 +10,18 @@
 //!   `command` como lista (`["bash","-lc","…"]`), `name:"exec_command"` con `cmd`, y
 //!   `payload.type:"local_shell_call"` con `action.{command (lista), working_directory}`.
 //! - `function_call_output` (`{call_id, output}`) es la salida: no se guarda.
+//! - Títulos del chat: `~/.codex/session_index.jsonl` (los lee `kuntur_usage::codex::titles`).
+//!
+//! Se lee línea por línea (también los `.zst`, descomprimiendo al vuelo).
 
+use std::collections::HashMap;
+use std::io::BufRead;
 use std::path::Path;
 
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::model::{AuditRecord, LOCAL_HOST};
+use crate::model::{AuditRecord, Interner, LOCAL_HOST};
 use kuntur_usage::AgentKind;
 
 /// Herramientas de Codex que ejecutan comandos.
@@ -61,41 +66,58 @@ fn command_from(value: Option<&Value>) -> Option<String> {
     .filter(|c| !c.trim().is_empty())
 }
 
-/// Comandos de un rollout ya descomprimido. `fallback_session` identifica la sesión si falta
-/// `session_meta` (el nombre del archivo).
-pub fn parse_lines(text: &str, fallback_session: &str) -> Vec<AuditRecord> {
-    let mut session = fallback_session.to_string();
-    let mut cwd: Option<String> = None;
+/// Comandos de un rollout desde `since` (segundos Unix), leídos de a una línea.
+/// `fallback_session` identifica la sesión si falta `session_meta` (el nombre del archivo);
+/// `titles` son los títulos de los chats por id de sesión.
+pub fn parse_reader(
+    reader: impl BufRead,
+    fallback_session: &str,
+    since: i64,
+    titles: &HashMap<String, String>,
+) -> Vec<AuditRecord> {
+    let mut shared = Interner::default();
+    let mut session = shared.get(fallback_session);
+    let mut cwd: Option<std::sync::Arc<str>> = None;
     let mut out = Vec::new();
-    for raw in text.lines() {
+    crate::for_each_line(reader, |raw| {
         if !(raw.contains("session_meta")
             || raw.contains("turn_context")
             || raw.contains("function_call\"")
             || raw.contains("local_shell_call"))
         {
-            continue;
+            return;
         }
         let Ok(line) = serde_json::from_str::<Line>(raw) else {
-            continue;
+            return;
         };
-        let Some(payload) = line.payload else { continue };
-        let text_of = |key: &str| payload.get(key).and_then(Value::as_str).map(str::to_string);
+        let Some(payload) = line.payload else { return };
+        let text_of = |key: &str| payload.get(key).and_then(Value::as_str);
         match line.kind.as_deref() {
             Some("session_meta") => {
                 if let Some(id) = text_of("id").or_else(|| text_of("session_id")) {
-                    session = id;
+                    session = shared.get(id);
                 }
-                cwd = text_of("cwd").or(cwd);
+                if let Some(c) = text_of("cwd") {
+                    cwd = Some(shared.get(c));
+                }
             }
-            Some("turn_context") => cwd = text_of("cwd").or(cwd),
+            Some("turn_context") => {
+                if let Some(c) = text_of("cwd") {
+                    cwd = Some(shared.get(c));
+                }
+            }
             Some("response_item") => {
                 let Some(ts) = line.timestamp.as_deref().and_then(crate::parse_iso) else {
-                    continue;
+                    return;
                 };
+                if ts < since {
+                    return;
+                }
                 let (tool, command, folder) = match payload.get("type").and_then(Value::as_str) {
                     Some("function_call") => {
-                        let Some(name) = text_of("name").filter(|n| SHELL_TOOLS.contains(&n.as_str())) else {
-                            continue;
+                        let Some(tool) = text_of("name").and_then(|n| SHELL_TOOLS.iter().copied().find(|t| *t == n))
+                        else {
+                            return;
                         };
                         let args = match payload.get("arguments") {
                             Some(Value::String(s)) => serde_json::from_str::<Value>(s).unwrap_or(Value::Null),
@@ -103,8 +125,8 @@ pub fn parse_lines(text: &str, fallback_session: &str) -> Vec<AuditRecord> {
                             None => Value::Null,
                         };
                         let command = command_from(args.get("command")).or_else(|| command_from(args.get("cmd")));
-                        let folder = args.get("workdir").and_then(Value::as_str).map(str::to_string);
-                        (name, command, folder)
+                        let folder = args.get("workdir").and_then(Value::as_str).map(|f| shared.get(f));
+                        (tool, command, folder)
                     }
                     Some("local_shell_call") => {
                         let action = payload.get("action");
@@ -112,27 +134,37 @@ pub fn parse_lines(text: &str, fallback_session: &str) -> Vec<AuditRecord> {
                         let folder = action
                             .and_then(|a| a.get("working_directory"))
                             .and_then(Value::as_str)
-                            .map(str::to_string);
-                        ("local_shell".to_string(), command, folder)
+                            .map(|f| shared.get(f));
+                        ("local_shell", command, folder)
                     }
-                    _ => continue,
+                    _ => return,
                 };
-                let Some(command) = command else { continue };
+                let Some(command) = command else { return };
                 out.push(AuditRecord {
                     ts,
                     agent: AgentKind::Codex,
                     session: session.clone(),
-                    host: LOCAL_HOST.into(),
+                    chat: None,
+                    host: LOCAL_HOST,
                     folder: folder.or_else(|| cwd.clone()),
-                    command,
+                    command: command.into_boxed_str(),
                     tool,
-                    key: text_of("call_id"),
+                    key: text_of("call_id").map(Into::into),
                 });
             }
             _ => {}
         }
+    });
+    for r in &mut out {
+        r.chat = titles.get(&*r.session).map(|t| shared.get(t));
     }
+    out.shrink_to_fit();
     out
+}
+
+/// Comandos de un texto ya descomprimido (pruebas).
+pub fn parse_lines(text: &str, fallback_session: &str) -> Vec<AuditRecord> {
+    parse_reader(text.as_bytes(), fallback_session, i64::MIN, &HashMap::new())
 }
 
 /// Nombre del archivo sin `.jsonl` / `.jsonl.zst`.
@@ -144,20 +176,20 @@ fn file_stem(path: &Path) -> String {
     name.trim_end_matches(".zst").trim_end_matches(".jsonl").to_string()
 }
 
-/// Comandos de un rollout (descomprime `.zst`); vacío si no se puede leer.
-pub fn read_file(path: &Path) -> Vec<AuditRecord> {
-    let Ok(bytes) = std::fs::read(path) else {
+/// Comandos de un rollout desde `since` (descomprime `.zst` al vuelo); vacío si no se puede leer.
+pub fn read_file(path: &Path, since: i64, titles: &HashMap<String, String>) -> Vec<AuditRecord> {
+    let Ok(file) = std::fs::File::open(path) else {
         return Vec::new();
     };
-    let text = if path.extension().is_some_and(|e| e == "zst") {
-        match zstd::decode_all(bytes.as_slice()) {
-            Ok(raw) => String::from_utf8_lossy(&raw).into_owned(),
-            Err(_) => return Vec::new(),
+    let stem = file_stem(path);
+    if path.extension().is_some_and(|e| e == "zst") {
+        match zstd::stream::read::Decoder::new(file) {
+            Ok(dec) => parse_reader(std::io::BufReader::new(dec), &stem, since, titles),
+            Err(_) => Vec::new(),
         }
     } else {
-        String::from_utf8_lossy(&bytes).into_owned()
-    };
-    parse_lines(&text, &file_stem(path))
+        parse_reader(std::io::BufReader::with_capacity(64 * 1024, file), &stem, since, titles)
+    }
 }
 
 /// Rollouts bajo `root`.
@@ -183,11 +215,11 @@ mod tests {
     #[test]
     fn lee_comandos_de_codex() {
         let r = parse_lines(SAMPLE, "rollout-x");
-        let commands: Vec<&str> = r.iter().map(|r| r.command.as_str()).collect();
+        let commands: Vec<&str> = r.iter().map(|r| &*r.command).collect();
         assert_eq!(commands, ["cargo test", "ls -la", "git status", "npm run build"]);
         assert!(
             r.iter()
-                .all(|r| r.agent == AgentKind::Codex && r.session == "ses-1" && r.host == "local")
+                .all(|r| r.agent == AgentKind::Codex && &*r.session == "ses-1" && r.host == "local")
         );
         assert_eq!(r[0].folder.as_deref(), Some(r"C:\proyectos\api\crate"));
         assert_eq!(r[0].tool, "shell_command");
@@ -204,7 +236,7 @@ mod tests {
         let only_call = SAMPLE.lines().nth(2).unwrap();
         let r = parse_lines(only_call, "rollout-x");
         assert_eq!(r.len(), 1);
-        assert_eq!(r[0].session, "rollout-x");
+        assert_eq!(&*r[0].session, "rollout-x");
         assert_eq!(r[0].folder.as_deref(), Some(r"C:\proyectos\api\crate"));
     }
 
@@ -237,8 +269,20 @@ mod tests {
         std::fs::write(day.join("rollout-b.jsonl.zst"), packed).unwrap();
         std::fs::write(day.join("rollout-c.jsonl.zst"), b"no es zstd").unwrap();
         let found = files(&root);
-        let counts: Vec<usize> = found.iter().map(|p| read_file(p).len()).collect();
+        let counts: Vec<usize> = found
+            .iter()
+            .map(|p| read_file(p, i64::MIN, &HashMap::new()).len())
+            .collect();
         let _ = std::fs::remove_dir_all(&root);
         assert_eq!(counts, [4, 4, 0]);
+    }
+
+    #[test]
+    fn titulo_del_chat_desde_el_indice() {
+        let titles = HashMap::from([("ses-1".to_string(), "Arreglar la API".to_string())]);
+        let r = parse_reader(SAMPLE.as_bytes(), "rollout-x", i64::MIN, &titles);
+        assert!(r.iter().all(|x| x.chat.as_deref() == Some("Arreglar la API")));
+        let since = crate::parse_iso("2026-11-20T10:00:05Z").unwrap();
+        assert_eq!(parse_reader(SAMPLE.as_bytes(), "rollout-x", since, &titles).len(), 2);
     }
 }
