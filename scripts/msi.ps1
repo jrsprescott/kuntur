@@ -72,7 +72,8 @@ try {
     $leaks = @($env:USERNAME, $HOME, "$root") | Where-Object { $_ -and $_.Length -ge 3 } | Select-Object -Unique
     foreach ($exe in 'kuntur.exe', 'kuntur-hook.exe') {
         $bytes = [System.IO.File]::ReadAllBytes((Join-Path $root "target\release\$exe"))
-        $text = [System.Text.Encoding]::Latin1.GetString($bytes)
+        # 28591 = Latin-1; [Encoding]::Latin1 solo existe en PowerShell 7 (.NET 5+), no en Windows PowerShell 5.1.
+        $text = [System.Text.Encoding]::GetEncoding(28591).GetString($bytes)
         foreach ($leak in $leaks) {
             if ($text.IndexOf($leak, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
                 throw "$exe contiene una ruta o el nombre de usuario de esta PC: no se arma el MSI."
