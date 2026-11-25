@@ -6,13 +6,13 @@
 - **Publicadas:** 0.2.0, 0.2.1 y **0.2.2** (Releases de GitHub, preliminares). El actualizador de la app avisa de
   las versiones nuevas. La 0.2.2 salió del merge del PR #4 (`5f49edd`); MSI SHA-256
   `8FB8703C995B625015A6BB6775A78AA7E1FDEA0C27443779C84945F398E34BE3`.
-- **PR #5** (rama `fix/msi-ps51`): `scripts\msi.ps1` usaba `[Encoding]::Latin1`, que no existe en Windows
-  PowerShell 5.1 (solo en PowerShell 7): fallaba al revisar los binarios después de compilar. Integrarlo.
-- **En curso** (rama `mejora/v0.2.3-memoria-chats`): memoria y lectura de Uso y Auditoría (solo 30 días, lectura
-  por líneas, `Arc` compartidos, se liberan al cerrar), clic en una tarea de Uso reanuda el chat, columna "Chat"
-  en Auditoría y menú del clic derecho en las pestañas (Renombrar…, Cerrar). Detalle y mediciones en el
-  CHANGELOG (Unreleased). Medidor: `cargo run --release -p kuntur-audit --example medir_memoria` (solo imprime
-  totales, nunca comandos ni rutas).
+- **0.2.3** (PR #6 integrado + PR de versión `release/v0.2.3`): Uso y Auditoría solo con 30 días y menos memoria
+  (lectura por líneas, `Arc` compartidos, se liberan al cerrar), clic en una tarea de Uso reanuda el chat, columna
+  "Chat" en Auditoría y menú del clic derecho en las pestañas. Mediciones en el CHANGELOG. Medidor:
+  `cargo run --release -p kuntur-audit --example medir_memoria` (solo imprime totales, nunca comandos ni rutas).
+  `scripts\msi.ps1` ya funciona en Windows PowerShell 5.1 (PR #5). Pasos: integrar el PR de versión, `git switch
+  main && git pull`, `.\scripts\msi.ps1 -Check`, publicar `v0.2.3` preliminar con el MSI y su SHA-256.
+  Falta la prueba manual de reanudar un chat real desde Uso.
 - **Firma:** SignPath Foundation **rechazó** la solicitud (2026-11-25): el programa pide visibilidad pública
   (estrellas, forks, colaboradores, menciones externas); se puede volver a postular cuando el proyecto la tenga.
   Mientras tanto las versiones salen **sin firma** (SmartScreen: "Editor desconocido"; el actualizador igual

@@ -6,6 +6,8 @@ Spanish, are in [`docs/plans/`](docs/plans/).
 
 ## [Unreleased]
 
+## [0.2.3] — Uso y Auditoría más livianos, reanudar chats y renombrar pestañas
+
 ### Added
 - **Usage: open a chat from "Tasks that used the most tokens".** Clicking a task opens a new tab in its project
   folder that resumes that chat with its agent (`claude --resume`, `codex resume`, `opencode --session`); the tab is
