@@ -123,6 +123,8 @@ pub struct Workspace {
     settings_panel: SettingsPanel,
     /// Marquesina del título de la pestaña activa (ajustes v0.2).
     tab_marquee: TabMarquee,
+    /// Menú del clic derecho en una pestaña (Renombrar, Cerrar).
+    tab_menu: Option<title_bar::TabMenu>,
     /// Aviso de actualización (ajustes v0.2, §7).
     update: UpdateState,
     /// La ventana tiene el foco (si no, ninguna pestaña se está viendo).
@@ -214,6 +216,7 @@ impl Workspace {
             toasts: crate::notify::ToastGate::default(),
             settings_panel: SettingsPanel::default(),
             tab_marquee: TabMarquee::default(),
+            tab_menu: None,
             update: UpdateState::default(),
             window_active: window.is_window_active(),
             codex_limits: None,
@@ -307,6 +310,11 @@ impl Workspace {
             if let (Ok(q), Some(p)) = (std::env::var("KUNTUR_SMOKE_PALETTE_QUERY"), this.palette.as_mut()) {
                 p.insert(&q);
             }
+        }
+
+        // Prueba de humo: menú del clic derecho de la pestaña activa.
+        if std::env::var_os("KUNTUR_SMOKE_TAB_MENU").is_some() {
+            this.smoke_tab_menu();
         }
 
         // Prueba de humo: panel completo, compacto o en "Archivos" (sin guardar).
@@ -640,8 +648,8 @@ impl Workspace {
         }
         // Hasta la próxima lectura, la terminal cuenta como ocupada (un segundo clic no escribe encima).
         self.busy.insert((session, docked));
-        self.usage.open = false;
-        self.audit.open = false;
+        self.hide_usage();
+        self.hide_audit();
         self.sessions.activate(session);
         self.focus_active(window, cx);
         cx.notify();
@@ -724,8 +732,8 @@ impl Workspace {
     fn new_session(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.add_session(None, None, None, window, cx);
         self.persist();
-        self.usage.open = false;
-        self.audit.open = false;
+        self.hide_usage();
+        self.hide_audit();
         self.focus_active(window, cx);
     }
 
@@ -785,11 +793,13 @@ impl Workspace {
         self.sync_files(false, cx);
     }
 
-    /// Doble clic en una pestaña: el campo de la paleta pasa a pedir el nombre nuevo.
+    /// Doble clic en una pestaña (o "Renombrar…" en su menú): el campo de la paleta pasa a pedir el
+    /// nombre nuevo, empezando por el que se ve en la pestaña (el título del chat, si hay un agente).
     fn start_rename(&mut self, id: u64, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(name) = self.sessions.iter().find(|e| e.id == id).map(|e| e.name.clone()) else {
+        if self.sessions.get(id).is_none() {
             return;
-        };
+        }
+        let name = self.tab_label(id, cx);
         self.open_palette(window, cx);
         if let Some(p) = self.palette.as_mut() {
             p.start_rename(id, &name);
@@ -1139,8 +1149,8 @@ impl Workspace {
     }
 
     fn cycle(&mut self, forward: bool, window: &mut Window, cx: &mut Context<Self>) {
-        self.usage.open = false;
-        self.audit.open = false;
+        self.hide_usage();
+        self.hide_audit();
         if forward {
             self.sessions.next();
         } else {
@@ -1175,7 +1185,7 @@ impl Workspace {
             return;
         }
         // Ajustes v0.2.1: Esc cierra el menú de un modelo local.
-        if self.local_menu_key(ev, cx) {
+        if self.tab_menu_key(ev, cx) || self.local_menu_key(ev, cx) {
             cx.stop_propagation();
             return;
         }
@@ -1240,8 +1250,8 @@ impl Workspace {
             (false, d) if d.len() == 1 && ('1'..='9').contains(&d.chars().next().unwrap_or('0')) => {
                 let n = d.parse::<usize>().unwrap_or(1);
                 if self.sessions.activate_index(n - 1) {
-                    self.usage.open = false;
-                    self.audit.open = false;
+                    self.hide_usage();
+                    self.hide_audit();
                     self.focus_active(window, cx);
                     cx.notify();
                 }
@@ -1562,6 +1572,7 @@ impl Render for Workspace {
         let file_menu = self.render_file_menu(cx);
         let link_menu = self.render_link_menu(cx);
         let local_menu = self.render_local_menu(cx);
+        let tab_menu = self.render_tab_menu(cx);
         self.sync_web_visibility();
         v_flex()
             .relative()
@@ -1609,5 +1620,6 @@ impl Render for Workspace {
             .children(file_menu)
             .children(link_menu)
             .children(local_menu)
+            .children(tab_menu)
     }
 }

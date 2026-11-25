@@ -41,7 +41,7 @@ fn importacion_incremental_del_historial_real() {
     let t = std::time::Instant::now();
     let mut store = UsageStore::open(&db).unwrap();
     let first = store.import(&sources).unwrap();
-    let n = store.records().unwrap().len();
+    let n = store.records_since(i64::MIN).unwrap().len();
     println!(
         "primera importación: {:?} en {:.2} s ({n} registros)",
         first,
@@ -49,13 +49,13 @@ fn importacion_incremental_del_historial_real() {
     );
     let t = std::time::Instant::now();
     let second = store.import(&sources).unwrap();
-    let again = store.records().unwrap();
+    let again = store.records_since(i64::MIN).unwrap();
     println!(
         "segunda importación: {:?} en {:.2} s",
         second,
         t.elapsed().as_secs_f64()
     );
-    let direct = kuntur_usage::load_local(&home()).len();
+    let direct = kuntur_usage::load_local(&home(), i64::MIN).len();
     println!("registros: almacén={} lectura directa={direct}", again.len());
     drop(store);
     let _ = std::fs::remove_file(&db);
@@ -77,7 +77,7 @@ fn totales_del_historial_real() {
     let all: Vec<UsageRecord> = claude.into_iter().chain(codex).chain(opencode).collect();
     let now = jiff::Timestamp::now().as_second();
     let tz = jiff::tz::TimeZone::system();
-    for period in [Period::Days7, Period::Days30, Period::All] {
+    for period in Period::ALL {
         let s = summarize(&all, period, now, &tz);
         println!(
             "{period:?}: turnos={} sesiones={} días={} modelos={} tiempo_agente_min={}",

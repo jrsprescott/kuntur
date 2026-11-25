@@ -1,5 +1,7 @@
 //! Búsqueda y filtros de la vista "Auditoría": texto (sin mayúsculas ni tildes; cada palabra debe
-//! aparecer en el comando, la carpeta, la sesión o el agente), agente y período.
+//! aparecer en el comando, el chat, la carpeta, la sesión o el agente), agente y período.
+
+use std::sync::Arc;
 
 use jiff::ToSpan;
 use jiff::tz::TimeZone;
@@ -42,9 +44,9 @@ fn normalize(s: &str) -> String {
 }
 
 /// Comienzo (segundos Unix) del período que termina hoy en la zona `tz`, con días locales completos
-/// como "Uso de agentes" ("7 días" = hoy y los 6 anteriores). `None` en "Todo".
+/// como "Uso de agentes" ("7 días" = hoy y los 6 anteriores).
 pub fn period_start(period: Period, now: i64, tz: &TimeZone) -> Option<i64> {
-    let days = period.days()?;
+    let days = period.days();
     let today = jiff::Timestamp::from_second(now)
         .ok()?
         .to_zoned_datetime(tz.clone())
@@ -57,7 +59,7 @@ pub fn period_start(period: Period, now: i64, tz: &TimeZone) -> Option<i64> {
 }
 
 /// Índices de `records` que pasan el filtro, en el mismo orden.
-pub fn filter(records: &[AuditRecord], f: &AuditFilter, now: i64, tz: &TimeZone) -> Vec<usize> {
+pub fn filter(records: &[Arc<AuditRecord>], f: &AuditFilter, now: i64, tz: &TimeZone) -> Vec<usize> {
     let start = period_start(f.period, now, tz);
     let words: Vec<String> = normalize(&f.query).split_whitespace().map(str::to_string).collect();
     records
@@ -70,8 +72,9 @@ pub fn filter(records: &[AuditRecord], f: &AuditFilter, now: i64, tz: &TimeZone)
                 return true;
             }
             let hay = normalize(&format!(
-                "{} {} {} {}",
+                "{} {} {} {} {}",
                 r.command,
+                r.chat.as_deref().unwrap_or(""),
                 r.folder.as_deref().unwrap_or(""),
                 r.session,
                 r.agent.name()
@@ -91,20 +94,21 @@ mod tests {
         s.parse::<jiff::Timestamp>().unwrap().as_second()
     }
 
-    fn rec(at: &str, agent: AgentKind, command: &str, folder: &str) -> AuditRecord {
-        AuditRecord {
+    fn rec(at: &str, agent: AgentKind, command: &str, folder: &str) -> Arc<AuditRecord> {
+        Arc::new(AuditRecord {
             ts: ts(at),
             agent,
             session: "ses-1".into(),
-            host: LOCAL_HOST.into(),
+            chat: Some("Arreglar el despliegue".into()),
+            host: LOCAL_HOST,
             folder: Some(folder.into()),
             command: command.into(),
-            tool: "Bash".into(),
+            tool: "Bash",
             key: None,
-        }
+        })
     }
 
-    fn sample() -> Vec<AuditRecord> {
+    fn sample() -> Vec<Arc<AuditRecord>> {
         vec![
             rec(
                 "2026-11-23T15:00:00Z",
@@ -143,19 +147,17 @@ mod tests {
         f.period = Period::Days7;
         assert_eq!(run(&f), [0, 1]);
         f.period = Period::Days30;
+        // El de 2025 queda fuera: nunca se muestra más que 30 días.
         assert_eq!(run(&f), [0, 1, 2]);
-        f.period = Period::All;
-        assert_eq!(run(&f), [0, 1, 2, 3]);
     }
 
     #[test]
     fn por_agente_y_texto() {
         let mut f = AuditFilter {
-            period: Period::All,
             agent: Some(AgentKind::Codex),
             ..AuditFilter::default()
         };
-        assert_eq!(run(&f), [1, 3]);
+        assert_eq!(run(&f), [1]);
         f.agent = None;
         f.query = "RM -rf".into();
         assert_eq!(run(&f), [2]);
@@ -167,6 +169,9 @@ mod tests {
         assert_eq!(run(&f), [0, 2]);
         f.query = "codex api".into();
         assert!(run(&f).is_empty());
+        // También por el nombre del chat.
+        f.query = "despliegue".into();
+        assert_eq!(run(&f), [0, 1, 2]);
     }
 
     #[test]
@@ -181,6 +186,5 @@ mod tests {
             period_start(Period::Days7, now, &tz),
             Some(ts("2026-11-17T00:00:00-05:00"))
         );
-        assert_eq!(period_start(Period::All, now, &tz), None);
     }
 }

@@ -64,6 +64,8 @@ pub struct AgentShare {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TaskRow {
     pub title: String,
+    /// Id de la sesión del agente (para reanudar el chat).
+    pub session_id: String,
     pub project: Option<String>,
     pub model: String,
     pub agent: AgentKind,
@@ -72,13 +74,13 @@ pub struct TaskRow {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Summary {
-    /// Inicio del período (segundos Unix); en `All`, el primer registro (o `now` si no hay).
+    /// Inicio del período (segundos Unix).
     pub start: i64,
     /// Fin exclusivo del período: comienzo de mañana en la zona local.
     pub end: i64,
     pub totals: Totals,
-    /// Mismo largo inmediatamente antes (para el % de cambio). `None` en `All` y cuando el
-    /// historial no llega hasta el inicio de ese período anterior.
+    /// Mismo largo inmediatamente antes (para el % de cambio). `None` cuando el historial no llega
+    /// hasta el inicio de ese período anterior (siempre en "30 días": solo se cargan 30 días).
     pub previous: Option<Totals>,
     /// Un elemento por día local del período, con los días vacíos en cero: (día, entrada, salida).
     pub by_day: Vec<(Date, u64, u64)>,
@@ -162,6 +164,18 @@ fn next_day(date: Date) -> Date {
     date.tomorrow().unwrap_or(date)
 }
 
+/// Primer día local de un período de `days` días que termina hoy.
+fn first_day_of(days: i64, now: i64, tz: &TimeZone) -> Date {
+    use jiff::ToSpan;
+    zoned(now, tz).date().saturating_sub((days - 1).days())
+}
+
+/// Inicio (segundos Unix) de la ventana que Kuntur carga: el comienzo del primero de los últimos
+/// [`crate::model::WINDOW_DAYS`] días locales. Lo anterior no se lee.
+pub fn window_start(now: i64, tz: &TimeZone) -> i64 {
+    day_start(first_day_of(crate::model::WINDOW_DAYS, now, tz), tz)
+}
+
 /// Resume `records` en el período que termina hoy (zona `tz`). Los períodos son días locales
 /// completos: "7 días" = hoy y los 6 días anteriores.
 pub fn summarize(records: &[UsageRecord], period: Period, now: i64, tz: &TimeZone) -> Summary {
@@ -169,17 +183,9 @@ pub fn summarize(records: &[UsageRecord], period: Period, now: i64, tz: &TimeZon
 
     let today = zoned(now, tz).date();
     let end = day_start(next_day(today), tz);
-    let (first_day, previous_range) = match period.days() {
-        Some(n) => {
-            let first = today.saturating_sub((n - 1).days());
-            let prev_first = first.saturating_sub(n.days());
-            (first, Some((day_start(prev_first, tz), day_start(first, tz))))
-        }
-        None => {
-            let oldest = records.iter().map(|r| r.ts).filter(|&t| t < end).min().unwrap_or(now);
-            (zoned(oldest, tz).date(), None)
-        }
-    };
+    let first_day = first_day_of(period.days(), now, tz);
+    let prev_first = first_day.saturating_sub(period.days().days());
+    let previous_range = Some((day_start(prev_first, tz), day_start(first_day, tz)));
     let start = day_start(first_day, tz);
 
     let current: Vec<&UsageRecord> = records.iter().filter(|r| r.ts >= start && r.ts < end).collect();
@@ -330,7 +336,7 @@ fn top_tasks(records: &[&UsageRecord]) -> Vec<TaskRow> {
     }
     let mut rows: Vec<TaskRow> = map
         .into_iter()
-        .map(|((agent, _), acc)| {
+        .map(|((agent, session), acc)| {
             let model = acc
                 .models
                 .iter()
@@ -339,6 +345,7 @@ fn top_tasks(records: &[&UsageRecord]) -> Vec<TaskRow> {
                 .unwrap_or_default();
             TaskRow {
                 title: acc.title.unwrap_or("Sin título").to_string(),
+                session_id: session.to_string(),
                 project: acc.project.map(str::to_string),
                 model,
                 agent,
@@ -406,9 +413,9 @@ mod tests {
         assert_eq!(s.start, ts("2026-11-17T00:00:00-05:00"));
         assert_eq!(s.end, ts("2026-11-24T00:00:00-05:00"));
 
-        let all = summarize(&records, Period::All, now(), &lima());
-        assert_eq!(all.totals.turns, 4);
-        assert_eq!(all.totals.sessions, 3);
+        let s30 = summarize(&records, Period::Days30, now(), &lima());
+        assert_eq!(s30.totals.turns, 4);
+        assert_eq!(s30.totals.sessions, 3);
     }
 
     #[test]
@@ -428,12 +435,7 @@ mod tests {
         let s30 = summarize(&records, Period::Days30, now(), &lima());
         assert_eq!(s30.by_day.len(), 30);
 
-        // En "Todo" va desde el día del primer registro hasta hoy.
-        let all = summarize(&records, Period::All, now(), &lima());
-        assert_eq!(all.by_day.len(), 4);
-        assert_eq!(all.by_day[0].0, date("2026-11-20"));
-
-        let vacio = summarize(&[], Period::All, now(), &lima());
+        let vacio = summarize(&[], Period::Today, now(), &lima());
         assert_eq!(vacio.by_day, vec![(date("2026-11-23"), 0, 0)]);
         assert_eq!(vacio.totals, Totals::default());
     }
@@ -582,7 +584,8 @@ mod tests {
         assert_eq!(pct_change(s.totals.output, prev.output), Some(-25.0));
         assert_eq!(pct_change(5, 0), None);
 
-        assert_eq!(summarize(&records, Period::All, now(), &lima()).previous, None);
+        // "30 días" nunca se compara: solo se cargan 30 días.
+        assert_eq!(summarize(&records, Period::Days30, now(), &lima()).previous, None);
     }
 
     #[test]
@@ -609,21 +612,11 @@ mod tests {
     }
 
     #[test]
-    fn un_ano_son_365_dias_locales() {
-        let records = vec![
-            // Primer día del año móvil: 24 de noviembre de 2025.
-            rec("a", "claude-x", "2025-11-24T00:00:00-05:00", 5, 5),
-            // Un minuto antes: pertenece al año anterior.
-            rec("b", "claude-x", "2025-11-23T23:59:00-05:00", 7, 7),
-            // El historial llega al inicio del año anterior: se puede comparar.
-            rec("d", "claude-x", "2024-11-24T00:00:00-05:00", 0, 0),
-            rec("c", "claude-x", "2026-11-23T08:00:00-05:00", 1, 1),
-        ];
-        let s = summarize(&records, Period::Year, now(), &lima());
-        assert_eq!(s.start, ts("2025-11-24T00:00:00-05:00"));
-        assert_eq!(s.by_day.len(), 365);
-        assert_eq!(s.totals.turns, 2);
-        assert_eq!(s.previous.expect("año anterior").input, 7);
+    fn la_ventana_son_los_ultimos_30_dias_locales() {
+        // Hoy es lunes 23 nov 2026 (UTC-5): la ventana empieza el martes 25 oct a las 00:00.
+        assert_eq!(window_start(now(), &lima()), ts("2026-10-25T00:00:00-05:00"));
+        let s = summarize(&[], Period::Days30, now(), &lima());
+        assert_eq!(s.start, window_start(now(), &lima()));
     }
 
     #[test]
@@ -661,8 +654,8 @@ mod tests {
     #[test]
     fn periodos_del_selector_en_orden() {
         let labels: Vec<_> = Period::ALL.iter().map(|p| p.label()).collect();
-        assert_eq!(labels, ["Hoy", "7 días", "30 días", "1 año", "Todo"]);
+        assert_eq!(labels, ["Hoy", "7 días", "30 días"]);
         let days: Vec<_> = Period::ALL.iter().map(|p| p.days()).collect();
-        assert_eq!(days, [Some(1), Some(7), Some(30), Some(365), None]);
+        assert_eq!(days, [1, 7, 30]);
     }
 }

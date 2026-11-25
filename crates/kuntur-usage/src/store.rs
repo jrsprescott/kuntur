@@ -184,15 +184,17 @@ impl UsageStore {
         Ok(stats)
     }
 
-    /// Todos los registros guardados, contando una sola vez las respuestas repetidas entre archivos.
-    /// El costo queda `Real` (si la fuente lo trajo) o `Unknown` (falta aplicar la tabla de precios).
-    pub fn records(&self) -> rusqlite::Result<Vec<UsageRecord>> {
+    /// Registros desde `since` (segundos Unix, incluido), contando una sola vez las respuestas
+    /// repetidas entre archivos. El costo queda `Real` (si la fuente lo trajo) o `Unknown` (falta
+    /// aplicar la tabla de precios). La clave de cada respuesta solo sirve para no repetirla: no se
+    /// devuelve (`key` = `None`), así no ocupa memoria mientras la vista está abierta.
+    pub fn records_since(&self, since: i64) -> rusqlite::Result<Vec<UsageRecord>> {
         let mut stmt = self.con.prepare(
             "SELECT agent, model, ts, input, output, cache_read, cache_write, session_id, title, project,
                     real_cost, key
-             FROM records ORDER BY file, id",
+             FROM records WHERE ts >= ?1 ORDER BY file, id",
         )?;
-        let rows = stmt.query_map([], |r| {
+        let rows = stmt.query_map([since], |r| {
             let count = |i: usize| -> rusqlite::Result<u64> { Ok(r.get::<_, i64>(i)?.max(0) as u64) };
             Ok(UsageRecord {
                 agent: agent_from_code(r.get(0)?),
@@ -214,14 +216,15 @@ impl UsageStore {
         let mut seen = HashSet::new();
         let mut out = Vec::new();
         for record in rows {
-            let record = record?;
-            if let Some(key) = &record.key
-                && !seen.insert((record.agent, key.clone()))
+            let mut record = record?;
+            if let Some(key) = record.key.take()
+                && !seen.insert((record.agent, key))
             {
                 continue;
             }
             out.push(record);
         }
+        out.shrink_to_fit();
         Ok(out)
     }
 }
@@ -345,10 +348,30 @@ mod tests {
             }
         );
         assert_eq!(store.import(&s).unwrap().reread, 0);
-        let records = store.records().unwrap();
+        let records = store.records_since(i64::MIN).unwrap();
         assert_eq!(records.len(), 1);
         assert_eq!(records[0].input, 10);
-        assert_eq!(records[0].key.as_deref(), Some("m1|r1"));
+        // La clave solo sirve para no repetir respuestas: no se devuelve.
+        assert_eq!(records[0].key, None);
+    }
+
+    #[test]
+    fn solo_devuelve_desde_el_inicio_de_la_ventana() {
+        let s = sources("ventana");
+        let file = s.claude_root.join("proyecto").join("s1.jsonl");
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        let text = [
+            line("m1", "r1", "s1", "2026-10-01T10:00:00Z", 1),
+            line("m2", "r2", "s1", "2026-11-20T10:00:00Z", 2),
+        ]
+        .concat();
+        std::fs::write(&file, text).unwrap();
+        let mut store = UsageStore::open_in_memory().unwrap();
+        store.import(&s).unwrap();
+        let since = crate::parse_iso("2026-11-01T00:00:00Z").unwrap();
+        let records = store.records_since(since).unwrap();
+        assert_eq!(records.iter().map(|r| r.input).collect::<Vec<_>>(), [2]);
+        assert_eq!(store.records_since(i64::MIN).unwrap().len(), 2);
     }
 
     #[test]
@@ -373,12 +396,12 @@ mod tests {
                 removed: 0
             }
         );
-        assert_eq!(store.records().unwrap().len(), 3);
+        assert_eq!(store.records_since(i64::MIN).unwrap().len(), 3);
 
         // `b` desaparece: sus registros se van.
         std::fs::remove_file(&b).unwrap();
         assert_eq!(store.import(&s).unwrap().removed, 1);
-        let total: u64 = store.records().unwrap().iter().map(|r| r.input).sum();
+        let total: u64 = store.records_since(i64::MIN).unwrap().iter().map(|r| r.input).sum();
         assert_eq!(total, 15);
     }
 
@@ -392,7 +415,7 @@ mod tests {
         std::fs::write(s.claude_root.join("proyecto").join("b.jsonl"), reanudada).unwrap();
         let mut store = UsageStore::open_in_memory().unwrap();
         store.import(&s).unwrap();
-        let records = store.records().unwrap();
+        let records = store.records_since(i64::MIN).unwrap();
         assert_eq!(records.len(), 2);
         assert_eq!(records.iter().map(|r| r.input).sum::<u64>(), 17);
     }
@@ -411,13 +434,13 @@ mod tests {
             store.import(&s).unwrap();
         }
         let mut store = UsageStore::open(&db).unwrap();
-        assert_eq!(store.records().unwrap().len(), 1);
+        assert_eq!(store.records_since(i64::MIN).unwrap().len(), 1);
         assert_eq!(store.import(&s).unwrap().reread, 0, "la huella quedó guardada");
 
         let vacio = Sources::under_home(&std::env::temp_dir().join("kuntur-no-existe-store"));
         let mut otro = UsageStore::open_in_memory().unwrap();
         assert_eq!(otro.import(&vacio).unwrap(), ImportStats::default());
-        assert!(otro.records().unwrap().is_empty());
+        assert!(otro.records_since(i64::MIN).unwrap().is_empty());
     }
 
     #[test]
@@ -432,7 +455,7 @@ mod tests {
                 [],
             )
             .unwrap();
-        let records = store.records().unwrap();
+        let records = store.records_since(i64::MIN).unwrap();
         assert_eq!(records[0].agent, AgentKind::OpenCode);
         assert_eq!(records[0].cost, Cost::Real(1234));
     }

@@ -316,6 +316,17 @@ impl Workspace {
                     this.close_session(id, window, cx);
                 }),
             )
+            .on_mouse_down(
+                MouseButton::Right,
+                cx.listener(move |this, ev: &MouseDownEvent, _, cx| {
+                    cx.stop_propagation();
+                    this.tab_menu = Some(TabMenu {
+                        id,
+                        position: ev.position,
+                    });
+                    cx.notify();
+                }),
+            )
             // Remota: globo (§6, siempre se ve si la pestaña es local o remota).
             .child(
                 Icon::new(if remote.is_some() {
@@ -464,4 +475,112 @@ pub(super) fn state_dot(c: &UiColors, state: AgentState, size: f32) -> Div {
         AgentState::Working => c.accent,
         AgentState::Waiting => c.warn,
     })
+}
+
+/// Menú del clic derecho en una pestaña.
+pub(super) struct TabMenu {
+    id: u64,
+    position: Point<Pixels>,
+}
+
+impl Workspace {
+    /// Prueba de humo (`-TabMenu`): el menú de la pestaña activa, abierto bajo ella.
+    pub(super) fn smoke_tab_menu(&mut self) {
+        if let Some(id) = self.sessions.active_id() {
+            self.tab_menu = Some(TabMenu {
+                id,
+                position: point(px(self.panel_width() + 60.), px(TAB_HEIGHT + 8.)),
+            });
+        }
+    }
+
+    fn close_tab_menu(&mut self, cx: &mut Context<Self>) {
+        if self.tab_menu.take().is_some() {
+            cx.notify();
+        }
+    }
+
+    /// Esc con el menú de la pestaña abierto lo cierra.
+    pub(super) fn tab_menu_key(&mut self, ev: &KeyDownEvent, cx: &mut Context<Self>) -> bool {
+        if self.tab_menu.is_some() && ev.keystroke.key == "escape" {
+            self.close_tab_menu(cx);
+            return true;
+        }
+        false
+    }
+
+    /// "Renombrar…" (el campo de la paleta, Enter guarda y Esc cancela) y "Cerrar pestaña".
+    pub(super) fn render_tab_menu(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let menu = self.tab_menu.as_ref()?;
+        let id = menu.id;
+        let c = &self.colors;
+        let hover = c.hover;
+        let item = |key: &'static str, label: crate::i18n::T, hint: Option<&'static str>| {
+            h_flex()
+                .id(key)
+                .h(px(28.))
+                .px(px(10.))
+                .gap(px(16.))
+                .items_center()
+                .justify_between()
+                .rounded(px(6.))
+                .text_size(px(12.5))
+                .cursor_pointer()
+                .hover(move |s| s.bg(hover))
+                .child(crate::i18n::t(label))
+                .children(hint.map(|h| div().text_size(px(11.)).text_color(c.muted).child(h)))
+        };
+        let list = v_flex()
+            .id("tab-menu")
+            .w(px(200.))
+            .p(px(4.))
+            .bg(c.popover)
+            .border_1()
+            .border_color(c.border)
+            .rounded(px(8.))
+            .shadow_lg()
+            .occlude()
+            .text_color(c.text)
+            .font_family(self.ui_font.clone())
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .on_mouse_down(MouseButton::Right, |_, _, cx| cx.stop_propagation())
+            .child(
+                item("tab-menu-rename", crate::i18n::T::TabRename, None).on_click(cx.listener(
+                    move |this, _, window, cx| {
+                        this.tab_menu = None;
+                        this.start_rename(id, window, cx);
+                    },
+                )),
+            )
+            .child(
+                item("tab-menu-close", crate::i18n::T::TabClose, Some("Ctrl+Shift+W")).on_click(cx.listener(
+                    move |this, _, window, cx| {
+                        this.tab_menu = None;
+                        this.close_session(id, window, cx);
+                    },
+                )),
+            );
+        Some(
+            deferred(
+                div()
+                    .id("tab-menu-backdrop")
+                    .absolute()
+                    .inset_0()
+                    .occlude()
+                    .on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.close_tab_menu(cx)))
+                    .on_mouse_down(
+                        MouseButton::Right,
+                        cx.listener(|this, _, _, cx| this.close_tab_menu(cx)),
+                    )
+                    .child(
+                        anchored()
+                            .position(menu.position)
+                            .snap_to_window_with_margin(px(8.))
+                            .child(list),
+                    ),
+            )
+            .with_priority(2)
+            .into_any_element(),
+        )
+    }
 }

@@ -1,25 +1,26 @@
 //! Vista "Auditoría" (§13; Ctrl+Shift+A o el botón de la barra): los comandos que ejecutaron los
 //! agentes, leídos de los registros locales de Claude Code y Codex (`kuntur-audit`). Búsqueda de
-//! texto, filtro por agente y período, lista virtualizada y "Exportar CSV". Esc vuelve a la
-//! terminal. La lectura corre fuera del hilo de la UI, con una caché incremental por archivo.
+//! texto, filtro por agente y período (hasta 30 días), el chat en que se usó cada comando, lista
+//! virtualizada y "Exportar CSV". Esc vuelve a la terminal. La lectura corre fuera del hilo de la UI,
+//! línea por línea y con una caché incremental por archivo.
+//!
+//! Memoria: solo los últimos 30 días; la lista comparte los comandos con la caché (`Arc`) y se suelta
+//! al cerrar la vista (la caché queda, así reabrir solo relee lo que cambió).
 
 use std::ops::Range;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
 
 use jiff::tz::TimeZone;
-use kuntur_audit::{AuditCache, AuditFilter, AuditRecord, Period, Sources};
+use kuntur_audit::{AuditCache, AuditFilter, AuditRecord, Period, Sources, window_start};
 
 use super::files_panel::empty_note;
 use super::*;
 use crate::usage_format::{folder_name, thousands};
 
-/// Al reabrir la vista, se vuelve a leer si la última lectura es más vieja que esto.
-const RELOAD_AFTER: Duration = Duration::from_secs(30);
 const ROW_HEIGHT: f32 = 30.0;
 const DATE_COL: f32 = 128.0;
 const FOLDER_COL: f32 = 150.0;
-const SESSION_COL: f32 = 84.0;
+const CHAT_COL: f32 = 220.0;
 /// Agentes con lector de auditoría (el filtro "Todos" va primero).
 const AGENTS: [AgentKind; 2] = [AgentKind::ClaudeCode, AgentKind::Codex];
 
@@ -28,10 +29,9 @@ pub(super) struct AuditState {
     /// Foco del buscador (mientras la vista está abierta, el teclado va ahí).
     pub(super) search_focus: FocusHandle,
     filter: AuditFilter,
-    records: Option<Arc<Vec<AuditRecord>>>,
+    records: Option<Arc<Vec<Arc<AuditRecord>>>>,
     /// Índices de `records` que pasan la búsqueda y los filtros.
     shown: Arc<Vec<usize>>,
-    loaded_at: Option<Instant>,
     load: Option<Task<()>>,
     /// Caché incremental de los registros reales (se presta al hilo de lectura y vuelve).
     cache: Option<AuditCache>,
@@ -47,7 +47,6 @@ impl AuditState {
             filter: AuditFilter::default(),
             records: None,
             shown: Arc::new(Vec::new()),
-            loaded_at: None,
             load: None,
             cache: Some(AuditCache::new()),
             notice: None,
@@ -77,8 +76,6 @@ fn slug(period: Period) -> &'static str {
         Period::Today => "hoy",
         Period::Days7 => "7-dias",
         Period::Days30 => "30-dias",
-        Period::Year => "1-ano",
-        Period::All => "todo",
     }
 }
 
@@ -113,18 +110,26 @@ impl Workspace {
 
     pub(super) fn open_audit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.audit.open = true;
-        self.usage.open = false;
+        self.hide_usage();
         self.audit.notice = None;
         window.focus(&self.audit.search_focus, cx);
-        let stale = self.audit.loaded_at.is_none_or(|t| t.elapsed() > RELOAD_AFTER);
-        if stale && self.audit.load.is_none() {
+        if self.audit.load.is_none() {
             self.load_audit(cx);
         }
         cx.notify();
     }
 
-    pub(super) fn close_audit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    /// Oculta la vista y suelta la lista (los comandos quedan solo en la caché). Una lectura en
+    /// curso termina igual, para devolver la caché, pero no guarda la lista. Toda forma de cerrar
+    /// la vista pasa por aquí.
+    pub(super) fn hide_audit(&mut self) {
         self.audit.open = false;
+        self.audit.records = None;
+        self.audit.shown = Arc::new(Vec::new());
+    }
+
+    pub(super) fn close_audit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.hide_audit();
         self.focus_active(window, cx);
         cx.notify();
     }
@@ -134,18 +139,20 @@ impl Workspace {
     fn load_audit(&mut self, cx: &mut Context<Self>) {
         let home = self.home.clone();
         let synthetic = std::env::var_os("KUNTUR_SMOKE_AUDIT").is_some();
-        let Some(mut cache) = self.audit.cache.take() else {
-            return;
-        };
+        let mut cache = self.audit.cache.take().unwrap_or_default();
         self.audit.load = Some(cx.spawn(async move |this, cx| {
             let (cache, records) = cx
                 .background_executor()
                 .spawn(async move {
+                    let now = now_secs() as i64;
+                    let since = window_start(now, &TimeZone::system());
                     let records = if synthetic {
-                        kuntur_audit::synthetic::records(now_secs() as i64)
+                        let mut all = kuntur_audit::synthetic::records(now);
+                        all.retain(|r| r.ts >= since);
+                        all
                     } else {
                         if let Some(home) = home.as_deref() {
-                            cache.refresh(&Sources::under_home(home));
+                            cache.refresh(&Sources::under_home(home), since);
                         }
                         cache.records()
                     };
@@ -154,9 +161,12 @@ impl Workspace {
                 .await;
             let _ = this.update(cx, |w, cx| {
                 w.audit.cache = Some(cache);
-                w.audit.records = Some(Arc::new(records));
-                w.audit.loaded_at = Some(Instant::now());
                 w.audit.load = None;
+                // Cerraron la vista mientras se leía: la lista no se guarda.
+                if !w.audit.open {
+                    return;
+                }
+                w.audit.records = Some(Arc::new(records));
                 w.audit.refilter();
                 cx.notify();
             });
@@ -266,7 +276,7 @@ impl Workspace {
             let result = cx
                 .background_executor()
                 .spawn(async move {
-                    let rows = shown.iter().filter_map(|&i| records.get(i));
+                    let rows = shown.iter().filter_map(|&i| records.get(i)).map(|r| &**r);
                     let csv = kuntur_audit::export::to_csv(rows, &TimeZone::system());
                     std::fs::write(&path, csv).map(|_| path)
                 })
@@ -452,7 +462,7 @@ impl Workspace {
                                 div()
                                     .ml(px(1.))
                                     .text_color(c.muted)
-                                    .child("Buscar en comandos, carpetas y sesiones"),
+                                    .child("Buscar en comandos, chats y carpetas"),
                             )
                         } else {
                             this.child(div().text_color(c.text).child(query.clone()))
@@ -528,8 +538,8 @@ impl Workspace {
             .child(head("Fecha").w(px(DATE_COL)).flex_shrink_0())
             .child(div().w(px(20.)).flex_shrink_0())
             .child(head("Comando").flex_1().min_w_0())
-            .child(head("Carpeta").w(px(FOLDER_COL)).flex_shrink_0())
-            .child(head("Sesión").w(px(SESSION_COL)).flex_shrink_0());
+            .child(head("Chat").w(px(CHAT_COL)).flex_shrink_0())
+            .child(head("Carpeta").w(px(FOLDER_COL)).flex_shrink_0());
         let count = self.audit.shown.len();
         let list = uniform_list(
             "audit-list",
@@ -564,7 +574,8 @@ impl Workspace {
                 let r = records.get(*self.audit.shown.get(row)?)?;
                 let folder = r.folder.as_deref().map(folder_name).unwrap_or("").to_string();
                 let tip: SharedString = format!(
-                    "{} · {} · {} · {}{}\n{}",
+                    "{}{} · {} · {} · {}{}\n{}",
+                    r.chat.as_deref().map(|t| format!("Chat: {t}\n")).unwrap_or_default(),
                     r.agent.name(),
                     r.tool,
                     r.host,
@@ -577,7 +588,11 @@ impl Workspace {
                     r.command
                 )
                 .into();
-                let session: String = r.session.chars().take(8).collect();
+                // Sin título guardado: el comienzo del id de la sesión, en gris.
+                let (chat, titled): (SharedString, bool) = match r.chat.as_deref() {
+                    Some(t) => (t.to_string().into(), true),
+                    None => (r.session.chars().take(8).collect::<String>().into(), false),
+                };
                 Some(
                     h_flex()
                         .id(("audit-row", row))
@@ -612,6 +627,24 @@ impl Workspace {
                         )
                         .child(
                             div()
+                                .w(px(CHAT_COL))
+                                .flex_shrink_0()
+                                .whitespace_nowrap()
+                                .overflow_hidden()
+                                .text_ellipsis()
+                                .map(|this| {
+                                    if titled {
+                                        this.text_color(c.text)
+                                    } else {
+                                        this.text_color(c.muted)
+                                            .font_family(self.mono_font.clone())
+                                            .text_size(px(11.))
+                                    }
+                                })
+                                .child(chat),
+                        )
+                        .child(
+                            div()
                                 .w(px(FOLDER_COL))
                                 .flex_shrink_0()
                                 .whitespace_nowrap()
@@ -619,17 +652,6 @@ impl Workspace {
                                 .text_ellipsis()
                                 .text_color(c.muted)
                                 .child(folder),
-                        )
-                        .child(
-                            div()
-                                .w(px(SESSION_COL))
-                                .flex_shrink_0()
-                                .whitespace_nowrap()
-                                .overflow_hidden()
-                                .text_color(c.muted)
-                                .font_family(self.mono_font.clone())
-                                .text_size(px(11.))
-                                .child(session),
                         )
                         .into_any_element(),
                 )

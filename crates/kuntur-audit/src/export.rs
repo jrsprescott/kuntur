@@ -5,7 +5,7 @@ use jiff::tz::TimeZone;
 
 use crate::model::AuditRecord;
 
-const HEADER: &str = "fecha,agente,sesion,host,carpeta,herramienta,comando";
+const HEADER: &str = "fecha,agente,chat,sesion,host,carpeta,herramienta,comando";
 
 /// CSV (RFC 4180, con BOM UTF-8 para que Excel lea las tildes) de `rows`, en el orden recibido y con
 /// la fecha en la zona local `tz`.
@@ -24,10 +24,11 @@ pub fn to_csv<'a>(rows: impl IntoIterator<Item = &'a AuditRecord>, tz: &TimeZone
         let fields = [
             date,
             r.agent.name().to_string(),
+            field(r.chat.as_deref().unwrap_or("")),
             field(&r.session),
-            field(&r.host),
+            field(r.host),
             field(r.folder.as_deref().unwrap_or("")),
-            field(&r.tool),
+            field(r.tool),
             field(&r.command),
         ];
         out.push_str(&fields.join(","));
@@ -63,10 +64,11 @@ mod tests {
             ts: "2026-11-23T14:00:00Z".parse::<jiff::Timestamp>().unwrap().as_second(),
             agent: AgentKind::Codex,
             session: "ses-1".into(),
-            host: LOCAL_HOST.into(),
+            chat: Some("Demo".into()),
+            host: LOCAL_HOST,
             folder: Some("C:/proyectos/demo".into()),
             command: command.into(),
-            tool: "shell_command".into(),
+            tool: "shell_command",
             key: None,
         }
     }
@@ -81,7 +83,7 @@ mod tests {
         assert_eq!(lines[0], HEADER);
         assert_eq!(
             lines[1],
-            "2026-11-23 09:00:00,Codex,ses-1,local,C:/proyectos/demo,shell_command,cargo test"
+            "2026-11-23 09:00:00,Codex,Demo,ses-1,local,C:/proyectos/demo,shell_command,cargo test"
         );
         assert!(body.contains("\"echo \"\"hola, mundo\"\"\nls\""));
     }

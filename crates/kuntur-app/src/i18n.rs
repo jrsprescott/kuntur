@@ -156,6 +156,8 @@ texts! {
     MenuCopyPath => "Copiar ruta", "Copy Path";
     MenuCopyRelativePath => "Copiar ruta relativa", "Copy Relative Path";
     MenuRename => "Cambiar nombre…", "Rename...";
+    TabRename => "Renombrar…", "Rename…";
+    TabClose => "Cerrar pestaña", "Close tab";
     MenuDelete => "Eliminar", "Delete";
     MenuDownloadThis => "Descargar esto", "Download This";
     MenuUploadThis => "Subir esto", "Upload This";

@@ -2,8 +2,9 @@
 
 **English** · [Español](#política-de-firma-de-código)
 
-Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by
-[SignPath Foundation](https://signpath.org/).
+> **Status (2026-11-25): releases are not signed yet.** The SignPath Foundation application was not approved (the
+> program requires broader public adoption first); the project may apply again later. This policy describes how
+> releases will be signed once a certificate is available.
 
 ## What is signed
 
@@ -36,8 +37,9 @@ the user points them.
 
 # Política de firma de código
 
-Firma de código gratuita de [SignPath.io](https://about.signpath.io/), certificado de
-[SignPath Foundation](https://signpath.org/).
+> **Estado (2026-11-25): las versiones todavía no están firmadas.** SignPath Foundation no aprobó la solicitud (el
+> programa pide primero más adopción pública); se puede volver a postular más adelante. Esta política describe cómo
+> se firmarán las versiones cuando haya un certificado.
 
 ## Qué se firma
 
