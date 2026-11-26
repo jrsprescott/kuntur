@@ -1233,6 +1233,9 @@ impl Workspace {
                     self.close_session(id, window, cx);
                 }
             }
+            // Cambiar de lugar la pestaña activa (como en el navegador o VS Code).
+            (true, "pageup") => self.shift_active_session(-1, cx),
+            (true, "pagedown") => self.shift_active_session(1, cx),
             (false, "tab") => self.cycle(true, window, cx),
             (true, "tab") => self.cycle(false, window, cx),
             (true, "b") => self.toggle_sidebar(cx),
@@ -1574,6 +1577,14 @@ impl Render for Workspace {
         let local_menu = self.render_local_menu(cx);
         let tab_menu = self.render_tab_menu(cx);
         self.sync_web_visibility();
+        // Con un panel que se queda con el teclado, el texto por carácter no va a la terminal de atrás.
+        let keyboard_taken =
+            self.palette.is_some() || self.connections.open || self.mcp.open || self.settings_panel.open;
+        if let Some(kb) = cx.try_global::<crate::terminal_view::TerminalKeyboard>()
+            && kb.blocked != keyboard_taken
+        {
+            cx.global_mut::<crate::terminal_view::TerminalKeyboard>().blocked = keyboard_taken;
+        }
         v_flex()
             .relative()
             .size_full()

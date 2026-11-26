@@ -158,6 +158,10 @@ texts! {
     MenuRename => "Cambiar nombre…", "Rename...";
     TabRename => "Renombrar…", "Rename…";
     TabClose => "Cerrar pestaña", "Close tab";
+    TabMoveLeft => "Mover a la izquierda", "Move left";
+    TabMoveRight => "Mover a la derecha", "Move right";
+    TabMoveLeftKey => "Ctrl+Shift+RePág", "Ctrl+Shift+PgUp";
+    TabMoveRightKey => "Ctrl+Shift+AvPág", "Ctrl+Shift+PgDn";
     MenuDelete => "Eliminar", "Delete";
     MenuDownloadThis => "Descargar esto", "Download This";
     MenuUploadThis => "Subir esto", "Upload This";

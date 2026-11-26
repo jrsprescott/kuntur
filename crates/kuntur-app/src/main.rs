@@ -117,6 +117,8 @@ fn main() {
 
     gpui_kit::application().with_assets(KunturAssets).run(move |cx| {
         gpui_kit::init(cx);
+        // Texto por carácter en la terminal (ñ por atajos, teclas muertas, AltGr, IME).
+        terminal_view::install_keyboard_tracking(cx);
         // Instalado con el MSI (F11): la ventana usa el AUMID del acceso del menú Inicio (se agrupa
         // con él en la barra de tareas). Sin instalar no se toca nada.
         if notify::app_id_registered() {

@@ -31,6 +31,54 @@ const MIN_CONTRAST: f32 = 3.0;
 /// Opacidad del texto fantasma del autocompletado (sobre el color del texto).
 const GHOST_OPACITY: f32 = 0.42;
 
+/// Texto que llega "por carácter" (WM_CHAR en Windows, IME en todos): así entran la ñ de un atajo
+/// de AutoHotkey o PowerToys, las teclas muertas (`~` + `n` → `ñ` en US-Internacional), AltGr, el
+/// Alt+código numérico y los métodos de entrada (chino, japonés…), sin importar el idioma de Windows.
+///
+/// Cada tecla física manda dos cosas: la pulsación (`KeyDownEvent`) y, si escribe algo, su carácter.
+/// Para no escribir dos veces, la pulsación anota aquí el carácter que vendrá (`swallow`); si la
+/// terminal la deja pasar como texto, la borra; si alguien la usó (un atajo, la paleta, Ctrl+Espacio),
+/// el carácter que llega igual se descarta. Lo que llega sin pulsación (inyectado por un programa)
+/// siempre se escribe.
+#[derive(Default)]
+pub struct TerminalKeyboard {
+    swallow: Option<String>,
+    /// Hay un panel encima que se queda con el teclado (paleta, conexiones, MCP, ajustes).
+    pub blocked: bool,
+}
+
+impl Global for TerminalKeyboard {}
+
+/// Instala el seguimiento de pulsaciones (una vez, al arrancar la app).
+pub fn install_keyboard_tracking(cx: &mut App) {
+    cx.set_global(TerminalKeyboard::default());
+    cx.intercept_keystrokes(|ev, _, cx| {
+        cx.global_mut::<TerminalKeyboard>().swallow = ev.keystroke.key_char.clone();
+    })
+    .detach();
+}
+
+/// ¿Se escribe este texto que llegó por carácter? (ver [`TerminalKeyboard`])
+fn take_char_input(text: &str, cx: &mut App) -> bool {
+    let Some(kb) = cx.try_global::<TerminalKeyboard>() else {
+        return true;
+    };
+    if kb.blocked {
+        return false;
+    }
+    let kb = cx.global_mut::<TerminalKeyboard>();
+    kb.swallow.take().as_deref() != Some(text)
+}
+
+/// La terminal no usó la pulsación: su carácter (si lo hay) se escribe cuando llegue.
+fn delegate_char_input(cx: &mut App) {
+    if let Some(kb) = cx.try_global::<TerminalKeyboard>()
+        && kb.swallow.is_some()
+    {
+        cx.global_mut::<TerminalKeyboard>().swallow = None;
+    }
+}
+
 #[derive(Clone, Copy)]
 struct Metrics {
     cell_w: Pixels,
@@ -71,6 +119,11 @@ pub struct TerminalView {
     ghost: ghost::Ghost,
     /// Barra del agente con las imágenes pegadas (ajustes v0.2, ver `image_bar.rs`).
     image_bar: image_bar::ImageBar,
+    /// Texto en composición de un método de entrada (IME); se escribe recién al confirmarlo.
+    marked: Option<String>,
+    /// Celda del cursor y medidas del último dibujo: ahí se abre la ventana del IME.
+    ime_cursor: Option<(usize, usize)>,
+    ime_metrics: Option<Metrics>,
     _pump: Task<()>,
 }
 
@@ -146,6 +199,9 @@ impl TerminalView {
             show_all_links: false,
             ghost: ghost::Ghost::default(),
             image_bar: image_bar::ImageBar::default(),
+            marked: None,
+            ime_cursor: None,
+            ime_metrics: None,
             _pump: pump,
         }
     }
@@ -308,7 +364,7 @@ impl TerminalView {
     }
 
     /// Ctrl+V: texto como siempre; una imagen o archivos copiados van al `Workspace` (ajustes v0.2).
-    fn paste(&self, cx: &mut Context<Self>) {
+    fn paste_clipboard(&self, cx: &mut Context<Self>) {
         self.paste_or_request(cx);
     }
 
@@ -324,17 +380,17 @@ impl TerminalView {
                 return;
             }
             (true, true, "v") | (true, false, "v") => {
-                self.paste(cx);
+                self.paste_clipboard(cx);
                 return;
             }
             // Mac: Cmd+V también pega (ajustes v0.2).
             (false, _, "v") if cfg!(target_os = "macos") && m.platform => {
-                self.paste(cx);
+                self.paste_clipboard(cx);
                 return;
             }
             (true, false, "c") if self.copy_selection(cx) => return,
             (false, true, "insert") => {
-                self.paste(cx);
+                self.paste_clipboard(cx);
                 return;
             }
             (false, true, "pageup") => {
@@ -362,6 +418,32 @@ impl TerminalView {
             alt: m.alt,
             shift: m.shift,
         };
+        // Texto: lo escribe el carácter que manda el sistema (ver `TerminalKeyboard`), que ya viene
+        // con la distribución del teclado, las teclas muertas, AltGr y los atajos de cada usuario.
+        // Con Ctrl o Alt (sin AltGr) sigue siendo un atajo para el programa (Ctrl+C, Alt+B…).
+        let named = matches!(
+            key,
+            "enter"
+                | "backspace"
+                | "tab"
+                | "escape"
+                | "up"
+                | "down"
+                | "left"
+                | "right"
+                | "home"
+                | "end"
+                | "pageup"
+                | "pagedown"
+                | "delete"
+                | "insert"
+        ) || (key.len() >= 2 && key.starts_with('f') && key[1..].parse::<u8>().is_ok());
+        let altgr_text = m.control && m.alt && ks.key_char.is_some();
+        if !named && ((!m.control && !m.alt) || altgr_text) {
+            delegate_char_input(cx);
+            return;
+        }
+
         let k = match key {
             "enter" => Key::Enter,
             "backspace" => Key::Backspace,
@@ -379,16 +461,16 @@ impl TerminalView {
             "insert" => Key::Insert,
             "space" => Key::Char(' '),
             f if f.len() >= 2 && f.starts_with('f') && f[1..].parse::<u8>().is_ok() => Key::F(f[1..].parse().unwrap()),
+            // Ctrl/Alt + tecla: la letra de la tecla (Ctrl+C → 0x03, Alt+B → ESC b).
             _ => {
-                // Texto: usar el carácter producido por el teclado (respeta distribución latinoamericana/española).
-                let ch = if m.control || m.alt {
-                    key.chars().next()
-                } else {
-                    ks.key_char.as_deref().and_then(|s| s.chars().next())
-                };
-                match ch {
-                    Some(c) => Key::Char(c),
-                    None => return,
+                let mut chars = key.chars();
+                match (chars.next(), chars.next()) {
+                    (Some(c), None) => Key::Char(c),
+                    // Una tecla sin nombre conocido (por ejemplo, la de un IME): su texto llega aparte.
+                    _ => {
+                        delegate_char_input(cx);
+                        return;
+                    }
                 }
             }
         };
@@ -403,6 +485,22 @@ impl TerminalView {
             let _ = self.pane.write(&bytes);
         }
         cx.stop_propagation();
+    }
+
+    /// Texto que llegó por carácter o confirmó un IME: se escribe tal cual (UTF-8).
+    fn type_text(&mut self, text: &str, cx: &mut Context<Self>) {
+        let text: String = text.chars().filter(|c| !c.is_control()).collect();
+        if text.is_empty() || !take_char_input(&text, cx) {
+            return;
+        }
+        self.pane.with_emulator(|e: &mut Emulator| {
+            e.clear_selection();
+            if e.display_offset() > 0 {
+                e.scroll(-(e.display_offset() as i32));
+            }
+        });
+        let _ = self.pane.write(text.as_bytes());
+        cx.notify();
     }
 
     /// Modo de mouse del programa, si los eventos deben ir a él. Shift fuerza el comportamiento de
@@ -466,7 +564,7 @@ impl TerminalView {
                 cx.notify();
             }
             // Clic derecho: copia si hay selección; si no, pega (igual que Windows Terminal).
-            MouseButton::Right if !self.copy_selection(cx) => self.paste(cx),
+            MouseButton::Right if !self.copy_selection(cx) => self.paste_clipboard(cx),
             _ => {}
         }
     }
@@ -575,6 +673,9 @@ impl Render for TerminalView {
             error: to_color(self.palette.ansi[1]).opacity(0.85),
         };
         let image_bar = self.render_image_bar(cx);
+        self.ime_cursor = screen.cursor;
+        self.ime_metrics = Some(metrics);
+        let (input_view, input_focus) = (cx.entity(), self.focus.clone());
 
         div()
             .size_full()
@@ -624,6 +725,8 @@ impl Render for TerminalView {
                         }
                     },
                     move |bounds, _, window, cx| {
+                        // Texto por carácter / IME: solo la terminal que tiene el teclado lo recibe.
+                        window.handle_input(&input_focus, ElementInputHandler::new(bounds, input_view), cx);
                         let style = TextStyleCfg {
                             family: family.clone(),
                             size: font_size,
@@ -647,6 +750,88 @@ impl Render for TerminalView {
                 .flex_1()
                 .min_h_0(),
             )
+    }
+}
+
+/// Entrada de texto del sistema (ver [`TerminalKeyboard`]). La terminal no tiene un documento que
+/// editar: solo se escribe lo confirmado y se informa dónde está el cursor para la ventana del IME.
+impl EntityInputHandler for TerminalView {
+    fn text_for_range(
+        &mut self,
+        _range: std::ops::Range<usize>,
+        _adjusted: &mut Option<std::ops::Range<usize>>,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> Option<String> {
+        None
+    }
+
+    fn selected_text_range(
+        &mut self,
+        _ignore_disabled_input: bool,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> Option<UTF16Selection> {
+        let end = self.marked.as_deref().map_or(0, |m| m.encode_utf16().count());
+        Some(UTF16Selection {
+            range: end..end,
+            reversed: false,
+        })
+    }
+
+    fn marked_text_range(&self, _window: &mut Window, _cx: &mut Context<Self>) -> Option<std::ops::Range<usize>> {
+        self.marked.as_deref().map(|m| 0..m.encode_utf16().count())
+    }
+
+    fn unmark_text(&mut self, _window: &mut Window, _cx: &mut Context<Self>) {
+        self.marked = None;
+    }
+
+    fn replace_text_in_range(
+        &mut self,
+        _range: Option<std::ops::Range<usize>>,
+        text: &str,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.marked = None;
+        self.type_text(text, cx);
+    }
+
+    fn replace_and_mark_text_in_range(
+        &mut self,
+        _range: Option<std::ops::Range<usize>>,
+        new_text: &str,
+        _new_selected_range: Option<std::ops::Range<usize>>,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) {
+        self.marked = (!new_text.is_empty()).then(|| new_text.to_string());
+    }
+
+    fn bounds_for_range(
+        &mut self,
+        _range_utf16: std::ops::Range<usize>,
+        element_bounds: Bounds<Pixels>,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> Option<Bounds<Pixels>> {
+        let (col, row) = self.ime_cursor?;
+        let m = self.ime_metrics?;
+        let origin = point(
+            element_bounds.origin.x + m.cell_w * col as f32,
+            element_bounds.origin.y + m.line_h * row as f32,
+        );
+        Some(Bounds::new(origin, size(m.cell_w, m.line_h)))
+    }
+
+    fn character_index_for_point(
+        &mut self,
+        _point: Point<Pixels>,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> Option<usize> {
+        None
     }
 }
 

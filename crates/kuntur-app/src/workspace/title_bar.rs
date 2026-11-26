@@ -16,6 +16,38 @@ const TAB_TEXT_MAX: f32 = 118.0;
 /// Marquesina del título de la pestaña activa (ajustes v0.2): solo se mueve si el texto no entra,
 /// con la ventana enfocada, sin el mouse encima y con `marquesina = true`. Fuera de eso no hay
 /// temporizador (nada se redibuja en reposo).
+/// Pestaña que se está arrastrando para cambiarla de lugar: lo que se ve bajo el mouse.
+pub(super) struct TabDrag {
+    id: u64,
+    name: SharedString,
+    bg: Hsla,
+    text: Hsla,
+    border: Hsla,
+}
+
+impl Render for TabDrag {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .h(px(TAB_HEIGHT))
+            .max_w(px(TAB_MAX))
+            .px(px(10.))
+            .flex()
+            .items_center()
+            .rounded(px(7.))
+            .bg(self.bg)
+            .border_1()
+            .border_color(self.border)
+            .shadow_md()
+            .opacity(0.9)
+            .text_size(px(UI_TEXT))
+            .text_color(self.text)
+            .whitespace_nowrap()
+            .overflow_hidden()
+            .text_ellipsis()
+            .child(self.name.clone())
+    }
+}
+
 #[derive(Default)]
 pub(super) struct TabMarquee {
     session: Option<u64>,
@@ -29,6 +61,29 @@ pub(super) struct TabMarquee {
 }
 
 impl Workspace {
+    /// Cambia de lugar una pestaña (arrastrándola o con Ctrl+Shift+RePág/AvPág) y guarda el orden.
+    pub(super) fn move_session(&mut self, id: u64, to: usize, cx: &mut Context<Self>) {
+        if self.sessions.move_to(id, to) {
+            self.persist();
+            cx.notify();
+        }
+    }
+
+    /// Corre una pestaña un lugar a la izquierda (`-1`) o a la derecha (`+1`) y guarda el orden.
+    fn shift_session(&mut self, id: u64, delta: isize, cx: &mut Context<Self>) {
+        if self.sessions.shift(id, delta) {
+            self.persist();
+            cx.notify();
+        }
+    }
+
+    /// Ctrl+Shift+RePág / AvPág: corre la pestaña activa.
+    pub(super) fn shift_active_session(&mut self, delta: isize, cx: &mut Context<Self>) {
+        if let Some(id) = self.sessions.active_id() {
+            self.shift_session(id, delta, cx);
+        }
+    }
+
     pub(super) fn panel_width(&self) -> f32 {
         match self.settings.sidebar {
             SidebarMode::Icons => PANEL_COMPACT,
@@ -251,7 +306,7 @@ impl Workspace {
 
     /// Pestaña: ícono, nombre (elipsis a 200 px), punto si sus agentes esperan o trabajan, insignia
     /// de alertas sin ver (§12) y `×` (visible en la activa y al pasar el mouse). Doble clic renombra;
-    /// clic medio cierra.
+    /// clic medio cierra; arrastrarla y soltarla sobre otra la deja en el lugar de esa.
     fn render_tab(&self, index: usize, id: u64, name: &str, is_active: bool, cx: &mut Context<Self>) -> AnyElement {
         let c = &self.colors;
         let group: SharedString = format!("tab-{id}").into();
@@ -280,6 +335,15 @@ impl Workspace {
             parts.join(" · ").into()
         };
 
+        let drag = TabDrag {
+            id,
+            name: name.to_string().into(),
+            bg: c.surface_2,
+            text: c.text,
+            border: c.border,
+        };
+        let accent = c.accent;
+
         h_flex()
             .id(("tab", id))
             .group(group.clone())
@@ -302,6 +366,27 @@ impl Workspace {
                 }
             })
             .tooltip(move |window, cx| Tooltip::new(tip.clone()).build(window, cx))
+            // Reordenar: se arrastra la pestaña y se suelta sobre otra (queda en su lugar).
+            .on_drag(drag, |drag, _, _, cx| {
+                cx.stop_propagation();
+                cx.new(|_| TabDrag {
+                    id: drag.id,
+                    name: drag.name.clone(),
+                    bg: drag.bg,
+                    text: drag.text,
+                    border: drag.border,
+                })
+            })
+            .drag_over::<TabDrag>(move |s, drag: &TabDrag, _, _| {
+                if drag.id == id {
+                    s
+                } else {
+                    s.bg(accent.opacity(0.18)).border_1().border_color(accent)
+                }
+            })
+            .on_drop(cx.listener(move |this, drag: &TabDrag, _, cx| {
+                this.move_session(drag.id, index, cx);
+            }))
             .on_click(cx.listener(move |this, ev: &ClickEvent, window, cx| {
                 if ev.click_count() >= 2 {
                     this.start_rename(id, window, cx);
@@ -513,6 +598,9 @@ impl Workspace {
     pub(super) fn render_tab_menu(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let menu = self.tab_menu.as_ref()?;
         let id = menu.id;
+        let index = self.sessions.iter().position(|e| e.id == id)?;
+        let can_left = index > 0;
+        let can_right = index + 1 < self.sessions.iter().count();
         let c = &self.colors;
         let hover = c.hover;
         let item = |key: &'static str, label: crate::i18n::T, hint: Option<&'static str>| {
@@ -532,7 +620,7 @@ impl Workspace {
         };
         let list = v_flex()
             .id("tab-menu")
-            .w(px(200.))
+            .w(px(240.))
             .p(px(4.))
             .bg(c.popover)
             .border_1()
@@ -552,6 +640,34 @@ impl Workspace {
                     },
                 )),
             )
+            .when(can_left, |this| {
+                this.child(
+                    item(
+                        "tab-menu-left",
+                        crate::i18n::T::TabMoveLeft,
+                        Some(crate::i18n::t(crate::i18n::T::TabMoveLeftKey)),
+                    )
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.tab_menu = None;
+                        this.shift_session(id, -1, cx);
+                        cx.notify();
+                    })),
+                )
+            })
+            .when(can_right, |this| {
+                this.child(
+                    item(
+                        "tab-menu-right",
+                        crate::i18n::T::TabMoveRight,
+                        Some(crate::i18n::t(crate::i18n::T::TabMoveRightKey)),
+                    )
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.tab_menu = None;
+                        this.shift_session(id, 1, cx);
+                        cx.notify();
+                    })),
+                )
+            })
             .child(
                 item("tab-menu-close", crate::i18n::T::TabClose, Some("Ctrl+Shift+W")).on_click(cx.listener(
                     move |this, _, window, cx| {
