@@ -4,6 +4,12 @@
 
 > **Status: early preview (0.2).** Usable day to day on Windows 11, but expect rough edges. Feedback is welcome.
 
+[![Download for Windows](https://img.shields.io/badge/Download-Windows%20x64%20(.msi)-2f81f7?style=for-the-badge&logo=windows)](https://github.com/jrsprescott/kuntur/releases/latest)
+[![Latest release](https://img.shields.io/github/v/release/jrsprescott/kuntur?include_prereleases&style=for-the-badge&label=version)](https://github.com/jrsprescott/kuntur/releases/latest)
+
+**[⬇ Download the latest version](https://github.com/jrsprescott/kuntur/releases/latest)** — open the page and download `kuntur-<version>-x86_64.msi` under *Assets*.
+Already installed? Kuntur tells you when a new version is out and updates in one click.
+
 **Kuntur Terminal IA Agente** — *Kuntur* means *condor* in Quechua — is a lightweight terminal for Windows, written in Rust, built for working with
 AI coding agents on the command line (Claude Code, Codex, OpenCode, Qwen, Gemini…). Like a condor seeing the whole
 valley from above, you see every session at a glance and what each agent is doing right now.
@@ -27,9 +33,11 @@ valley from above, you see every session at a glance and what each agent is doin
 - **Docked terminal** (Ctrl+`) under each session, in the session's folder or the agent's worktree.
 - **Alerts:** a badge on the tab and a Windows notification when an agent in a hidden tab finishes or needs you.
 - **Agent usage:** tokens per day, hour heat map, models, top tasks and an **estimated cost**
-  (editable `pricing.toml`), for Today / 7 days / 30 days / 1 year / All, with CSV export. Read incrementally from
-  the agents' own local logs into a local SQLite store.
-- **Audit:** every command an agent ran (date, session, agent, host, command), with search, filters and CSV.
+  (editable `pricing.toml`), for Today / 7 days / 30 days (only the last 30 days are loaded), with CSV export; click a
+  top task to resume that chat in a new tab. Read incrementally from the agents' own local logs into a local SQLite
+  store.
+- **Audit:** every command an agent ran in the last 30 days (date, agent, chat, folder, command), with search,
+  filters and CSV.
 - **SSH and SFTP** (`russh`): saved connections, `known_hosts` check, the Windows ssh-agent, passwords only in the
   Windows Credential Manager; remote tabs with a docked channel on the same connection; remote file tree with
   upload (drag and drop from Explorer), download and a transfer queue. Local and remote are never mixed.
@@ -60,7 +68,7 @@ valley from above, you see every session at a glance and what each agent is doin
 
 ## Install
 
-Download `kuntur-<version>-x86_64.msi` from the project's Releases page and run it. It installs `kuntur.exe` and
+Download `kuntur-<version>-x86_64.msi` from the [latest release](https://github.com/jrsprescott/kuntur/releases/latest) and run it. It installs `kuntur.exe` and
 `kuntur-hook.exe` in `C:\Program Files\Kuntur` and adds **Kuntur** to the Start menu and the desktop. Uninstall from *Settings →
 Apps*; your settings in `%APPDATA%\Kuntur` are kept.
 
