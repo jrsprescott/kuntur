@@ -78,6 +78,34 @@ impl<T> SessionList<T> {
         }
     }
 
+    /// Lleva la sesión `id` a la posición `to` (se acota al final). La activa sigue siendo la misma
+    /// sesión aunque cambie de lugar. Devuelve `false` si no existe o ya estaba ahí.
+    pub fn move_to(&mut self, id: u64, to: usize) -> bool {
+        let Some(from) = self.items.iter().position(|e| e.id == id) else {
+            return false;
+        };
+        let to = to.min(self.items.len() - 1);
+        if from == to {
+            return false;
+        }
+        let active_id = self.items[self.active].id;
+        let entry = self.items.remove(from);
+        self.items.insert(to, entry);
+        self.active = self.items.iter().position(|e| e.id == active_id).unwrap_or(0);
+        true
+    }
+
+    /// Corre la sesión un lugar a la izquierda (`-1`) o a la derecha (`+1`).
+    pub fn shift(&mut self, id: u64, delta: isize) -> bool {
+        let Some(from) = self.items.iter().position(|e| e.id == id) else {
+            return false;
+        };
+        match from.checked_add_signed(delta) {
+            Some(to) if to < self.items.len() => self.move_to(id, to),
+            _ => false,
+        }
+    }
+
     pub fn rename(&mut self, id: u64, name: impl Into<String>) {
         if let Some(e) = self.items.iter_mut().find(|e| e.id == id) {
             e.name = name.into();
@@ -300,6 +328,40 @@ mod tests {
         assert_eq!(s.active_id(), Some(c));
         assert!(s.activate_index(1));
         assert!(!s.activate_index(9));
+    }
+
+    fn orden(s: &SessionList<()>) -> Vec<String> {
+        s.iter().map(|e| e.name.clone()).collect()
+    }
+
+    #[test]
+    fn mover_pestanas_conserva_la_activa() {
+        let mut s = SessionList::new();
+        let a = s.push("uno", ());
+        let b = s.push("dos", ());
+        let c = s.push("tres", ());
+        s.activate(b);
+        // Arrastrar la primera al final.
+        assert!(s.move_to(a, 2));
+        assert_eq!(orden(&s), ["dos", "tres", "uno"]);
+        assert_eq!(s.active_id(), Some(b));
+        // Arrastrar la última al principio.
+        assert!(s.move_to(a, 0));
+        assert_eq!(orden(&s), ["uno", "dos", "tres"]);
+        // Fuera de rango se acota al final; al mismo lugar no hace nada.
+        assert!(s.move_to(a, 99));
+        assert_eq!(orden(&s), ["dos", "tres", "uno"]);
+        assert!(!s.move_to(a, 2));
+        assert!(!s.move_to(999, 0));
+        assert_eq!(s.active_id(), Some(b));
+        // Un lugar a la izquierda / derecha, sin pasarse de los bordes.
+        assert!(s.shift(c, -1));
+        assert_eq!(orden(&s), ["tres", "dos", "uno"]);
+        assert!(!s.shift(c, -1));
+        assert!(!s.shift(a, 1));
+        assert!(s.shift(b, 1));
+        assert_eq!(orden(&s), ["tres", "uno", "dos"]);
+        assert_eq!(s.active_id(), Some(b));
     }
 
     #[test]
