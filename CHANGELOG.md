@@ -6,6 +6,21 @@ Spanish, are in [`docs/plans/`](docs/plans/).
 
 ## [Unreleased]
 
+## [0.2.4] — Pestañas reordenables y la ñ de cualquier teclado
+
+### Added
+- **Tabs can be reordered.** Drag a tab and drop it on another to take its place (the target is highlighted);
+  Ctrl+Shift+PgUp / Ctrl+Shift+PgDn move the active tab; the right-click menu adds "Move left" / "Move right". The
+  order is saved and the active tab stays active when it moves.
+
+### Fixed
+- **Characters typed through the system text input reach the terminal**, whatever the user's Windows language or
+  keyboard setup: the ñ of an AutoHotkey or PowerToys shortcut (injected as `VK_PACKET`), dead keys (US-International
+  `~` + `n` → ñ), AltGr, Alt+numpad codes and IMEs (Chinese, Japanese, Korean…). The terminal now registers a text
+  input handler and writes the text the system composes; key presses are kept for special keys and shortcuts, and a
+  keystroke interceptor prevents a character from being written twice. While the palette, Connections, MCP or
+  Settings are open, that text does not reach the terminal behind them.
+
 ## [0.2.3] — Uso y Auditoría más livianos, reanudar chats y renombrar pestañas
 
 ### Added

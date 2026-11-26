@@ -13,6 +13,12 @@
   `scripts\msi.ps1` ya funciona en Windows PowerShell 5.1 (PR #5). Pasos: integrar el PR de versión, `git switch
   main && git pull`, `.\scripts\msi.ps1 -Check`, publicar `v0.2.3` preliminar con el MSI y su SHA-256.
   Falta la prueba manual de reanudar un chat real desde Uso.
+- **0.2.4** (PR #9 integrado + PR de versión `release/v0.2.4`): pestañas reordenables (arrastrar y soltar,
+  Ctrl+Shift+RePág/AvPág, menú del clic derecho) y entrada de texto del sistema en la terminal
+  (`EntityInputHandler` + interceptor `TerminalKeyboard` en `terminal_view.rs`): la ñ de un atajo de AutoHotkey
+  (`VK_PACKET` → `WM_CHAR`), teclas muertas, AltGr, Alt+código e IME. Probado a mano: la ñ con AutoHotkey y el
+  teclado en inglés. Pendiente: que la paleta y el buscador también acepten texto inyectado (hoy solo leen
+  pulsaciones). Desde la 0.2.3 las versiones se publican **estables y Latest**.
 - **Firma:** SignPath Foundation **rechazó** la solicitud (2026-11-25): el programa pide visibilidad pública
   (estrellas, forks, colaboradores, menciones externas); se puede volver a postular cuando el proyecto la tenga.
   Mientras tanto las versiones salen **sin firma** (SmartScreen: "Editor desconocido"; el actualizador igual
